@@ -31,29 +31,29 @@ class Product {
   // Dummy data for testing (will be replaced with Firebase data)
   static List<Product> getDummyProducts() {
     return [
-      // Carbonated Drinks — 1500ml
+      // Frequently Used Products
       Product(name: 'Pepsi 1500ml', price: 990),
-      Product(name: 'Big Apple 1500ml', price: 850),
-      Product(name: 'Coke 1500ml', price: 1020),
-      Product(name: 'Master Cola 1500ml', price: 700),
-
-      // RB
       Product(name: 'Pepsi 250ml RB', price: 920),
+      Product(name: 'Pepsi NR 300ml', price: 740),
       Product(name: 'Sting 240ml RB', price: 1200),
       Product(name: 'Shezan RB', price: 910),
+      Product(name: 'Sting NR 300ml', price: 880),
+      Product(name: 'Slice 200ml', price: 1020),
+      Product(name: 'Aquafina 1500ml', price: 450),
 
       // Carbonated Drinks — 300ml (NR)
-      Product(name: 'Pepsi NR 300ml', price: 740),
-      Product(name: 'Sting NR 300ml', price: 880),
       Product(name: 'Bigapple NR 300ml', price: 600),
       Product(name: 'Revive NR 300ml', price: 500),
       Product(name: 'Master Cola NR 300ml', price: 550),
 
       // Juices
-      Product(name: 'Slice 200ml', price: 1020),
       Product(name: 'Slice 1000ml', price: 0),
       Product(name: 'Tops Tangy 250ml', price: 680),
       Product(name: 'Shezan 250ml', price: 890),
+
+      Product(name: 'Big Apple 1500ml', price: 850),
+      Product(name: 'Coke 1500ml', price: 1020),
+      Product(name: 'Master Cola 1500ml', price: 700),
 
       // Cans
       Product(name: 'Pepsi Can 330ml', price: 1160),
@@ -72,7 +72,6 @@ class Product {
       Product(name: 'Gatorade 500ml', price: 990),
 
       // Water
-      Product(name: 'Aquafina 1500ml', price: 450),
       Product(name: 'Aquafina 500ml', price: 500),
       Product(name: 'Aquafina 19L', price: 400),
       Product(name: 'Murree Sparklet 1500ml', price: 440),

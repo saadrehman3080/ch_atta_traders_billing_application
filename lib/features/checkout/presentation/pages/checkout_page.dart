@@ -99,7 +99,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: AppColors.gray400,
+                color: AppColors.pepsiBlueLight,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -151,7 +151,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         decoration: BoxDecoration(
           color: AppColors.gray100,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.gray300, width: 1),
+          border: Border.all(color: AppColors.pepsiBlueLight, width: 1.5),
         ),
         child: Stack(
           children: [
@@ -161,7 +161,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               padding: const EdgeInsets.all(12),
               itemCount: _selectedProducts.length,
               separatorBuilder: (context, index) =>
-                  const Divider(color: AppColors.gray300, height: 16),
+                  const Divider(color: AppColors.pepsiBlueLight, height: 22),
               itemBuilder: (context, index) {
                 return _buildProductListItem(_selectedProducts[index]);
               },
@@ -236,8 +236,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
             icon: Icon(Icons.payments),
           ),
           ButtonSegment<String>(
-            value: 'loan',
-            label: Text('Loan'),
+            value: 'credit',
+            label: Text('Credit'),
             icon: Icon(Icons.account_balance),
           ),
         ],
@@ -250,7 +250,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
-              return AppColors.pepsiBlue;
+              return AppColors.pepsiBlueLight;
             }
             return AppColors.gray100;
           }),
@@ -261,7 +261,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             return Colors.black87;
           }),
           side: WidgetStateProperty.all(
-            const BorderSide(color: AppColors.gray300, width: 1),
+            const BorderSide(color: AppColors.pepsiBlueLight, width: 1),
           ),
           padding: WidgetStateProperty.all(
             const EdgeInsets.symmetric(vertical: 8),

@@ -351,6 +351,8 @@ class HistoryPage extends StatelessWidget {
           ],
         ),
         Container(
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: AppColors.pepsiWhite,
             shape: BoxShape.circle,
@@ -361,10 +363,13 @@ class HistoryPage extends StatelessWidget {
             icon: const Icon(
               Icons.close,
               color: AppColors.pepsiRedLight,
-              size: 28,
+              size: 24,
             ),
             padding: const EdgeInsets.all(0),
             constraints: const BoxConstraints(),
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            hoverColor: Colors.transparent,
           ),
         ),
       ],

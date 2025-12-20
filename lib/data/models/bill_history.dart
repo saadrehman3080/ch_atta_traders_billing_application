@@ -86,7 +86,7 @@ class BillHistory {
       ),
       BillHistory(
         billId: 'BILL002',
-        customerName: 'Fatima Ali',
+        customerName: 'Naiz Bakers',
         date: DateTime(2025, 12, 20, 11, 15),
         products: [
           Product(name: 'Coke 1500ml', quantity: 3, price: 1020),
@@ -95,7 +95,7 @@ class BillHistory {
       ),
       BillHistory(
         billId: 'BILL003',
-        customerName: 'Hassan Raza',
+        customerName: 'Babu Ismail',
         date: DateTime(2025, 12, 19, 14, 45),
         products: [
           Product(name: 'Pepsi 2250ml', quantity: 5, price: 920),
