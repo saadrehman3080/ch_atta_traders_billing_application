@@ -1,0 +1,20 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- White circle background -->
+  <circle cx="100" cy="100" r="90" fill="white"/>
+  
+  <!-- Red outer ring -->
+  <circle cx="100" cy="100" r="90" fill="none" stroke="#E32934" stroke-width="5"/>
+  
+  <!-- Blue inner shadow ring -->
+  <circle cx="100" cy="100" r="85" fill="none" stroke="#005CB4" stroke-width="3" opacity="0.3"/>
+  
+  <!-- AT Text -->
+  <text x="100" y="120" 
+        font-family="Arial, sans-serif" 
+        font-size="65" 
+        font-weight="bold" 
+        font-style="italic"
+        fill="#1B3B6F" 
+        text-anchor="middle"
+        letter-spacing="2">AT</text>
+</svg>
