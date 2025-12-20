@@ -138,7 +138,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         const SizedBox(height: 4),
         Text(
           "Rs. ${formatNumber(_grandTotal)}",
-          style: AppTextStyles.billingTotal.copyWith(color: Colors.black),
+          style: AppTextStyles.billingTotal.copyWith(
+            color: AppColors.pepsiRedLight,
+          ),
         ),
       ],
     );
@@ -272,60 +274,68 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildCustomerNameField() {
-    return TextField(
-      controller: widget.customerController,
-      style: AppTextStyles.inputText.copyWith(color: Colors.black87),
-      cursorColor: AppColors.pepsiBlue,
-      textInputAction: TextInputAction.done,
-      onSubmitted: (value) {
-        FocusScope.of(context).unfocus();
-      },
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: AppColors.gray50,
-        hintText: "Customer Name (Required)",
-        hintStyle: AppTextStyles.inputHint,
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textSelectionTheme: const TextSelectionThemeData(
+          selectionHandleColor: AppColors.pepsiBlueLight,
+          selectionColor: AppColors.textSecondary,
+          cursorColor: AppColors.pepsiBlueLight,
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 2),
+      ),
+      child: TextField(
+        controller: widget.customerController,
+        style: AppTextStyles.inputText.copyWith(color: Colors.black87),
+        cursorColor: AppColors.pepsiBlue,
+        textInputAction: TextInputAction.done,
+
+        onSubmitted: (value) {
+          FocusScope.of(context).unfocus();
+        },
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: AppColors.gray50,
+          hintText: "Customer Name (Required)",
+          hintStyle: AppTextStyles.inputHint,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 2),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildPrintButton() {
-    return GestureDetector(
-      onTap: _hasCustomerName ? widget.onPrint : null,
-      child: Container(
-        height: 55,
-        decoration: BoxDecoration(
-          color: _hasCustomerName ? AppColors.pepsiBlue : AppColors.gray300,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _hasCustomerName ? Colors.transparent : AppColors.gray400,
-            width: 1,
+    return SizedBox(
+      height: 55,
+      child: ElevatedButton.icon(
+        onPressed: _hasCustomerName ? widget.onPrint : null,
+        icon: const Icon(Icons.print, size: 22),
+        label: Text(
+          "Print Bill",
+          style: AppTextStyles.smallButton.copyWith(
+            color: _hasCustomerName ? Colors.white : AppColors.gray500,
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.print,
-              color: _hasCustomerName ? Colors.white : AppColors.gray500,
-              size: 22,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _hasCustomerName
+              ? AppColors.pepsiBlueLight
+              : AppColors.gray300,
+          foregroundColor: _hasCustomerName ? Colors.white : AppColors.gray500,
+          disabledBackgroundColor: AppColors.gray300,
+          disabledForegroundColor: AppColors.gray500,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: _hasCustomerName ? Colors.transparent : AppColors.gray400,
+              width: 1,
             ),
-            const SizedBox(width: 8),
-            Text(
-              "Print Bill",
-              style: AppTextStyles.smallButton.copyWith(
-                color: _hasCustomerName ? Colors.white : AppColors.gray500,
-              ),
-            ),
-          ],
+          ),
+          elevation: 0,
         ),
       ),
     );

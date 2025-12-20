@@ -1,7 +1,7 @@
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/dashboard_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/history_page.dart';
-import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/debit_record_page.dart';
+import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/credit_record_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/order_page.dart';
 import 'package:flutter/material.dart';
 
@@ -13,7 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 2;
+  int _selectedIndex = 3;
 
   final List<Widget> _pages = const [
     DashboardPage(),

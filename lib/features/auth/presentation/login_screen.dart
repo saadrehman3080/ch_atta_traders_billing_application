@@ -3,6 +3,7 @@ import 'package:ch_atta_traders_billing_application/common/themes/text_styles.da
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:animated_text_kit/animated_text_kit.dart';
 import 'dart:ui';
 
 class LoginScreen extends StatelessWidget {
@@ -23,7 +24,28 @@ class LoginScreen extends StatelessWidget {
               height: 100,
             ),
             const SizedBox(height: 20),
-            Text('CH. ATTA TRADERS', style: AppTextStyles.pageTitle),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(width: 25),
+                DefaultTextStyle(
+                  style: AppTextStyles.pageTitle,
+                  child: AnimatedTextKit(
+                    animatedTexts: [
+                      TypewriterAnimatedText(
+                        'CH. ATTA TRADERS',
+                        speed: const Duration(milliseconds: 150),
+                        textAlign: TextAlign.right,
+                      ),
+                    ],
+                    totalRepeatCount: 1,
+                    pause: const Duration(milliseconds: 1000),
+                    displayFullTextOnTap: true,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
             Text(
               'Pepsi Distribution for Kallar Syedan',
