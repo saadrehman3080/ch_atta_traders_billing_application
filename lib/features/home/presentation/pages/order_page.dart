@@ -1,5 +1,6 @@
 import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/checkout_page.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:flutter/material.dart';
@@ -40,10 +41,7 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   int get _grandTotal {
-    return _products.fold(
-      0,
-      (sum, product) => sum + (product.price * product.quantity),
-    );
+    return BillingCalculations.calculateGrandTotal(_products);
   }
 
   void _showCheckoutBottomSheet() {
@@ -66,25 +64,21 @@ class _OrderPageState extends State<OrderPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Padding(
-        padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.75,
-          child: Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: CheckoutPage(
-              customerController: _customerNameController,
-              products: _products,
-              onPrint: () {
-                _handlePrintBill();
-                Navigator.pop(context);
-              },
-              onDismiss: () {
-                Navigator.pop(context);
-              },
-            ),
-          ),
+        padding: EdgeInsets.only(
+          left: 8,
+          right: 8,
+          bottom: 8 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: CheckoutPage(
+          customerController: _customerNameController,
+          products: _products,
+          onPrint: () {
+            _handlePrintBill();
+            Navigator.pop(context);
+          },
+          onDismiss: () {
+            Navigator.pop(context);
+          },
         ),
       ),
     ).whenComplete(() {
@@ -97,7 +91,9 @@ class _OrderPageState extends State<OrderPage> {
   @override
   Widget build(BuildContext context) {
     // compute selection to decide whether to show the billing card
-    final int selectedCount = _products.where((p) => p.quantity > 0).length;
+    final int selectedCount = BillingCalculations.countSelectedProducts(
+      _products,
+    );
 
     return Scaffold(
       backgroundColor: Colors.grey[100],

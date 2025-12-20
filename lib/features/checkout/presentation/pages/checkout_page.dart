@@ -1,4 +1,5 @@
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:flutter/material.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
@@ -62,18 +63,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   int get _selectedItemsCount {
-    return widget.products.where((p) => p.quantity > 0).length;
+    return BillingCalculations.countSelectedProducts(widget.products);
   }
 
   List<Product> get _selectedProducts {
-    return widget.products.where((p) => p.quantity > 0).toList();
+    return BillingCalculations.getSelectedProducts(widget.products);
   }
 
   int get _grandTotal {
-    return widget.products.fold(
-      0,
-      (sum, product) => sum + (product.price * product.quantity),
-    );
+    return BillingCalculations.calculateGrandTotal(widget.products);
   }
 
   @override
@@ -91,32 +89,40 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: AppColors.gray400,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: AppColors.gray400,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            _buildSummaryInfo(),
-            const SizedBox(height: 20),
-            _buildProductsList(context),
-            const SizedBox(height: 12),
-            _buildPaymentTypeSelector(),
-            const SizedBox(height: 12),
-            _buildCustomerNameField(),
-            const SizedBox(height: 12),
-            _buildPrintButton(),
-          ],
-        ),
+          ),
+          _buildSummaryInfo(),
+          const SizedBox(height: 20),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildProductsList(context),
+                  const SizedBox(height: 12),
+                  _buildPaymentTypeSelector(),
+                  const SizedBox(height: 12),
+                  _buildCustomerNameField(),
+                  const SizedBox(height: 12),
+                  _buildPrintButton(),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -139,31 +145,31 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildProductsList(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.3,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.gray100,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.gray300, width: 1),
-          ),
-          child: ListView.separated(
-            controller: _scrollController,
-            shrinkWrap: true,
-            padding: const EdgeInsets.all(12),
-            itemCount: _selectedProducts.length,
-            separatorBuilder: (context, index) =>
-                const Divider(color: AppColors.gray300, height: 16),
-            itemBuilder: (context, index) {
-              return _buildProductListItem(_selectedProducts[index]);
-            },
-          ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 250),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.gray100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.gray300, width: 1),
         ),
-        if (_isScrollable) _buildScrollIndicator(),
-      ],
+        child: Stack(
+          children: [
+            ListView.separated(
+              controller: _scrollController,
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(12),
+              itemCount: _selectedProducts.length,
+              separatorBuilder: (context, index) =>
+                  const Divider(color: AppColors.gray300, height: 16),
+              itemBuilder: (context, index) {
+                return _buildProductListItem(_selectedProducts[index]);
+              },
+            ),
+            if (_isScrollable) _buildScrollIndicator(),
+          ],
+        ),
+      ),
     );
   }
 
@@ -270,6 +276,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       controller: widget.customerController,
       style: AppTextStyles.inputText.copyWith(color: Colors.black87),
       cursorColor: AppColors.pepsiBlue,
+      textInputAction: TextInputAction.done,
+      onSubmitted: (value) {
+        FocusScope.of(context).unfocus();
+      },
       decoration: InputDecoration(
         filled: true,
         fillColor: AppColors.gray50,
