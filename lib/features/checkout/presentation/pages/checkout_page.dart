@@ -26,13 +26,19 @@ class CheckoutPage extends StatefulWidget {
 class _CheckoutPageState extends State<CheckoutPage> {
   bool _hasCustomerName = false;
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _discountController = TextEditingController();
+  final TextEditingController _mtController = TextEditingController();
   bool _isScrollable = false;
   String _paymentType = 'cash';
+  int _discount = 0;
+  int _mt = 0;
 
   @override
   void initState() {
     super.initState();
     widget.customerController.addListener(_updateButtonState);
+    _discountController.addListener(_updateDiscount);
+    _mtController.addListener(_updateMt);
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
   }
@@ -40,8 +46,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
   @override
   void dispose() {
     widget.customerController.removeListener(_updateButtonState);
+    _discountController.removeListener(_updateDiscount);
+    _mtController.removeListener(_updateMt);
     _scrollController.removeListener(_checkScrollable);
     _scrollController.dispose();
+    _discountController.dispose();
+    _mtController.dispose();
     super.dispose();
   }
 
@@ -71,6 +81,70 @@ class _CheckoutPageState extends State<CheckoutPage> {
     });
   }
 
+  void _updateDiscount() {
+    final text = _discountController.text.trim();
+    if (text.isEmpty) {
+      setState(() {
+        _discount = 0;
+      });
+      return;
+    }
+
+    final value = int.tryParse(text) ?? 0;
+    final totalBeforeDiscount = BillingCalculations.calculateGrandTotal(
+      widget.products,
+    );
+
+    if (value < 0) {
+      _discountController.text = '0';
+      _discountController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _discountController.text.length),
+      );
+      setState(() {
+        _discount = 0;
+      });
+    } else if (value > totalBeforeDiscount) {
+      _discountController.text = totalBeforeDiscount.toString();
+      _discountController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _discountController.text.length),
+      );
+      setState(() {
+        _discount = totalBeforeDiscount;
+      });
+    } else {
+      setState(() {
+        _discount = value;
+      });
+    }
+  }
+
+  void _updateMt() {
+    final text = _mtController.text.trim();
+    if (text.isEmpty) {
+      setState(() {
+        _mt = 0;
+      });
+      return;
+    }
+
+    final value = int.tryParse(text) ?? 0;
+    final totalRbQuantity = _getTotalRbQuantity();
+
+    if (value < 0 || value > totalRbQuantity) {
+      _mtController.text = '0';
+      _mtController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _mtController.text.length),
+      );
+      setState(() {
+        _mt = 0;
+      });
+    } else {
+      setState(() {
+        _mt = value;
+      });
+    }
+  }
+
   void _checkScrollable() {
     if (_scrollController.hasClients) {
       final isScrollable = _scrollController.position.maxScrollExtent > 0;
@@ -91,7 +165,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   int get _grandTotal {
-    return BillingCalculations.calculateGrandTotal(widget.products);
+    final total = BillingCalculations.calculateGrandTotal(widget.products);
+    return total - _discount;
+  }
+
+  bool get _hasRbProducts {
+    return _selectedProducts.any(
+      (product) => product.name.toUpperCase().endsWith('RB'),
+    );
+  }
+
+  int _getTotalRbQuantity() {
+    return _selectedProducts
+        .where((product) => product.name.toUpperCase().endsWith('RB'))
+        .fold(0, (sum, product) => sum + product.quantity);
   }
 
   // ========== Main Container Building Methods ==========
@@ -135,6 +222,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
             _buildPaymentTypeSelector(),
             const SizedBox(height: 10),
             _buildCustomerNameField(),
+            const SizedBox(height: 10),
+            _buildDiscountField(),
+            if (_hasRbProducts) ...[
+              const SizedBox(height: 10),
+              _buildMtField(),
+            ],
             const SizedBox(height: 14),
             _buildPrintButton(),
           ],
@@ -417,6 +510,96 @@ class _CheckoutPageState extends State<CheckoutPage> {
       hintText: "Customer Name *",
       hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
       prefixIcon: const Icon(Icons.person_outline, size: 20),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildDiscountField() {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textSelectionTheme: const TextSelectionThemeData(
+          selectionHandleColor: AppColors.pepsiBlueLight,
+          selectionColor: AppColors.textSecondary,
+          cursorColor: AppColors.pepsiBlueLight,
+        ),
+      ),
+      child: TextField(
+        controller: _discountController,
+        style: AppTextStyles.inputText.copyWith(
+          color: Colors.black87,
+          fontSize: 14,
+        ),
+        cursorColor: AppColors.pepsiBlue,
+        keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) {
+          FocusScope.of(context).unfocus();
+        },
+        decoration: _buildDiscountFieldDecoration(),
+      ),
+    );
+  }
+
+  InputDecoration _buildDiscountFieldDecoration() {
+    return InputDecoration(
+      filled: true,
+      fillColor: Colors.white,
+      hintText: "Discount (Optional)",
+      hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
+      prefixIcon: const Icon(Icons.discount_outlined, size: 20),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildMtField() {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textSelectionTheme: const TextSelectionThemeData(
+          selectionHandleColor: AppColors.pepsiBlueLight,
+          selectionColor: AppColors.textSecondary,
+          cursorColor: AppColors.pepsiBlueLight,
+        ),
+      ),
+      child: TextField(
+        controller: _mtController,
+        style: AppTextStyles.inputText.copyWith(
+          color: Colors.black87,
+          fontSize: 14,
+        ),
+        cursorColor: AppColors.pepsiBlue,
+        keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) {
+          FocusScope.of(context).unfocus();
+        },
+        decoration: _buildMtFieldDecoration(),
+      ),
+    );
+  }
+
+  InputDecoration _buildMtFieldDecoration() {
+    return InputDecoration(
+      filled: true,
+      fillColor: Colors.white,
+      hintText: "Remaining MT (Optional)",
+      hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
+      prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),

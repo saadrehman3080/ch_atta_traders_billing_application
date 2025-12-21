@@ -46,34 +46,39 @@ class LoginScreen extends StatelessWidget {
   }
 
   Widget _buildAnimatedTitle() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(width: 25),
-        DefaultTextStyle(
-          style: AppTextStyles.pageTitle,
-          child: AnimatedTextKit(
-            animatedTexts: [
-              TypewriterAnimatedText(
-                'CH. ATTA TRADERS',
-                speed: const Duration(milliseconds: 150),
-                textAlign: TextAlign.right,
-              ),
-            ],
-            totalRepeatCount: 1,
-            pause: const Duration(milliseconds: 1000),
-            displayFullTextOnTap: true,
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(width: 25),
+          DefaultTextStyle(
+            style: AppTextStyles.pageTitle,
+            child: AnimatedTextKit(
+              animatedTexts: [
+                TypewriterAnimatedText(
+                  'CH. ATTA TRADERS',
+                  speed: const Duration(milliseconds: 150),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              totalRepeatCount: 1,
+              pause: const Duration(milliseconds: 1000),
+              displayFullTextOnTap: true,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildSubtitle() {
-    return Text(
-      'Pepsi Distribution for Kallar Syedan',
-      style: AppTextStyles.pageSubtitle,
+    return Center(
+      child: Text(
+        'Pepsi Distribution for Kallar Syedan',
+        style: AppTextStyles.pageSubtitle,
+        textAlign: TextAlign.center,
+      ),
     );
   }
 
@@ -239,6 +244,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
       textInputAction: TextInputAction.next,
       onFieldSubmitted: (_) => _focusPassword(),
       validator: _validateId,
+      keyboardType: TextInputType.number,
     );
   }
 
@@ -253,6 +259,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
       textInputAction: TextInputAction.done,
       onFieldSubmitted: (_) => _unfocusAll(),
       validator: _validatePassword,
+      keyboardType: TextInputType.number,
     );
   }
 
@@ -273,6 +280,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
     TextInputAction? textInputAction,
     void Function(String)? onFieldSubmitted,
     String? Function(String?)? validator,
+    TextInputType? keyboardType,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,6 +296,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
           textInputAction: textInputAction,
           onFieldSubmitted: onFieldSubmitted,
           validator: validator,
+          keyboardType: keyboardType,
         ),
       ],
     );
@@ -306,6 +315,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
     TextInputAction? textInputAction,
     void Function(String)? onFieldSubmitted,
     String? Function(String?)? validator,
+    TextInputType? keyboardType,
   }) {
     return TextFormField(
       controller: controller,
@@ -314,6 +324,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
       validator: validator,
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
+      keyboardType: keyboardType,
       cursorColor: Colors.white,
       style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
       decoration: _buildInputDecoration(hint, icon),

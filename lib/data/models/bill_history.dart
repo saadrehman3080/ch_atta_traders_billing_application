@@ -5,12 +5,18 @@ class BillHistory {
   final String customerName;
   final DateTime date;
   final List<Product> products;
+  final int remainingCrates;
+  final int discount;
+  final bool isPaid;
 
   BillHistory({
     required this.billId,
     required this.customerName,
     required this.date,
     required this.products,
+    this.remainingCrates = 0,
+    this.discount = 0,
+    this.isPaid = false,
   });
 
   // Factory constructor to create BillHistory from JSON (Firebase)
@@ -22,6 +28,9 @@ class BillHistory {
       products: (json['products'] as List<dynamic>)
           .map((item) => Product.fromJson(item as Map<String, dynamic>))
           .toList(),
+      remainingCrates: json['remainingCrates'] as int? ?? 0,
+      discount: json['discount'] as int? ?? 0,
+      isPaid: json['isPaid'] as bool? ?? true,
     );
   }
 
@@ -32,6 +41,9 @@ class BillHistory {
       'customerName': customerName,
       'date': date.toIso8601String(),
       'products': products.map((product) => product.toJson()).toList(),
+      'remainingCrates': remainingCrates,
+      'discount': discount,
+      'isPaid': isPaid,
     };
   }
 
@@ -41,12 +53,18 @@ class BillHistory {
     String? customerName,
     DateTime? date,
     List<Product>? products,
+    int? remainingCrates,
+    int? discount,
+    bool? isPaid,
   }) {
     return BillHistory(
       billId: billId ?? this.billId,
       customerName: customerName ?? this.customerName,
       date: date ?? this.date,
       products: products ?? this.products,
+      remainingCrates: remainingCrates ?? this.remainingCrates,
+      discount: discount ?? this.discount,
+      isPaid: isPaid ?? this.isPaid,
     );
   }
 
@@ -83,6 +101,9 @@ class BillHistory {
           Product(name: 'Revive NR 300ml', quantity: 5, price: 500),
           Product(name: 'Nestlé 1500ml', quantity: 3, price: 490),
         ],
+        remainingCrates: 5,
+        discount: 150,
+        isPaid: true,
       ),
       BillHistory(
         billId: 'BILL002',
@@ -92,6 +113,9 @@ class BillHistory {
           Product(name: 'Coke 1500ml', quantity: 3, price: 1020),
           Product(name: 'Pepsi Can 330ml', quantity: 2, price: 1160),
         ],
+        discount: 100,
+        remainingCrates: 3,
+        isPaid: true,
       ),
       BillHistory(
         billId: 'BILL003',
@@ -102,6 +126,7 @@ class BillHistory {
           Product(name: 'Master Cola 1500ml', quantity: 4, price: 700),
           Product(name: 'Slice 200ml', quantity: 2, price: 1020),
         ],
+        remainingCrates: 3,
       ),
       BillHistory(
         billId: 'BILL004',

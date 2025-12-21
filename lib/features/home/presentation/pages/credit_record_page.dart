@@ -192,7 +192,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         const SizedBox(height: 6),
         _buildDateTimeInfo(bill.formattedDate, bill.formattedTime),
         const SizedBox(height: 8),
-        _buildAmountSection(grandTotal, totalItems),
+        _buildAmountSection(
+          grandTotal,
+          totalItems,
+          bill.remainingCrates,
+          bill.isPaid,
+        ),
       ],
     );
   }
@@ -217,19 +222,52 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildAmountSection(int amount, int itemCount) {
-    return Row(
+  Widget _buildAmountSection(
+    int amount,
+    int itemCount,
+    int remainingCrates,
+    bool isPaid,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildAmountText(amount),
-        const SizedBox(width: 8),
-        _buildItemCountBadge(itemCount),
+        Row(
+          children: [
+            _buildAmountText(amount, isPaid),
+            const SizedBox(width: 8),
+            _buildItemCountBadge(itemCount),
+          ],
+        ),
+        if (remainingCrates > 0) ...[
+          const SizedBox(height: 6),
+          _buildPendingCratesText(remainingCrates),
+        ],
       ],
     );
   }
 
-  Widget _buildAmountText(int amount) {
+  Widget _buildAmountText(int amount, bool isPaid) {
+    return Row(
+      children: [
+        if (isPaid) ...[
+          Icon(Icons.check_circle_outline, size: 18, color: Colors.green[600]),
+          const SizedBox(width: 4),
+        ],
+        Text(
+          'Rs. ${formatNumber(amount)}',
+          style: AppTextStyles.productItemTotal.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: isPaid ? Colors.green[600] : AppColors.pepsiRedLight,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPendingCratesText(int remainingCrates) {
     return Text(
-      'Rs. ${formatNumber(amount)}',
+      'Pending Crates: $remainingCrates',
       style: AppTextStyles.productItemTotal.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w600,

@@ -1,5 +1,6 @@
 import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
+import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/checkout_page.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
@@ -37,8 +38,7 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
-  // ========== Business Logic Methods ==========
-
+  // ========== Business Logic Methods =
   void _incrementQuantity(int index) {
     setState(() {
       _products[index].quantity++;
@@ -140,11 +140,7 @@ class _OrderPageState extends State<OrderPage> {
           : (selectedCount > 0
                 ? 'GT Rs. ${formatNumber(_grandTotal)}'
                 : 'New Order'),
-      style: const TextStyle(
-        color: Colors.black,
-        fontSize: 24,
-        fontWeight: FontWeight.bold,
-      ),
+      style: AppTextStyles.pageTitleBlack,
     );
   }
 
@@ -193,7 +189,7 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildSearchBar() {
     return Container(
       color: AppColors.pepsiWhite,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: TextField(
         cursorColor: AppColors.textSecondary,
         controller: _searchController,
@@ -223,7 +219,11 @@ class _OrderPageState extends State<OrderPage> {
               width: 1,
             ),
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 8,
+            horizontal: 12,
+          ),
+          isDense: true,
         ),
       ),
     );
@@ -273,10 +273,19 @@ class _OrderPageState extends State<OrderPage> {
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
         color: isUnavailable
-            ? Colors.grey.withValues(alpha: 0.3)
-            : (isSelected ? AppColors.pepsiBlue : Colors.transparent),
-        width: 2,
+            ? AppColors.gray300
+            : (isSelected ? AppColors.pepsiBlue : AppColors.gray300),
+        width: 1.5,
       ),
+      boxShadow: !isUnavailable
+          ? [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ]
+          : null,
     );
   }
 
@@ -296,9 +305,9 @@ class _OrderPageState extends State<OrderPage> {
       child: Text(
         name,
         semanticsLabel: name,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
+        style: AppTextStyles.productItemName.copyWith(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
           color: isUnavailable
               ? Colors.black.withValues(alpha: 0.4)
               : Colors.black,
@@ -397,7 +406,7 @@ class _OrderPageState extends State<OrderPage> {
 
   Widget _buildUnitPrice(int price, bool isUnavailable) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
       decoration: BoxDecoration(
         color: AppColors.pepsiBlue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -424,7 +433,10 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildTotalPrice(int total) {
     return Text(
       'Rs. $total',
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      style: AppTextStyles.productItemTotal.copyWith(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }

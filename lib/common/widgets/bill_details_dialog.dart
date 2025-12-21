@@ -152,25 +152,78 @@ class BillDetailsDialog extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
 
-                    // Grand Total
+                    // Grand Total (or Subtotal if discount exists)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Grand Total',
-                          style: AppTextStyles.productItemTotal.copyWith(
-                            fontSize: 18,
+                          bill.discount > 0 ? 'Subtotal' : 'Grand Total',
+                          style: AppTextStyles.inputText.copyWith(
+                            color: AppColors.gray500,
+                            fontSize: 16,
                           ),
                         ),
                         Text(
                           'Rs. ${formatNumber(grandTotal)}',
-                          style: AppTextStyles.billingTotal.copyWith(
-                            fontSize: 22,
-                            color: accentColor,
+                          style: AppTextStyles.productItemTotal.copyWith(
+                            fontSize: bill.discount > 0 ? 16 : 22,
+                            color: bill.discount > 0
+                                ? Colors.black87
+                                : accentColor,
+                            fontWeight: bill.discount > 0
+                                ? FontWeight.w600
+                                : FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
+
+                    // Show discount section if discount > 0
+                    if (bill.discount > 0) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Discount',
+                            style: AppTextStyles.inputText.copyWith(
+                              color: AppColors.gray500,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Text(
+                            '- Rs. ${formatNumber(bill.discount)}',
+                            style: AppTextStyles.productItemTotal.copyWith(
+                              fontSize: 16,
+                              color: AppColors.pepsiRed,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(color: AppColors.gray300, thickness: 1),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Net Amount',
+                            style: AppTextStyles.productItemTotal.copyWith(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            'Rs. ${formatNumber(grandTotal - bill.discount)}',
+                            style: AppTextStyles.billingTotal.copyWith(
+                              fontSize: 22,
+                              color: accentColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 24),
 
                     // Reprint Button

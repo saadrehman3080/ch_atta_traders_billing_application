@@ -15,11 +15,17 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = const [
-    DashboardPage(),
-    OrderPage(),
-    HistoryPage(),
-    CreditRecordPage(),
+  void _navigateToOrderPage() {
+    setState(() {
+      _selectedIndex = 1;
+    });
+  }
+
+  List<Widget> get _pages => [
+    DashboardPage(onNavigateToOrder: _navigateToOrderPage),
+    const OrderPage(),
+    const HistoryPage(),
+    const CreditRecordPage(),
   ];
 
   @override
