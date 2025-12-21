@@ -45,6 +45,26 @@ class _CheckoutPageState extends State<CheckoutPage> {
     super.dispose();
   }
 
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: _buildContainerDecoration(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDragHandle(),
+          _buildSummaryInfo(),
+          const SizedBox(height: 12),
+          _buildScrollableContent(),
+        ],
+      ),
+    );
+  }
+
+  // ========== Business Logic Methods ==========
+
   void _updateButtonState() {
     setState(() {
       _hasCustomerName = widget.customerController.text.trim().isNotEmpty;
@@ -74,100 +94,136 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return BillingCalculations.calculateGrandTotal(widget.products);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: AppColors.pepsiBlueLight,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          _buildSummaryInfo(),
-          const SizedBox(height: 20),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildProductsList(context),
-                  const SizedBox(height: 12),
-                  _buildPaymentTypeSelector(),
-                  const SizedBox(height: 12),
-                  _buildCustomerNameField(),
-                  const SizedBox(height: 12),
-                  _buildPrintButton(),
-                ],
-              ),
-            ),
-          ),
-        ],
+  // ========== Main Container Building Methods ==========
+
+  BoxDecoration _buildContainerDecoration() {
+    return BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.shadowColor,
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDragHandle() {
+    return Center(
+      child: Container(
+        width: 36,
+        height: 3,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: AppColors.gray300,
+          borderRadius: BorderRadius.circular(2),
+        ),
       ),
     );
   }
 
+  Widget _buildScrollableContent() {
+    return Flexible(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildProductsList(),
+            const SizedBox(height: 10),
+            _buildPaymentTypeSelector(),
+            const SizedBox(height: 10),
+            _buildCustomerNameField(),
+            const SizedBox(height: 14),
+            _buildPrintButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ========== Summary Section Building Methods ==========
+
   Widget _buildSummaryInfo() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: _buildSummaryDecoration(),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [_buildTotalAmountSection(), _buildItemCountBadge()],
+      ),
+    );
+  }
+
+  BoxDecoration _buildSummaryDecoration() {
+    return BoxDecoration(
+      color: AppColors.pepsiBlueLight.withValues(alpha: 0.05),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: AppColors.pepsiBlueLight.withValues(alpha: 0.2),
+        width: 1,
+      ),
+    );
+  }
+
+  Widget _buildTotalAmountSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          "$_selectedItemsCount items selected",
-          style: AppTextStyles.billingItems.copyWith(color: Colors.black87),
+          "Total Amount",
+          style: AppTextStyles.billingItems.copyWith(
+            color: Colors.black54,
+            fontSize: 11,
+          ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           "Rs. ${formatNumber(_grandTotal)}",
           style: AppTextStyles.billingTotal.copyWith(
-            color: AppColors.pepsiRedLight,
+            color: AppColors.pepsiBlue,
+            fontSize: 24,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildProductsList(BuildContext context) {
+  Widget _buildItemCountBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.pepsiBlue,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        "$_selectedItemsCount items",
+        style: AppTextStyles.billingItems.copyWith(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  // ========== Products List Building Methods ==========
+
+  Widget _buildProductsList() {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 250),
+      constraints: const BoxConstraints(maxHeight: 280),
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.gray100,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.pepsiBlueLight, width: 1.5),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.gray300, width: 1),
         ),
         child: Stack(
           children: [
-            ListView.separated(
-              controller: _scrollController,
-              shrinkWrap: true,
-              padding: const EdgeInsets.all(12),
-              itemCount: _selectedProducts.length,
-              separatorBuilder: (context, index) =>
-                  const Divider(color: AppColors.pepsiBlueLight, height: 22),
-              itemBuilder: (context, index) {
-                return _buildProductListItem(_selectedProducts[index]);
-              },
-            ),
+            _buildProductsListView(),
             if (_isScrollable) _buildScrollIndicator(),
           ],
         ),
@@ -175,26 +231,71 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  Widget _buildProductsListView() {
+    return ListView.separated(
+      controller: _scrollController,
+      shrinkWrap: true,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      itemCount: _selectedProducts.length,
+      separatorBuilder: (context, index) =>
+          const Divider(color: AppColors.gray300, height: 16),
+      itemBuilder: (context, index) {
+        return _buildProductListItem(_selectedProducts[index]);
+      },
+    );
+  }
+
   Widget _buildProductListItem(Product product) {
     final itemTotal = product.price * product.quantity;
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Text(product.name, style: AppTextStyles.productItemName),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          _buildProductName(product.name),
+          const SizedBox(width: 8),
+          _buildQuantityBadge(product.quantity),
+          const SizedBox(width: 8),
+          _buildItemTotal(itemTotal),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductName(String name) {
+    return Expanded(
+      flex: 3,
+      child: Text(
+        name,
+        style: AppTextStyles.productItemName.copyWith(fontSize: 13),
+      ),
+    );
+  }
+
+  Widget _buildQuantityBadge(int quantity) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.gray100,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        'x$quantity',
+        style: AppTextStyles.productItemQuantity.copyWith(fontSize: 11),
+      ),
+    );
+  }
+
+  Widget _buildItemTotal(int total) {
+    return Expanded(
+      flex: 2,
+      child: Text(
+        'Rs. ${formatNumber(total)}',
+        textAlign: TextAlign.right,
+        style: AppTextStyles.productItemTotal.copyWith(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
         ),
-        const SizedBox(width: 8),
-        Text('x${product.quantity}', style: AppTextStyles.productItemQuantity),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: Text(
-            'Rs. ${formatNumber(itemTotal)}',
-            textAlign: TextAlign.right,
-            style: AppTextStyles.productItemTotal,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -227,48 +328,59 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  // ========== Form Building Methods ==========
+
   Widget _buildPaymentTypeSelector() {
     return SizedBox(
       width: double.infinity,
       child: SegmentedButton<String>(
-        segments: const [
-          ButtonSegment<String>(
-            value: 'cash',
-            label: Text('Cash'),
-            icon: Icon(Icons.payments),
-          ),
-          ButtonSegment<String>(
-            value: 'credit',
-            label: Text('Credit'),
-            icon: Icon(Icons.account_balance),
-          ),
-        ],
+        segments: _buildPaymentSegments(),
         selected: {_paymentType},
         onSelectionChanged: (Set<String> newSelection) {
           setState(() {
             _paymentType = newSelection.first;
           });
         },
-        style: ButtonStyle(
-          backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return AppColors.pepsiBlueLight;
-            }
-            return AppColors.gray100;
-          }),
-          foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return Colors.white;
-            }
-            return Colors.black87;
-          }),
-          side: WidgetStateProperty.all(
-            const BorderSide(color: AppColors.pepsiBlueLight, width: 1),
-          ),
-          padding: WidgetStateProperty.all(
-            const EdgeInsets.symmetric(vertical: 8),
-          ),
-        ),
+        style: _buildSegmentedButtonStyle(),
+      ),
+    );
+  }
+
+  List<ButtonSegment<String>> _buildPaymentSegments() {
+    return const [
+      ButtonSegment<String>(
+        value: 'cash',
+        label: Text('Cash'),
+        icon: Icon(Icons.payments, size: 18),
+      ),
+      ButtonSegment<String>(
+        value: 'credit',
+        label: Text('Credit'),
+        icon: Icon(Icons.account_balance, size: 18),
+      ),
+    ];
+  }
+
+  ButtonStyle _buildSegmentedButtonStyle() {
+    return ButtonStyle(
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return AppColors.pepsiBlue;
+        }
+        return Colors.white;
+      }),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return Colors.white;
+        }
+        return Colors.black87;
+      }),
+      side: WidgetStateProperty.all(
+        const BorderSide(color: AppColors.gray300, width: 1),
+      ),
+      padding: WidgetStateProperty.all(const EdgeInsets.symmetric(vertical: 6)),
+      textStyle: WidgetStateProperty.all(
+        const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -284,60 +396,69 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ),
       child: TextField(
         controller: widget.customerController,
-        style: AppTextStyles.inputText.copyWith(color: Colors.black87),
+        style: AppTextStyles.inputText.copyWith(
+          color: Colors.black87,
+          fontSize: 14,
+        ),
         cursorColor: AppColors.pepsiBlue,
         textInputAction: TextInputAction.done,
-
         onSubmitted: (value) {
           FocusScope.of(context).unfocus();
         },
-        decoration: InputDecoration(
-          filled: true,
-          fillColor: AppColors.gray50,
-          hintText: "Customer Name (Required)",
-          hintStyle: AppTextStyles.inputHint,
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.gray300, width: 1),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 2),
-          ),
-        ),
+        decoration: _buildCustomerFieldDecoration(),
+      ),
+    );
+  }
+
+  InputDecoration _buildCustomerFieldDecoration() {
+    return InputDecoration(
+      filled: true,
+      fillColor: Colors.white,
+      hintText: "Customer Name *",
+      hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
+      prefixIcon: const Icon(Icons.person_outline, size: 20),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 1.5),
       ),
     );
   }
 
   Widget _buildPrintButton() {
     return SizedBox(
-      height: 55,
+      height: 46,
+      width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: _hasCustomerName ? widget.onPrint : null,
-        icon: const Icon(Icons.print, size: 22),
+        icon: const Icon(Icons.print, size: 20),
         label: Text(
           "Print Bill",
           style: AppTextStyles.smallButton.copyWith(
             color: _hasCustomerName ? Colors.white : AppColors.gray500,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _hasCustomerName
-              ? AppColors.pepsiBlueLight
-              : AppColors.gray300,
-          foregroundColor: _hasCustomerName ? Colors.white : AppColors.gray500,
-          disabledBackgroundColor: AppColors.gray300,
-          disabledForegroundColor: AppColors.gray500,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: _hasCustomerName ? Colors.transparent : AppColors.gray400,
-              width: 1,
-            ),
-          ),
-          elevation: 0,
-        ),
+        style: _buildPrintButtonStyle(),
       ),
+    );
+  }
+
+  ButtonStyle _buildPrintButtonStyle() {
+    return ElevatedButton.styleFrom(
+      backgroundColor: _hasCustomerName
+          ? AppColors.pepsiBlue
+          : AppColors.gray300,
+      foregroundColor: _hasCustomerName ? Colors.white : AppColors.gray500,
+      disabledBackgroundColor: AppColors.gray300,
+      disabledForegroundColor: AppColors.gray500,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevation: _hasCustomerName ? 2 : 0,
     );
   }
 }

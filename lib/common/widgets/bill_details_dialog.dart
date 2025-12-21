@@ -235,15 +235,11 @@ class BillDetailsDialog extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.pepsiWhite,
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.pepsiRedLight, width: 1.5),
+            border: Border.all(color: accentColor, width: 1.5),
           ),
           child: IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.close,
-              color: AppColors.pepsiRedLight,
-              size: 24,
-            ),
+            icon: Icon(Icons.close, color: accentColor, size: 24),
             padding: const EdgeInsets.all(0),
             constraints: const BoxConstraints(),
             splashColor: Colors.transparent,
