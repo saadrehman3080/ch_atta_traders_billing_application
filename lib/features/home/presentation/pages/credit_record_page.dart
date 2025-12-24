@@ -102,15 +102,15 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 100,
-              height: 100,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: AppColors.pepsiRedLight.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.credit_card_outlined,
-                size: 48,
+                size: 40,
                 color: AppColors.pepsiRedLight,
               ),
             ),

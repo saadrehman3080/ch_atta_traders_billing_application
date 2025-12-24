@@ -251,15 +251,87 @@ class DashboardPage extends StatelessWidget {
   }
 
   Widget _buildPrintersSection() {
+    final hasPrinters = false; // Change this to dynamic check later
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildPrintersSectionHeader(),
         const SizedBox(height: 12),
-        _buildPrinterItem('HP LaserJet Pro', true),
-        const SizedBox(height: 8),
-        _buildPrinterItem('Canon PIXMA G3020', false),
+        if (hasPrinters) ...[
+          _buildPrinterItem('HP LaserJet Pro', true),
+          const SizedBox(height: 8),
+          _buildPrinterItem('Canon PIXMA G3020', false),
+        ] else
+          _buildNoPrintersFound(),
       ],
+    );
+  }
+
+  Widget _buildNoPrintersFound() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.gray300, width: 1.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.print_disabled,
+              color: AppColors.pepsiBlue,
+              size: 40,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'No Printer',
+            style: AppTextStyles.productItemName.copyWith(
+              color: Colors.black87,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Please connect a printer to continue',
+            style: AppTextStyles.helperText.copyWith(
+              color: AppColors.gray500,
+              fontSize: 13,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          TextButton.icon(
+            onPressed: () => _handleRefreshPrinters(),
+            icon: Icon(Icons.refresh, size: 16),
+            label: Text(
+              'Refresh',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.pepsiBlue,
+              backgroundColor: AppColors.pepsiBlue.withValues(alpha: 0.1),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -419,5 +491,9 @@ class DashboardPage extends StatelessWidget {
 
   void _handlePrinterAction(bool isConnected) {
     // TODO: Implement printer connect/disconnect logic
+  }
+
+  void _handleRefreshPrinters() {
+    // TODO: Implement refresh printers logic
   }
 }

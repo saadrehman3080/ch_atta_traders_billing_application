@@ -91,25 +91,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
 
     final value = int.tryParse(text) ?? 0;
-    final totalBeforeDiscount = BillingCalculations.calculateGrandTotal(
-      widget.products,
-    );
 
-    if (value < 0) {
+    if (value < 0 || value > 200) {
       _discountController.text = '0';
       _discountController.selection = TextSelection.fromPosition(
         TextPosition(offset: _discountController.text.length),
       );
       setState(() {
         _discount = 0;
-      });
-    } else if (value > totalBeforeDiscount) {
-      _discountController.text = totalBeforeDiscount.toString();
-      _discountController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _discountController.text.length),
-      );
-      setState(() {
-        _discount = totalBeforeDiscount;
       });
     } else {
       setState(() {
@@ -262,6 +251,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildTotalAmountSection() {
+    final totalRbQuantity = _getTotalRbQuantity();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -281,6 +271,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
             fontSize: 24,
           ),
         ),
+        if (totalRbQuantity > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            "Remaining MT: $totalRbQuantity",
+            style: AppTextStyles.billingItems.copyWith(
+              color: AppColors.pepsiBlue,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -552,7 +553,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return InputDecoration(
       filled: true,
       fillColor: Colors.white,
-      hintText: "Discount (Optional)",
+      hintText: "Discount (max 200)",
       hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
       prefixIcon: const Icon(Icons.discount_outlined, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -597,7 +598,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return InputDecoration(
       filled: true,
       fillColor: Colors.white,
-      hintText: "Remaining MT (Optional)",
+      hintText: "Collected MT (Optional)",
       hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
       prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

@@ -152,6 +152,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
   // ========== Business Logic Methods ==========
 
   Future<void> _handleLogin() async {
+    _unfocusAll();
     final form = _formKey.currentState;
     if (form == null) return;
 

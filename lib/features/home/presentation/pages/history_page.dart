@@ -71,16 +71,16 @@ class HistoryPage extends StatelessWidget {
 
   Widget _buildEmptyStateIcon() {
     return Container(
-      width: 100,
-      height: 100,
+      width: 80,
+      height: 80,
       decoration: BoxDecoration(
-        color: AppColors.pepsiBlueLight.withValues(alpha: 0.1),
+        color: AppColors.pepsiBlue.withValues(alpha: 0.1),
         shape: BoxShape.circle,
       ),
       child: const Icon(
         Icons.receipt_long_outlined,
-        size: 48,
-        color: AppColors.pepsiBlueLight,
+        size: 40,
+        color: AppColors.pepsiBlue,
       ),
     );
   }

@@ -18,11 +18,34 @@ class _OrderPageState extends State<OrderPage> {
   final TextEditingController _customerNameController = TextEditingController();
   bool _isCheckoutVisible = false;
   late final List<Product> _products = Product.getDummyProducts();
+  List<Product> _filteredProducts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredProducts = _products;
+    _searchController.addListener(_filterProducts);
+  }
 
   @override
   void dispose() {
+    _searchController.removeListener(_filterProducts);
     _searchController.dispose();
+    _customerNameController.dispose();
     super.dispose();
+  }
+
+  void _filterProducts() {
+    final query = _searchController.text.toLowerCase().trim();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredProducts = _products;
+      } else {
+        _filteredProducts = _products
+            .where((product) => product.name.toLowerCase().contains(query))
+            .toList();
+      }
+    });
   }
 
   @override
@@ -190,52 +213,127 @@ class _OrderPageState extends State<OrderPage> {
     return Container(
       color: AppColors.pepsiWhite,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: TextField(
-        cursorColor: AppColors.textSecondary,
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Search items...',
-          hintStyle: TextStyle(
-            color: AppColors.textSecondary.withValues(alpha: 0.6),
-          ),
-          prefixIcon: Icon(
-            Icons.search,
-            color: AppColors.textSecondary.withValues(alpha: 0.6),
-          ),
-          filled: true,
-          fillColor: Colors.grey[100],
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.textSecondary, width: 1.5),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.pepsiRed, width: 1.5),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: Colors.grey.withValues(alpha: 0.1),
-              width: 1,
+      child: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _searchController,
+        builder: (context, value, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              textSelectionTheme: TextSelectionThemeData(
+                cursorColor: AppColors.textSecondary,
+                selectionHandleColor: AppColors.textSecondary,
+                selectionColor: AppColors.textSecondary,
+              ),
             ),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 8,
-            horizontal: 12,
-          ),
-          isDense: true,
-        ),
+            child: TextField(
+              cursorColor: AppColors.textSecondary,
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search items...',
+                hintStyle: TextStyle(
+                  color: AppColors.textSecondary.withValues(alpha: 0.6),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: AppColors.textSecondary.withValues(alpha: 0.6),
+                ),
+                suffixIcon: value.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          color: AppColors.textSecondary.withValues(alpha: 0.6),
+                        ),
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.grey[100],
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: AppColors.textSecondary,
+                    width: 1.5,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: AppColors.pepsiRed,
+                    width: 1.5,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    width: 1,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 12,
+                ),
+                isDense: true,
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildProductList() {
+    if (_filteredProducts.isEmpty) {
+      return Expanded(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.search_off,
+                    size: 40,
+                    color: AppColors.pepsiBlue,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'No Products Found',
+                  style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Try searching with different keywords',
+                  style: AppTextStyles.helperText.copyWith(
+                    color: AppColors.gray500,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Expanded(
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _products.length,
+        itemCount: _filteredProducts.length,
         itemBuilder: (context, index) {
-          return _buildProductItem(_products[index], index);
+          final product = _filteredProducts[index];
+          final originalIndex = _products.indexOf(product);
+          return _buildProductItem(product, originalIndex);
         },
       ),
     );

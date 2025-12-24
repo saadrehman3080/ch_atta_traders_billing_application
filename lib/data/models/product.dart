@@ -38,7 +38,7 @@ class Product {
       Product(name: 'Sting 250ml RB', price: 1200),
       Product(name: 'Shezan 250ml RB', price: 910),
       Product(name: 'Sting NR 300ml', price: 880),
-      Product(name: 'Slice 200ml', price: 1020),
+      Product(name: 'Slice 200ml TP', price: 1020),
       Product(name: 'Aquafina 1500ml', price: 450),
 
       // Carbonated Drinks — 300ml (NR)
@@ -47,9 +47,9 @@ class Product {
       Product(name: 'Master Cola NR 300ml', price: 550),
 
       // Juices
-      Product(name: 'Slice 1000ml', price: 0),
+      Product(name: 'Slice 1000ml TP', price: 0),
       Product(name: 'Tops Tangy 250ml', price: 680),
-      Product(name: 'Shezan 250ml', price: 890),
+      Product(name: 'Shezan 250ml TP', price: 890),
 
       Product(name: 'Big Apple 1500ml', price: 850),
       Product(name: 'Coke 1500ml', price: 1020),
