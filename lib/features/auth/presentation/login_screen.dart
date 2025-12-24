@@ -83,7 +83,7 @@ class LoginScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
-              width: 95,
+              width: 105,
               child: AnimatedTextKit(
                 animatedTexts: [
                   RotateAnimatedText(

@@ -2,6 +2,7 @@ import 'package:ch_atta_traders_billing_application/common/constants/formated_nu
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
+import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/checkout_page.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:flutter/material.dart';
@@ -132,17 +133,18 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   void _showNoItemsSnackBar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No items to print'),
-        duration: Duration(seconds: 2),
-      ),
+    CustomSnackBar.show(
+      context,
+      message: 'No items to print',
+      type: SnackBarType.warning,
     );
   }
 
   void _showBillPrintedSnackBar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Bill printed and order reset')),
+    CustomSnackBar.show(
+      context,
+      message: 'Bill printed and order reset',
+      type: SnackBarType.success,
     );
   }
 
@@ -240,6 +242,7 @@ class _OrderPageState extends State<OrderPage> {
                 ),
                 suffixIcon: value.text.isNotEmpty
                     ? IconButton(
+                        iconSize: 24,
                         icon: Icon(
                           Icons.clear,
                           color: AppColors.pepsiRed.withValues(alpha: 0.6),
