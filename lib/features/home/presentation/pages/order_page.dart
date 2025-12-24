@@ -104,6 +104,8 @@ class _OrderPageState extends State<OrderPage> {
           customerController: _customerNameController,
           products: _products,
           onPrint: () {
+            _searchController.clear();
+            _customerNameController.clear();
             _handlePrintBill();
             Navigator.pop(context);
           },
@@ -240,7 +242,7 @@ class _OrderPageState extends State<OrderPage> {
                     ? IconButton(
                         icon: Icon(
                           Icons.clear,
-                          color: AppColors.textSecondary.withValues(alpha: 0.6),
+                          color: AppColors.pepsiRed.withValues(alpha: 0.6),
                         ),
                         onPressed: () {
                           _searchController.clear();

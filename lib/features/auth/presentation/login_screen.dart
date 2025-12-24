@@ -51,22 +51,23 @@ class LoginScreen extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(width: 25),
-          DefaultTextStyle(
-            style: AppTextStyles.pageTitle,
-            child: AnimatedTextKit(
-              animatedTexts: [
-                TypewriterAnimatedText(
-                  'CH. ATTA TRADERS',
-                  speed: const Duration(milliseconds: 150),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              totalRepeatCount: 1,
-              pause: const Duration(milliseconds: 1000),
-              displayFullTextOnTap: true,
-            ),
-          ),
+          //const SizedBox(width: 25),
+          // DefaultTextStyle(
+          //   style: AppTextStyles.pageTitle,
+          //   child: AnimatedTextKit(
+          //     animatedTexts: [
+          //       TypewriterAnimatedText(
+          //         'CH. ATTA TRADERS',
+          //         speed: const Duration(milliseconds: 150),
+          //         textAlign: TextAlign.center,
+          //       ),
+          //     ],
+          //     totalRepeatCount: 1,
+          //     pause: const Duration(milliseconds: 1000),
+          //     displayFullTextOnTap: true,
+          //   ),
+          // ),
+          Text('CH. ATTA TRADERS', style: AppTextStyles.pageTitle),
         ],
       ),
     );
@@ -74,10 +75,40 @@ class LoginScreen extends StatelessWidget {
 
   Widget _buildSubtitle() {
     return Center(
-      child: Text(
-        'Pepsi Distribution for Kallar Syedan',
-        style: AppTextStyles.pageSubtitle,
-        textAlign: TextAlign.center,
+      child: SizedBox(
+        height: 26,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 95,
+              child: AnimatedTextKit(
+                animatedTexts: [
+                  RotateAnimatedText(
+                    'Pepsi Cola',
+                    textStyle: AppTextStyles.pageSubtitle,
+                    textAlign: TextAlign.right,
+                  ),
+                  RotateAnimatedText(
+                    'Master Cola',
+                    textStyle: AppTextStyles.pageSubtitle,
+                    textAlign: TextAlign.right,
+                  ),
+                ],
+                isRepeatingAnimation: true,
+                repeatForever: true,
+                pause: const Duration(milliseconds: 800),
+              ),
+            ),
+            Text(
+              'Distributor for Kallar Syedan',
+              style: AppTextStyles.pageSubtitle,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
