@@ -4,7 +4,7 @@ import 'package:ch_atta_traders_billing_application/common/themes/text_styles.da
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
-import 'package:ch_atta_traders_billing_application/data/models/bill_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:flutter/material.dart';
 
 /// Displays a list of credit transaction records with delete functionality.
@@ -16,7 +16,7 @@ class CreditRecordPage extends StatefulWidget {
 }
 
 class _CreditRecordPageState extends State<CreditRecordPage> {
-  late List<BillHistory> billHistory;
+  late List<CreditHistory> billHistory;
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _cratesController = TextEditingController();
 
@@ -45,7 +45,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   // ========== Business Logic Methods ==========
 
   void _initializeBillHistory() {
-    billHistory = BillHistory.getDummyBillHistory();
+    billHistory = CreditHistory.getDummyCreditHistory();
   }
 
   void _deleteItem(int index) {
@@ -85,34 +85,40 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
     final bill = billHistory[index];
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
+    final remainingAmount = grandTotal - bill.discount;
 
-    // Calculate new remaining amount (treating discount as amount already paid)
-    int newDiscount = bill.discount;
+    // Calculate new amount due
+    int newAmountDue = bill.amountDue;
     bool newIsPaid = bill.isPaid;
 
     if (amountReceived != null && amountReceived > 0) {
-      newDiscount += amountReceived;
-      // Mark as paid if amount received covers the grand total
-      if (newDiscount >= grandTotal) {
+      newAmountDue = (remainingAmount - amountReceived).clamp(
+        0,
+        remainingAmount,
+      );
+      // Mark as paid if amount received covers the remaining amount
+      if (newAmountDue == 0) {
         newIsPaid = true;
-        newDiscount = grandTotal; // Cap at grand total
       }
     }
 
     // Calculate new remaining crates
     int newRemainingCrates = bill.remainingCrates;
+    int newCratesDue = bill.cratesDue;
     if (cratesReceived != null && cratesReceived > 0) {
       newRemainingCrates = (bill.remainingCrates - cratesReceived).clamp(
         0,
         bill.remainingCrates,
       );
+      newCratesDue = newRemainingCrates;
     }
 
     setState(() {
       billHistory[index] = bill.copyWith(
-        discount: newDiscount,
         isPaid: newIsPaid,
         remainingCrates: newRemainingCrates,
+        amountDue: newAmountDue,
+        cratesDue: newCratesDue,
       );
     });
 
@@ -135,7 +141,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  void _showBillDetails(BillHistory bill) {
+  void _showBillDetails(CreditHistory bill) {
     showDialog(
       context: context,
       builder: (context) =>
@@ -212,13 +218,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   // ========== Card Building Methods ==========
 
-  Widget _buildCreditCard(BillHistory bill, int index) {
+  Widget _buildCreditCard(CreditHistory bill, int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppColors.pepsiWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.gray300, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: AppColors.shadowColor.withValues(alpha: 0.06),
@@ -253,7 +259,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildCardContent(BillHistory bill) {
+  Widget _buildCardContent(CreditHistory bill) {
     final totalItems = BillingCalculations.calculateTotalItems(bill.products);
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
 
@@ -449,7 +455,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   // ========== Dialog Building Methods ==========
 
-  Dialog _buildDeleteConfirmationDialog(BillHistory bill, int index) {
+  Dialog _buildDeleteConfirmationDialog(CreditHistory bill, int index) {
     return Dialog(
       backgroundColor: AppColors.pepsiWhite,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -561,7 +567,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   // ========== Edit Dialog Methods ==========
 
-  Widget _buildEditDialog(BillHistory bill, int index) {
+  Widget _buildEditDialog(CreditHistory bill, int index) {
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
     final remainingAmount = grandTotal - bill.discount;
     final hasPendingAmount = !bill.isPaid && remainingAmount > 0;
@@ -572,20 +578,22 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         int? enteredAmount = int.tryParse(_amountController.text);
         int? enteredCrates = int.tryParse(_cratesController.text);
 
+        // Cap entered amount to the remaining amount (if more than due, treat as due)
         int displayRemainingAmount = remainingAmount;
         if (enteredAmount != null && enteredAmount > 0) {
-          displayRemainingAmount = (remainingAmount - enteredAmount).clamp(
-            0,
-            remainingAmount,
-          );
+          int cappedAmount = enteredAmount > remainingAmount
+              ? remainingAmount
+              : enteredAmount;
+          displayRemainingAmount = remainingAmount - cappedAmount;
         }
 
+        // Cap entered crates to the remaining crates (if more than balance, treat as balance)
         int displayRemainingCrates = bill.remainingCrates;
         if (enteredCrates != null && enteredCrates > 0) {
-          displayRemainingCrates = (bill.remainingCrates - enteredCrates).clamp(
-            0,
-            bill.remainingCrates,
-          );
+          int cappedCrates = enteredCrates > bill.remainingCrates
+              ? bill.remainingCrates
+              : enteredCrates;
+          displayRemainingCrates = bill.remainingCrates - cappedCrates;
         }
 
         return Dialog(
@@ -789,7 +797,16 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               ),
             ),
           ),
-          onChanged: (value) => setDialogState(() {}),
+          onChanged: (value) {
+            final amount = int.tryParse(value);
+            if (amount != null && amount > remainingAmount) {
+              _amountController.text = '0';
+              _amountController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _amountController.text.length),
+              );
+            }
+            setDialogState(() {});
+          },
         ),
       ),
       const SizedBox(height: 10),
@@ -934,7 +951,16 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               ),
             ),
           ),
-          onChanged: (value) => setDialogState(() {}),
+          onChanged: (value) {
+            final crates = int.tryParse(value);
+            if (crates != null && crates > totalPendingCrates) {
+              _cratesController.text = '0';
+              _cratesController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _cratesController.text.length),
+              );
+            }
+            setDialogState(() {});
+          },
         ),
       ),
       const SizedBox(height: 10),

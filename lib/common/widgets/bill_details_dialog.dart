@@ -2,11 +2,12 @@ import 'package:ch_atta_traders_billing_application/common/constants/formated_nu
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
-import 'package:ch_atta_traders_billing_application/data/models/bill_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
+import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:flutter/material.dart';
 
 class BillDetailsDialog extends StatelessWidget {
-  final BillHistory bill;
+  final BillBase bill;
   final Color accentColor;
 
   const BillDetailsDialog({
@@ -14,6 +15,10 @@ class BillDetailsDialog extends StatelessWidget {
     required this.bill,
     this.accentColor = AppColors.pepsiBlue,
   });
+
+  // Check if this is a paid bill (SaleHistory is always paid, CreditHistory checks isPaid)
+  bool get _isPaid =>
+      bill is CreditHistory ? (bill as CreditHistory).isPaid : true;
 
   @override
   Widget build(BuildContext context) {
@@ -163,17 +168,32 @@ class BillDetailsDialog extends StatelessWidget {
                             fontSize: 16,
                           ),
                         ),
-                        Text(
-                          'Rs. ${formatNumber(grandTotal)}',
-                          style: AppTextStyles.productItemTotal.copyWith(
-                            fontSize: bill.discount > 0 ? 16 : 22,
-                            color: bill.discount > 0
-                                ? Colors.black87
-                                : accentColor,
-                            fontWeight: bill.discount > 0
-                                ? FontWeight.w600
-                                : FontWeight.bold,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_isPaid && bill.discount == 0) ...[
+                              Icon(
+                                Icons.check_circle,
+                                size: 20,
+                                color: Colors.green[600],
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(
+                              'Rs. ${formatNumber(grandTotal)}',
+                              style: AppTextStyles.productItemTotal.copyWith(
+                                fontSize: bill.discount > 0 ? 16 : 22,
+                                color: bill.discount > 0
+                                    ? Colors.black87
+                                    : (_isPaid
+                                          ? Colors.green[700]
+                                          : accentColor),
+                                fontWeight: bill.discount > 0
+                                    ? FontWeight.w600
+                                    : FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -205,7 +225,7 @@ class BillDetailsDialog extends StatelessWidget {
                       const Divider(color: AppColors.gray300, thickness: 1),
                       const SizedBox(height: 12),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.start,
                         children: [
                           Text(
                             'Net Amount',
@@ -214,12 +234,27 @@ class BillDetailsDialog extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          Spacer(),
+                          if (_isPaid) ...[
+                            Icon(
+                              Icons.check_circle,
+                              size: 16,
+                              color: Colors.green[600],
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           Text(
                             'Rs. ${formatNumber(grandTotal - bill.discount)}',
-                            style: AppTextStyles.billingTotal.copyWith(
-                              fontSize: 22,
-                              color: accentColor,
-                            ),
+                            style: _isPaid
+                                ? AppTextStyles.productItemTotal.copyWith(
+                                    color: Colors.green[600],
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                  )
+                                : AppTextStyles.billingTotal.copyWith(
+                                    fontSize: 22,
+                                    color: accentColor,
+                                  ),
                           ),
                         ],
                       ),

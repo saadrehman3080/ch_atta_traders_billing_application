@@ -187,7 +187,7 @@ class _OrderPageState extends State<OrderPage> {
           color: Colors.transparent,
           child: InkWell(
             onTap: _showCheckoutBottomSheet,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Row(
@@ -373,7 +373,7 @@ class _OrderPageState extends State<OrderPage> {
   ) {
     return BoxDecoration(
       color: isUnavailable ? Colors.grey[100] : Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       border: Border.all(
         color: isUnavailable
             ? AppColors.gray300

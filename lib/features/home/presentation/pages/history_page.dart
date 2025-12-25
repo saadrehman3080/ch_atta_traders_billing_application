@@ -3,7 +3,7 @@ import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
-import 'package:ch_atta_traders_billing_application/data/models/bill_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:flutter/material.dart';
 
 class HistoryPage extends StatelessWidget {
@@ -11,14 +11,14 @@ class HistoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final billHistory = BillHistory.getDummyBillHistory();
+    final saleHistory = SaleHistory.getDummySaleHistory();
 
     return Scaffold(
       backgroundColor: AppColors.gray100,
       appBar: _buildAppBar(),
-      body: billHistory.isEmpty
+      body: saleHistory.isEmpty
           ? _buildEmptyState()
-          : _buildBillList(billHistory),
+          : _buildSaleList(saleHistory),
     );
   }
 
@@ -56,13 +56,13 @@ class HistoryPage extends StatelessWidget {
     );
   }
 
-  Widget _buildBillList(List<BillHistory> billHistory) {
+  Widget _buildSaleList(List<SaleHistory> saleHistory) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: billHistory.length,
+      itemCount: saleHistory.length,
       itemBuilder: (context, index) {
-        final bill = billHistory[index];
-        return _buildSalesCard(context, bill);
+        final sale = saleHistory[index];
+        return _buildSalesCard(context, sale);
       },
     );
   }
@@ -105,7 +105,7 @@ class HistoryPage extends StatelessWidget {
 
   // ========== Card Building Methods ==========
 
-  Widget _buildSalesCard(BuildContext context, BillHistory bill) {
+  Widget _buildSalesCard(BuildContext context, SaleHistory sale) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -114,26 +114,26 @@ class HistoryPage extends StatelessWidget {
         border: Border.all(color: AppColors.gray300, width: 1.5),
       ),
       child: InkWell(
-        onTap: () => _showBillDetails(context, bill),
+        onTap: () => _showBillDetails(context, sale),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: _buildCardContent(bill),
+          child: _buildCardContent(sale),
         ),
       ),
     );
   }
 
-  Widget _buildCardContent(BillHistory bill) {
-    final totalItems = BillingCalculations.calculateTotalItems(bill.products);
-    final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
+  Widget _buildCardContent(SaleHistory sale) {
+    final totalItems = BillingCalculations.calculateTotalItems(sale.products);
+    final grandTotal = BillingCalculations.calculateGrandTotal(sale.products);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildCardTopRow(bill.customerName, grandTotal),
+        _buildCardTopRow(sale.customerName, grandTotal),
         const SizedBox(height: 6),
-        _buildCardBottomRow(bill.formattedDate, bill.formattedTime, totalItems),
+        _buildCardBottomRow(sale.formattedDate, sale.formattedTime, totalItems),
       ],
     );
   }
@@ -209,11 +209,11 @@ class HistoryPage extends StatelessWidget {
 
   // ========== Dialog Methods ==========
 
-  void _showBillDetails(BuildContext context, BillHistory bill) {
+  void _showBillDetails(BuildContext context, SaleHistory sale) {
     showDialog(
       context: context,
       builder: (context) =>
-          BillDetailsDialog(bill: bill, accentColor: AppColors.pepsiBlueLight),
+          BillDetailsDialog(bill: sale, accentColor: AppColors.pepsiBlueLight),
     );
   }
 }

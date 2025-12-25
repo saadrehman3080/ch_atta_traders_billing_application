@@ -1,15 +1,23 @@
+import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 
-class BillHistory {
+class CreditHistory implements BillBase {
+  @override
   final String billId;
+  @override
   final String customerName;
+  @override
   final DateTime date;
+  @override
   final List<Product> products;
   final int remainingCrates;
+  @override
   final int discount;
   final bool isPaid;
+  final int amountDue;
+  final int cratesDue;
 
-  BillHistory({
+  CreditHistory({
     required this.billId,
     required this.customerName,
     required this.date,
@@ -17,11 +25,13 @@ class BillHistory {
     this.remainingCrates = 0,
     this.discount = 0,
     this.isPaid = false,
+    this.amountDue = 0,
+    this.cratesDue = 0,
   });
 
-  // Factory constructor to create BillHistory from JSON (Firebase)
-  factory BillHistory.fromJson(Map<String, dynamic> json) {
-    return BillHistory(
+  // Factory constructor to create CreditHistory from JSON (Firebase)
+  factory CreditHistory.fromJson(Map<String, dynamic> json) {
+    return CreditHistory(
       billId: json['billId'] as String,
       customerName: json['customerName'] as String,
       date: DateTime.parse(json['date'] as String),
@@ -31,10 +41,13 @@ class BillHistory {
       remainingCrates: json['remainingCrates'] as int? ?? 0,
       discount: json['discount'] as int? ?? 0,
       isPaid: json['isPaid'] as bool? ?? true,
+      amountDue: json['amountDue'] as int? ?? 0,
+      cratesDue: json['cratesDue'] as int? ?? 0,
     );
   }
 
-  // Convert BillHistory to JSON for Firebase
+  // Convert CreditHistory to JSON for Firebase
+  @override
   Map<String, dynamic> toJson() {
     return {
       'billId': billId,
@@ -44,11 +57,13 @@ class BillHistory {
       'remainingCrates': remainingCrates,
       'discount': discount,
       'isPaid': isPaid,
+      'amountDue': amountDue,
+      'cratesDue': cratesDue,
     };
   }
 
   // Copy with method for immutable updates
-  BillHistory copyWith({
+  CreditHistory copyWith({
     String? billId,
     String? customerName,
     DateTime? date,
@@ -56,8 +71,10 @@ class BillHistory {
     int? remainingCrates,
     int? discount,
     bool? isPaid,
+    int? amountDue,
+    int? cratesDue,
   }) {
-    return BillHistory(
+    return CreditHistory(
       billId: billId ?? this.billId,
       customerName: customerName ?? this.customerName,
       date: date ?? this.date,
@@ -65,15 +82,18 @@ class BillHistory {
       remainingCrates: remainingCrates ?? this.remainingCrates,
       discount: discount ?? this.discount,
       isPaid: isPaid ?? this.isPaid,
+      amountDue: amountDue ?? this.amountDue,
+      cratesDue: cratesDue ?? this.cratesDue,
     );
   }
 
-  // Helper method to get formatted date
+  // Helper methods
+  @override
   String get formattedDate {
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  // Helper method to get formatted time
+  @override
   String get formattedTime {
     final hour = date.hour > 12 ? date.hour - 12 : date.hour;
     final period = date.hour >= 12 ? 'PM' : 'AM';
@@ -82,9 +102,9 @@ class BillHistory {
   }
 
   // Dummy data for testing (will be replaced with Firebase data)
-  static List<BillHistory> getDummyBillHistory() {
+  static List<CreditHistory> getDummyCreditHistory() {
     return [
-      BillHistory(
+      CreditHistory(
         billId: 'BILL001',
         customerName: 'Ahmed Khan',
         date: DateTime(2025, 12, 20, 10, 30),
@@ -105,7 +125,7 @@ class BillHistory {
         discount: 150,
         isPaid: true,
       ),
-      BillHistory(
+      CreditHistory(
         billId: 'BILL002',
         customerName: 'Naiz Bakers',
         date: DateTime(2025, 12, 20, 11, 15),
@@ -117,10 +137,11 @@ class BillHistory {
         remainingCrates: 3,
         isPaid: true,
       ),
-      BillHistory(
+      CreditHistory(
         billId: 'BILL003',
         customerName: 'Babu Ismail',
         date: DateTime(2025, 12, 19, 14, 45),
+        discount: 100,
         products: [
           Product(name: 'Pepsi 2250ml', quantity: 5, price: 920),
           Product(name: 'Master Cola 1500ml', quantity: 4, price: 700),
@@ -128,7 +149,7 @@ class BillHistory {
         ],
         remainingCrates: 3,
       ),
-      BillHistory(
+      CreditHistory(
         billId: 'BILL004',
         customerName: 'Ayesha Malik',
         date: DateTime(2025, 12, 19, 16, 20),
@@ -137,7 +158,7 @@ class BillHistory {
           Product(name: 'Sting 500ml', quantity: 2, price: 1260),
         ],
       ),
-      BillHistory(
+      CreditHistory(
         billId: 'BILL005',
         customerName: 'Muhammad Usman',
         date: DateTime(2025, 12, 18, 9, 10),
@@ -147,7 +168,7 @@ class BillHistory {
           Product(name: 'Nestlé 1500ml', quantity: 3, price: 490),
         ],
       ),
-      BillHistory(
+      CreditHistory(
         billId: 'BILL006',
         customerName: 'Sara Ahmed',
         date: DateTime(2025, 12, 18, 13, 50),
@@ -156,7 +177,7 @@ class BillHistory {
           Product(name: 'Shezan 250ml', quantity: 4, price: 890),
         ],
       ),
-      BillHistory(
+      CreditHistory(
         billId: 'BILL007',
         customerName: 'Ali Hassan',
         date: DateTime(2025, 12, 17, 15, 30),
@@ -166,7 +187,7 @@ class BillHistory {
           Product(name: 'Aquafina 500ml', quantity: 6, price: 500),
         ],
       ),
-      BillHistory(
+      CreditHistory(
         billId: 'BILL008',
         customerName: 'Zainab Sheikh',
         date: DateTime(2025, 12, 17, 17, 15),
