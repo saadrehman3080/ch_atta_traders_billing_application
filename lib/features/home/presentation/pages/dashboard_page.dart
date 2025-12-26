@@ -1,12 +1,32 @@
+import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
+import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   final VoidCallback? onNavigateToOrder;
 
   const DashboardPage({super.key, this.onNavigateToOrder});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  late DashboardData _dashboardData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  void _loadDashboardData() {
+    // TODO: Replace with actual data from Firebase/local storage
+    _dashboardData = DashboardData.getDummyData();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,17 +123,19 @@ class DashboardPage extends StatelessWidget {
   Widget _buildTodayCollectionCard() {
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: _buildCollectionCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildCollectionLabel(),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _buildCollectionAmount(),
           const SizedBox(height: 12),
           _buildStatsGrid(),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          _buildCustomersServedSection(),
+          const SizedBox(height: 10),
           _buildNewBillButton(),
         ],
       ),
@@ -147,8 +169,8 @@ class DashboardPage extends StatelessWidget {
 
   Widget _buildCollectionAmount() {
     return Text(
-      'Rs. 2,940',
-      style: AppTextStyles.billingTotal.copyWith(fontSize: 36),
+      'Rs. ${formatNumber(_dashboardData.totalCollection)}',
+      style: AppTextStyles.billingTotal.copyWith(fontSize: 32),
     );
   }
 
@@ -160,31 +182,35 @@ class DashboardPage extends StatelessWidget {
             Expanded(
               child: _buildStatItem(
                 'Items Sold',
-                '156',
+                '${_dashboardData.totalItemsSold}',
                 Icons.inventory_2_outlined,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
-              child: _buildStatItem('Customers', '12', Icons.people_outline),
+              child: _buildStatItem(
+                'MT Remaining',
+                '${_dashboardData.totalMtRemaining}',
+                Icons.recycling_outlined,
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: _buildStatItem(
                 'Credit',
-                'Rs. 1,200',
+                'Rs. ${formatNumber(_dashboardData.totalCredit)}',
                 Icons.credit_card_outlined,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: _buildStatItem(
                 'Discount',
-                'Rs. 240',
+                'Rs. ${formatNumber(_dashboardData.totalDiscount)}',
                 Icons.discount_outlined,
               ),
             ),
@@ -194,9 +220,46 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
+  Widget _buildCustomersServedSection() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.people, color: Colors.white, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            'Customers Served:',
+            style: AppTextStyles.helperText.copyWith(
+              color: Colors.white70,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${_dashboardData.customersServed}',
+            style: AppTextStyles.productItemName.copyWith(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatItem(String label, String value, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
@@ -210,23 +273,23 @@ class DashboardPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: Colors.white70, size: 16),
-              const SizedBox(width: 6),
+              Icon(icon, color: Colors.white70, size: 15),
+              const SizedBox(width: 5),
               Text(
                 label,
                 style: AppTextStyles.helperText.copyWith(
                   color: Colors.white70,
-                  fontSize: 11,
+                  fontSize: 10.5,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
             value,
             style: AppTextStyles.productItemName.copyWith(
               color: Colors.white,
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -439,7 +502,7 @@ class DashboardPage extends StatelessWidget {
 
   Widget _buildNewBillButton() {
     return SizedBox(
-      height: 50,
+      height: 44,
       width: double.infinity,
       child: ElevatedButton(
         onPressed: _handleNewBill,
@@ -486,7 +549,7 @@ class DashboardPage extends StatelessWidget {
   }
 
   void _handleNewBill() {
-    onNavigateToOrder?.call();
+    widget.onNavigateToOrder?.call();
   }
 
   void _handlePrinterAction(bool isConnected) {

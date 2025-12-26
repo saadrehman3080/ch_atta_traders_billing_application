@@ -48,22 +48,26 @@ class CustomSnackBar {
     switch (type) {
       case SnackBarType.success:
         return _SnackBarConfig(
-          backgroundColor: Colors.green[600]!,
+          backgroundColor: const Color(
+            0xFF16A34A,
+          ), // Green that complements Pepsi colors
           icon: Icons.check_circle,
         );
       case SnackBarType.error:
         return _SnackBarConfig(
-          backgroundColor: AppColors.pepsiRed,
+          backgroundColor: AppColors.pepsiRedLight, // Using Pepsi Red Light
           icon: Icons.error,
         );
       case SnackBarType.warning:
         return _SnackBarConfig(
-          backgroundColor: Colors.orange[600]!,
+          backgroundColor: const Color(
+            0xFFEA580C,
+          ), // Orange that matches Pepsi palette
           icon: Icons.warning,
         );
       case SnackBarType.info:
         return _SnackBarConfig(
-          backgroundColor: AppColors.pepsiBlue,
+          backgroundColor: AppColors.pepsiBlueLight, // Using Pepsi Blue Light
           icon: Icons.info,
         );
     }

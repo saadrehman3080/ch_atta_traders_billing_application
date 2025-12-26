@@ -6,14 +6,12 @@ import 'package:ch_atta_traders_billing_application/common/themes/text_styles.da
 import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 
 class CheckoutPage extends StatefulWidget {
-  final TextEditingController customerController;
   final List<Product> products;
   final VoidCallback onPrint;
   final VoidCallback onDismiss;
 
   const CheckoutPage({
     super.key,
-    required this.customerController,
     required this.products,
     required this.onPrint,
     required this.onDismiss,
@@ -26,6 +24,7 @@ class CheckoutPage extends StatefulWidget {
 class _CheckoutPageState extends State<CheckoutPage> {
   bool _hasCustomerName = false;
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _discountController = TextEditingController();
   final TextEditingController _mtController = TextEditingController();
   bool _isScrollable = false;
@@ -36,7 +35,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   @override
   void initState() {
     super.initState();
-    widget.customerController.addListener(_updateButtonState);
+    _customerNameController.addListener(_updateButtonState);
     _discountController.addListener(_updateDiscount);
     _mtController.addListener(_updateMt);
     _scrollController.addListener(_checkScrollable);
@@ -45,11 +44,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   void dispose() {
-    widget.customerController.removeListener(_updateButtonState);
+    _customerNameController.removeListener(_updateButtonState);
     _discountController.removeListener(_updateDiscount);
     _mtController.removeListener(_updateMt);
     _scrollController.removeListener(_checkScrollable);
     _scrollController.dispose();
+    _customerNameController.dispose();
     _discountController.dispose();
     _mtController.dispose();
     super.dispose();
@@ -77,7 +77,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   void _updateButtonState() {
     setState(() {
-      _hasCustomerName = widget.customerController.text.trim().isNotEmpty;
+      _hasCustomerName = _customerNameController.text.trim().isNotEmpty;
     });
   }
 
@@ -274,7 +274,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (totalRbQuantity > 0) ...[
           const SizedBox(height: 4),
           Text(
-            "Remaining MT: $totalRbQuantity",
+            "Remaining MT: ${totalRbQuantity - _mt}",
             style: AppTextStyles.billingItems.copyWith(
               color: AppColors.pepsiBlue,
               fontSize: 11,
@@ -489,7 +489,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         ),
       ),
       child: TextField(
-        controller: widget.customerController,
+        controller: _customerNameController,
         style: AppTextStyles.inputText.copyWith(
           color: Colors.black87,
           fontSize: 14,
@@ -618,7 +618,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
       height: 46,
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: _hasCustomerName ? widget.onPrint : null,
+        onPressed: _hasCustomerName
+            ? () {
+                _customerNameController.clear();
+                _discountController.clear();
+                _mtController.clear();
+                widget.onPrint();
+              }
+            : null,
         icon: const Icon(Icons.print, size: 20),
         label: Text(
           "Print Bill",

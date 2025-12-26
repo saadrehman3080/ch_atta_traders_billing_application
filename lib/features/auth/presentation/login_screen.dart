@@ -99,7 +99,7 @@ class LoginScreen extends StatelessWidget {
                 ],
                 isRepeatingAnimation: true,
                 repeatForever: true,
-                pause: const Duration(milliseconds: 800),
+                pause: const Duration(milliseconds: 600),
               ),
             ),
             Text(

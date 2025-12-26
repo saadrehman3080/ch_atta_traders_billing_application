@@ -16,7 +16,7 @@ class OrderPage extends StatefulWidget {
 
 class _OrderPageState extends State<OrderPage> {
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _customerNameController = TextEditingController();
+  final ScrollController _productListScrollController = ScrollController();
   bool _isCheckoutVisible = false;
   late final List<Product> _products = Product.getDummyProducts();
   List<Product> _filteredProducts = [];
@@ -32,7 +32,7 @@ class _OrderPageState extends State<OrderPage> {
   void dispose() {
     _searchController.removeListener(_filterProducts);
     _searchController.dispose();
-    _customerNameController.dispose();
+    _productListScrollController.dispose();
     super.dispose();
   }
 
@@ -102,11 +102,8 @@ class _OrderPageState extends State<OrderPage> {
           bottom: 8 + MediaQuery.of(context).viewInsets.bottom,
         ),
         child: CheckoutPage(
-          customerController: _customerNameController,
           products: _products,
           onPrint: () {
-            _searchController.clear();
-            _customerNameController.clear();
             _handlePrintBill();
             Navigator.pop(context);
           },
@@ -127,8 +124,15 @@ class _OrderPageState extends State<OrderPage> {
       for (final p in _products) {
         p.quantity = 0;
       }
-      _customerNameController.clear();
     });
+    _searchController.clear();
+    if (_productListScrollController.hasClients) {
+      _productListScrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
     _showBillPrintedSnackBar();
   }
 
@@ -333,6 +337,7 @@ class _OrderPageState extends State<OrderPage> {
 
     return Expanded(
       child: ListView.builder(
+        controller: _productListScrollController,
         padding: const EdgeInsets.all(16),
         itemCount: _filteredProducts.length,
         itemBuilder: (context, index) {

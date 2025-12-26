@@ -24,4 +24,11 @@ class BillingCalculations {
   static int countSelectedProducts(List<Product> products) {
     return products.where((p) => p.quantity > 0).length;
   }
+
+  /// Calculate total crates from RB (Returnable Bottle) products
+  static int calculateTotalCrates(List<Product> products) {
+    return products
+        .where((product) => product.name.toUpperCase().endsWith('RB'))
+        .fold<int>(0, (sum, product) => sum + product.quantity);
+  }
 }

@@ -84,39 +84,28 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     if (!_isValidIndex(index)) return;
 
     final bill = billHistory[index];
-    final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
-    final remainingAmount = grandTotal - bill.discount;
 
     // Calculate new amount due
     int newAmountDue = bill.amountDue;
     bool newIsPaid = bill.isPaid;
 
     if (amountReceived != null && amountReceived > 0) {
-      newAmountDue = (remainingAmount - amountReceived).clamp(
-        0,
-        remainingAmount,
-      );
+      newAmountDue = (bill.amountDue - amountReceived).clamp(0, bill.amountDue);
       // Mark as paid if amount received covers the remaining amount
       if (newAmountDue == 0) {
         newIsPaid = true;
       }
     }
 
-    // Calculate new remaining crates
-    int newRemainingCrates = bill.remainingCrates;
+    // Calculate new crates due
     int newCratesDue = bill.cratesDue;
     if (cratesReceived != null && cratesReceived > 0) {
-      newRemainingCrates = (bill.remainingCrates - cratesReceived).clamp(
-        0,
-        bill.remainingCrates,
-      );
-      newCratesDue = newRemainingCrates;
+      newCratesDue = (bill.cratesDue - cratesReceived).clamp(0, bill.cratesDue);
     }
 
     setState(() {
       billHistory[index] = bill.copyWith(
         isPaid: newIsPaid,
-        remainingCrates: newRemainingCrates,
         amountDue: newAmountDue,
         cratesDue: newCratesDue,
       );
@@ -261,7 +250,6 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   Widget _buildCardContent(CreditHistory bill) {
     final totalItems = BillingCalculations.calculateTotalItems(bill.products);
-    final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,9 +259,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         _buildDateTimeInfo(bill.formattedDate, bill.formattedTime),
         const SizedBox(height: 8),
         _buildAmountSection(
-          grandTotal,
+          bill.amountDue,
           totalItems,
-          bill.remainingCrates,
+          bill.cratesDue,
           bill.isPaid,
         ),
       ],
@@ -308,9 +296,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   }
 
   Widget _buildAmountSection(
-    int amount,
+    int amountDue,
     int itemCount,
-    int remainingCrates,
+    int cratesDue,
     bool isPaid,
   ) {
     return Column(
@@ -318,14 +306,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       children: [
         Row(
           children: [
-            _buildAmountText(amount, isPaid),
+            _buildAmountText(amountDue, isPaid),
             const SizedBox(width: 8),
             _buildItemCountBadge(itemCount),
           ],
         ),
-        if (remainingCrates > 0) ...[
+        if (cratesDue > 0) ...[
           const SizedBox(height: 6),
-          _buildPendingCratesText(remainingCrates),
+          _buildPendingCratesText(cratesDue),
         ],
       ],
     );
@@ -348,7 +336,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             const SizedBox(width: 6),
           ],
           Text(
-            'Rs. ${formatNumber(amount)}',
+            isPaid && amount == 0 ? 'Paid' : 'Rs. ${formatNumber(amount)}',
             style: AppTextStyles.productItemTotal.copyWith(
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -361,7 +349,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildPendingCratesText(int remainingCrates) {
+  Widget _buildPendingCratesText(int cratesDue) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -375,7 +363,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           Icon(Icons.inventory_2_outlined, size: 14, color: Colors.orange[700]),
           const SizedBox(width: 6),
           Text(
-            'Pending: $remainingCrates crates',
+            'Pending: $cratesDue crates',
             style: AppTextStyles.productItemTotal.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -568,32 +556,32 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   // ========== Edit Dialog Methods ==========
 
   Widget _buildEditDialog(CreditHistory bill, int index) {
+    final totalCrates = BillingCalculations.calculateTotalCrates(bill.products);
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
-    final remainingAmount = grandTotal - bill.discount;
-    final hasPendingAmount = !bill.isPaid && remainingAmount > 0;
-    final hasPendingCrates = bill.remainingCrates > 0;
+    final hasPendingAmount = bill.amountDue > 0;
+    final hasPendingCrates = bill.cratesDue > 0;
 
     return StatefulBuilder(
       builder: (context, setDialogState) {
         int? enteredAmount = int.tryParse(_amountController.text);
         int? enteredCrates = int.tryParse(_cratesController.text);
 
-        // Cap entered amount to the remaining amount (if more than due, treat as due)
-        int displayRemainingAmount = remainingAmount;
+        // Cap entered amount to amountDue
+        int displayRemainingAmount = bill.amountDue;
         if (enteredAmount != null && enteredAmount > 0) {
-          int cappedAmount = enteredAmount > remainingAmount
-              ? remainingAmount
+          int cappedAmount = enteredAmount > bill.amountDue
+              ? bill.amountDue
               : enteredAmount;
-          displayRemainingAmount = remainingAmount - cappedAmount;
+          displayRemainingAmount = bill.amountDue - cappedAmount;
         }
 
-        // Cap entered crates to the remaining crates (if more than balance, treat as balance)
-        int displayRemainingCrates = bill.remainingCrates;
+        // Cap entered crates to cratesDue
+        int displayRemainingCrates = bill.cratesDue;
         if (enteredCrates != null && enteredCrates > 0) {
-          int cappedCrates = enteredCrates > bill.remainingCrates
-              ? bill.remainingCrates
+          int cappedCrates = enteredCrates > bill.cratesDue
+              ? bill.cratesDue
               : enteredCrates;
-          displayRemainingCrates = bill.remainingCrates - cappedCrates;
+          displayRemainingCrates = bill.cratesDue - cappedCrates;
         }
 
         return Dialog(
@@ -622,7 +610,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                     ..._buildEditAmountSection(
                       setDialogState,
                       grandTotal,
-                      remainingAmount,
+                      bill.amountDue,
                       displayRemainingAmount,
                     ),
                   if (hasPendingAmount && hasPendingCrates) ...[
@@ -633,7 +621,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                   if (hasPendingCrates)
                     ..._buildEditCratesSection(
                       setDialogState,
-                      bill.remainingCrates,
+                      totalCrates,
+                      bill.cratesDue,
                       displayRemainingCrates,
                     ),
                   if (!hasPendingAmount && !hasPendingCrates)
@@ -691,7 +680,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   List<Widget> _buildEditAmountSection(
     StateSetter setDialogState,
     int grandTotal,
-    int remainingAmount,
+    int amountDue,
     int displayRemainingAmount,
   ) {
     return [
@@ -728,7 +717,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             Row(
               children: [
                 Text(
-                  'Due:',
+                  'Amount Due:',
                   style: AppTextStyles.helperText.copyWith(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -737,7 +726,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 ),
                 const Spacer(),
                 Text(
-                  'Rs. ${formatNumber(remainingAmount)}',
+                  'Rs. ${formatNumber(amountDue)}',
                   style: AppTextStyles.productItemTotal.copyWith(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -799,7 +788,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           ),
           onChanged: (value) {
             final amount = int.tryParse(value);
-            if (amount != null && amount > remainingAmount) {
+            if (amount != null && amount > amountDue) {
               _amountController.text = '0';
               _amountController.selection = TextSelection.fromPosition(
                 TextPosition(offset: _amountController.text.length),
@@ -865,7 +854,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   List<Widget> _buildEditCratesSection(
     StateSetter setDialogState,
-    int totalPendingCrates,
+    int totalCrates,
+    int cratesDue,
     int displayRemainingCrates,
   ) {
     return [
@@ -876,30 +866,55 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppColors.gray300, width: 1),
         ),
-        child: Row(
+        child: Column(
           children: [
-            Icon(
-              Icons.inventory_2_outlined,
-              size: 18,
-              color: AppColors.pepsiBlue,
+            Row(
+              children: [
+                Text(
+                  'Total Crates:',
+                  style: AppTextStyles.helperText.copyWith(
+                    fontSize: 13,
+                    color: AppColors.gray500,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$totalCrates',
+                  style: AppTextStyles.productItemTotal.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(
-              'Crates Due:',
-              style: AppTextStyles.helperText.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.pepsiBlue,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              '$totalPendingCrates',
-              style: AppTextStyles.productItemTotal.copyWith(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.pepsiBlue,
-              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 18,
+                  color: AppColors.pepsiBlue,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Due:',
+                  style: AppTextStyles.helperText.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.pepsiBlue,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$cratesDue',
+                  style: AppTextStyles.productItemTotal.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.pepsiBlue,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -953,7 +968,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           ),
           onChanged: (value) {
             final crates = int.tryParse(value);
-            if (crates != null && crates > totalPendingCrates) {
+            if (crates != null && crates > cratesDue) {
               _cratesController.text = '0';
               _cratesController.selection = TextSelection.fromPosition(
                 TextPosition(offset: _cratesController.text.length),

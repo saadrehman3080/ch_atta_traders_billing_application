@@ -6,8 +6,8 @@ import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:flutter/material.dart';
 
-class HistoryPage extends StatelessWidget {
-  const HistoryPage({super.key});
+class DailySalePage extends StatelessWidget {
+  const DailySalePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +29,7 @@ class HistoryPage extends StatelessWidget {
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,
-      title: Text('Sales History', style: AppTextStyles.pageTitleBlack),
+      title: Text('Daily Sales', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
