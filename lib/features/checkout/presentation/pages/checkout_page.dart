@@ -145,8 +145,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
   }
 
-  int get _selectedItemsCount {
+  int get _selectedProductsCount {
     return BillingCalculations.countSelectedProducts(widget.products);
+  }
+
+  int get _selectedItemsCount {
+    return BillingCalculations.calculateTotalItems(widget.products);
   }
 
   List<Product> get _selectedProducts {
@@ -234,7 +238,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: [_buildTotalAmountSection(), _buildItemCountBadge()],
+        children: [
+          _buildTotalAmountSection(),
+          _buildTotalItemsProductsSection(),
+        ],
       ),
     );
   }
@@ -286,20 +293,34 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  Widget _buildItemCountBadge() {
+  Widget _buildTotalItemsProductsSection() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: AppColors.pepsiBlue,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        "$_selectedItemsCount items",
-        style: AppTextStyles.billingItems.copyWith(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        children: [
+          Text(
+            "$_selectedItemsCount items",
+            style: AppTextStyles.billingItems.copyWith(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            "$_selectedProductsCount Products",
+            style: AppTextStyles.billingItems.copyWith(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

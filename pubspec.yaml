@@ -16,6 +16,11 @@ dependencies:
   go_router: ^17.0.0
   flutter_svg: ^2.2.3
   animated_text_kit: ^4.3.0
+  firebase_core: ^4.3.0
+  cloud_firestore: ^6.1.1
+  uuid: ^4.5.2
+  local_auth: ^3.0.0
+  shared_preferences: ^2.5.4
 
 dev_dependencies:
   flutter_test:

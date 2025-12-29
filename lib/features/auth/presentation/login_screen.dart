@@ -1,16 +1,95 @@
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
+import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:flutter/material.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/auth_service.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'dart:ui';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  bool _showFingerprint = false;
+  bool _loading = true;
+  final AuthService _authService = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFirstLogin();
+  }
+
+  Future<void> _checkFirstLogin() async {
+    final isFirst = await AppPreferences.isFirstLogin();
+    setState(() {
+      _showFingerprint = !isFirst;
+      _loading = false;
+    });
+  }
+
+  Future<void> _authenticateWithFingerprint() async {
+    final canCheck = await _authService.canCheckBiometrics();
+    if (!canCheck) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Biometric authentication is not available on this device.',
+          type: SnackBarType.error,
+        );
+      }
+      return;
+    }
+    // Remove 'options' parameter for compatibility
+    final result = await _authService.authenticate(biometricsOnly: true);
+    if (!mounted) return;
+    switch (result) {
+      case AuthResult.success:
+        context.go('/home');
+        break;
+      case AuthResult.failed:
+        CustomSnackBar.show(
+          context,
+          message: 'Authentication failed. Please try again.',
+          type: SnackBarType.error,
+        );
+        break;
+      case AuthResult.lockedOut:
+        CustomSnackBar.show(
+          context,
+          message: 'Too many attempts. Try again later.',
+          type: SnackBarType.error,
+        );
+        break;
+      case AuthResult.canceled:
+        // User cancelled, do nothing
+        break;
+      case AuthResult.error:
+        CustomSnackBar.show(
+          context,
+          message: 'An error occurred. Please try again.',
+          type: SnackBarType.error,
+        );
+        break;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppColors.backgroundBlue,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.backgroundBlue,
       body: SingleChildScrollView(
@@ -25,9 +104,34 @@ class LoginScreen extends StatelessWidget {
             _buildSubtitle(),
             const SizedBox(height: 30),
             const CredentialInputContainer(),
+            if (_showFingerprint) ...[
+              const SizedBox(height: 20),
+              _buildFingerprintButton(),
+            ],
             const SizedBox(height: 30),
             _buildFooter(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFingerprintButton() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _authenticateWithFingerprint,
+        icon: const Icon(Icons.fingerprint, size: 28),
+        label: const Text('Login with Fingerprint'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.backgroundBlue,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -51,65 +155,32 @@ class LoginScreen extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          //const SizedBox(width: 25),
-          // DefaultTextStyle(
-          //   style: AppTextStyles.pageTitle,
-          //   child: AnimatedTextKit(
-          //     animatedTexts: [
-          //       TypewriterAnimatedText(
-          //         'CH. ATTA TRADERS',
-          //         speed: const Duration(milliseconds: 150),
-          //         textAlign: TextAlign.center,
-          //       ),
-          //     ],
-          //     totalRepeatCount: 1,
-          //     pause: const Duration(milliseconds: 1000),
-          //     displayFullTextOnTap: true,
-          //   ),
-          // ),
-          Text('CH. ATTA TRADERS', style: AppTextStyles.pageTitle),
+          const SizedBox(width: 25),
+          DefaultTextStyle(
+            style: AppTextStyles.pageTitle,
+            child: AnimatedTextKit(
+              animatedTexts: [
+                TypewriterAnimatedText(
+                  'CH. ATTA TRADERS',
+                  speed: const Duration(milliseconds: 150),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              totalRepeatCount: 1,
+              pause: const Duration(milliseconds: 1000),
+              displayFullTextOnTap: true,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildSubtitle() {
-    return Center(
-      child: SizedBox(
-        height: 26,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 105,
-              child: AnimatedTextKit(
-                animatedTexts: [
-                  RotateAnimatedText(
-                    'Pepsi Cola',
-                    textStyle: AppTextStyles.pageSubtitle,
-                    textAlign: TextAlign.right,
-                  ),
-                  RotateAnimatedText(
-                    'Master Cola',
-                    textStyle: AppTextStyles.pageSubtitle,
-                    textAlign: TextAlign.right,
-                  ),
-                ],
-                isRepeatingAnimation: true,
-                repeatForever: true,
-                pause: const Duration(milliseconds: 600),
-              ),
-            ),
-            Text(
-              'Distributor for Kallar Syedan',
-              style: AppTextStyles.pageSubtitle,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+    return Text(
+      'Pepsi Cola Distributor For Kallar Syedan',
+      style: AppTextStyles.pageSubtitle,
+      textAlign: TextAlign.center,
     );
   }
 
@@ -199,7 +270,7 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
 
     try {
       await Future.delayed(const Duration(seconds: 1));
-
+      await AppPreferences.setNotFirstLogin();
       if (!mounted) return;
       context.go('/home');
     } catch (e) {

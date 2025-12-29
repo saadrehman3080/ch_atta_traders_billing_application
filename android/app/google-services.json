@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "42480456932",
+    "project_id": "atta-traders-billing-app",
+    "storage_bucket": "atta-traders-billing-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:42480456932:android:2910ea86579770f5d508f1",
+        "android_client_info": {
+          "package_name": "com.example.ch_atta_traders_billing_application"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUHXrjWwf8a6g4KTQVM253E4lyYuVLkqw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
