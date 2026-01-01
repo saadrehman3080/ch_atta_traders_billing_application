@@ -76,7 +76,7 @@ class Product {
       Product(name: 'Aquafina 19L', price: 400),
       Product(name: 'Murree Sparklet 1500ml', price: 440),
       Product(name: 'Murree Sparklet 500ml', price: 440),
-      Product(name: 'Nestlé 1500ml', price: 490),
+      Product(name: 'Nestle 1500ml', price: 490),
       Product(name: 'Master Water', price: 0),
     ];
   }

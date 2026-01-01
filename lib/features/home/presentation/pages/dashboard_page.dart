@@ -1,9 +1,12 @@
 import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
+import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 class DashboardPage extends StatefulWidget {
   final VoidCallback? onNavigateToOrder;
@@ -16,16 +19,27 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   late DashboardData _dashboardData;
+  String _salesmanName = 'Salesman';
 
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
+    _loadSalesmanName();
   }
 
   void _loadDashboardData() {
     // TODO: Replace with actual data from Firebase/local storage
     _dashboardData = DashboardData.getDummyData();
+  }
+
+  Future<void> _loadSalesmanName() async {
+    final name = await AppPreferences.instance.salesmanName;
+    if (name != null && mounted) {
+      setState(() {
+        _salesmanName = name;
+      });
+    }
   }
 
   @override
@@ -77,7 +91,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Row(
       children: [
         Text(
-          'Khawar • Salesman Panel',
+          '$_salesmanName • Salesman Panel',
           style: AppTextStyles.helperText.copyWith(
             fontSize: 12,
             color: AppColors.gray500,
@@ -321,12 +335,12 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         _buildPrintersSectionHeader(),
         const SizedBox(height: 12),
-        if (hasPrinters) ...[
-          _buildPrinterItem('HP LaserJet Pro', true),
-          const SizedBox(height: 8),
-          _buildPrinterItem('Canon PIXMA G3020', false),
-        ] else
-          _buildNoPrintersFound(),
+        // if (hasPrinters) ...[
+        //   _buildPrinterItem('HP LaserJet Pro', true),
+        //   const SizedBox(height: 8),
+        //   _buildPrinterItem('Canon PIXMA G3020', false),
+        // ] else
+        _buildNoPrintersFound(),
       ],
     );
   }
@@ -544,8 +558,24 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // ========== Business Logic Methods ==========
 
-  void _handleLogout(BuildContext context) {
-    context.go('/');
+  Future<void> _handleLogout(BuildContext context) async {
+    try {
+      // Clear authentication state
+      if (context.mounted) {
+        context.read<AuthProvider>().logout();
+      }
+
+      // Navigate to login screen
+      if (context.mounted) {
+        context.go('/');
+      }
+    } catch (e) {
+      debugPrint('Error during logout: $e');
+      // Still navigate to login even if cleanup fails
+      if (context.mounted) {
+        context.go('/');
+      }
+    }
   }
 
   void _handleNewBill() {

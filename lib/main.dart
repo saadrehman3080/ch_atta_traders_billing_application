@@ -1,8 +1,12 @@
 import 'package:ch_atta_traders_billing_application/app/router.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/app_theme.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
+import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -10,6 +14,9 @@ void main() async {
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize App Preferences
+  await AppPreferences.init();
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -23,10 +30,16 @@ class ChAttaBillingApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      debugShowCheckedModeBanner: false,
-      routerConfig: appRouter,
-      theme: AppTheme.light,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ProductProvider()),
+      ],
+      child: MaterialApp.router(
+        debugShowCheckedModeBanner: false,
+        routerConfig: appRouter,
+        theme: AppTheme.light,
+      ),
     );
   }
 }

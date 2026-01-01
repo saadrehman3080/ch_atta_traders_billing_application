@@ -4,8 +4,10 @@ import 'package:ch_atta_traders_billing_application/common/themes/text_styles.da
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/checkout_page.dart';
+import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class OrderPage extends StatefulWidget {
   const OrderPage({super.key});
@@ -18,14 +20,16 @@ class _OrderPageState extends State<OrderPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _productListScrollController = ScrollController();
   bool _isCheckoutVisible = false;
-  late final List<Product> _products = Product.getDummyProducts();
   List<Product> _filteredProducts = [];
 
   @override
   void initState() {
     super.initState();
-    _filteredProducts = _products;
     _searchController.addListener(_filterProducts);
+    // Load products from Firebase
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ProductProvider>().loadProducts();
+    });
   }
 
   @override
@@ -37,48 +41,95 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   void _filterProducts() {
-    final query = _searchController.text.toLowerCase().trim();
     setState(() {
-      if (query.isEmpty) {
-        _filteredProducts = _products;
-      } else {
-        _filteredProducts = _products
-            .where((product) => product.name.toLowerCase().contains(query))
-            .toList();
-      }
+      // Trigger rebuild to apply filter
     });
+  }
+
+  List<Product> _getFilteredProducts(List<Product> allProducts) {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) {
+      return allProducts;
+    } else {
+      return allProducts
+          .where((product) => product.name.toLowerCase().contains(query))
+          .toList();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final int selectedCount = BillingCalculations.countSelectedProducts(
-      _products,
-    );
+    return Consumer<ProductProvider>(
+      builder: (context, productProvider, child) {
+        // Apply filter to current products
+        _filteredProducts = _getFilteredProducts(productProvider.products);
 
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: _buildAppBar(selectedCount),
-      body: Column(children: [_buildSearchBar(), _buildProductList()]),
+        final int selectedCount = BillingCalculations.countSelectedProducts(
+          productProvider.products,
+        );
+
+        // Show loading indicator
+        if (productProvider.isLoading) {
+          return Scaffold(
+            backgroundColor: Colors.grey[100],
+            appBar: _buildAppBar(selectedCount),
+            body: const Center(
+              child: CircularProgressIndicator(color: AppColors.pepsiBlue),
+            ),
+          );
+        }
+
+        // Show error state
+        if (productProvider.state == ProductState.error) {
+          return Scaffold(
+            backgroundColor: Colors.grey[100],
+            appBar: _buildAppBar(selectedCount),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: AppColors.pepsiRed,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    productProvider.errorMessage ?? 'Failed to load products',
+                    style: AppTextStyles.helperText,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => productProvider.refreshProducts(),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: Colors.grey[100],
+          appBar: _buildAppBar(selectedCount),
+          body: Column(children: [_buildSearchBar(), _buildProductList()]),
+        );
+      },
     );
   }
 
   // ========== Business Logic Methods =
   void _incrementQuantity(int index) {
-    setState(() {
-      _products[index].quantity++;
-    });
+    context.read<ProductProvider>().incrementQuantity(index);
   }
 
   void _decrementQuantity(int index) {
-    setState(() {
-      if (_products[index].quantity > 0) {
-        _products[index].quantity--;
-      }
-    });
+    context.read<ProductProvider>().decrementQuantity(index);
   }
 
   int get _grandTotal {
-    return BillingCalculations.calculateGrandTotal(_products);
+    final products = context.read<ProductProvider>().products;
+    return BillingCalculations.calculateGrandTotal(products);
   }
 
   void _showCheckoutBottomSheet() {
@@ -91,6 +142,8 @@ class _OrderPageState extends State<OrderPage> {
       _isCheckoutVisible = true;
     });
 
+    final products = context.read<ProductProvider>().products;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -102,7 +155,7 @@ class _OrderPageState extends State<OrderPage> {
           bottom: 8 + MediaQuery.of(context).viewInsets.bottom,
         ),
         child: CheckoutPage(
-          products: _products,
+          products: products,
           onPrint: () {
             _handlePrintBill();
             Navigator.pop(context);
@@ -120,11 +173,7 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   void _handlePrintBill() {
-    setState(() {
-      for (final p in _products) {
-        p.quantity = 0;
-      }
-    });
+    context.read<ProductProvider>().resetAllQuantities();
     _searchController.clear();
     if (_productListScrollController.hasClients) {
       _productListScrollController.animateTo(
@@ -342,7 +391,8 @@ class _OrderPageState extends State<OrderPage> {
         itemCount: _filteredProducts.length,
         itemBuilder: (context, index) {
           final product = _filteredProducts[index];
-          final originalIndex = _products.indexOf(product);
+          final products = context.read<ProductProvider>().products;
+          final originalIndex = products.indexOf(product);
           return _buildProductItem(product, originalIndex);
         },
       ),
