@@ -182,7 +182,6 @@ class _OrderPageState extends State<OrderPage> {
         curve: Curves.easeOut,
       );
     }
-    _showBillPrintedSnackBar();
   }
 
   void _showNoItemsSnackBar() {
@@ -190,14 +189,6 @@ class _OrderPageState extends State<OrderPage> {
       context,
       message: 'No items to print',
       type: SnackBarType.warning,
-    );
-  }
-
-  void _showBillPrintedSnackBar() {
-    CustomSnackBar.show(
-      context,
-      message: 'Bill printed and order reset',
-      type: SnackBarType.success,
     );
   }
 

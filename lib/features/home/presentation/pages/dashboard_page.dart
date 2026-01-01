@@ -20,6 +20,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   late DashboardData _dashboardData;
   String _salesmanName = 'Salesman';
+  // final bool hasPrinters = false; // TODO: Replace with actual printer check
 
   @override
   void initState() {
@@ -328,18 +329,11 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildPrintersSection() {
-    final hasPrinters = false; // Change this to dynamic check later
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildPrintersSectionHeader(),
         const SizedBox(height: 12),
-        // if (hasPrinters) ...[
-        //   _buildPrinterItem('HP LaserJet Pro', true),
-        //   const SizedBox(height: 8),
-        //   _buildPrinterItem('Canon PIXMA G3020', false),
-        // ] else
         _buildNoPrintersFound(),
       ],
     );
@@ -439,81 +433,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildPrinterItem(String printerName, bool isConnected) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.gray100,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.gray300, width: 1),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                Icon(
-                  Icons.print,
-                  color: isConnected ? Colors.green : AppColors.gray500,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        printerName,
-                        style: AppTextStyles.productItemName.copyWith(
-                          color: Colors.black87,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        isConnected ? 'Connected' : 'Not connected',
-                        style: AppTextStyles.helperText.copyWith(
-                          color: isConnected ? Colors.green : AppColors.gray500,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _buildPrinterActionButton(isConnected),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrinterActionButton(bool isConnected) {
-    return TextButton(
-      onPressed: () => _handlePrinterAction(isConnected),
-      style: TextButton.styleFrom(
-        backgroundColor: isConnected
-            ? AppColors.pepsiRed.withValues(alpha: 0.1)
-            : Colors.green.withValues(alpha: 0.1),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: Text(
-        isConnected ? 'Disconnect' : 'Connect',
-        style: AppTextStyles.helperText.copyWith(
-          color: isConnected ? AppColors.pepsiRed : Colors.green,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
   Widget _buildNewBillButton() {
     return SizedBox(
       height: 44,
@@ -582,11 +501,80 @@ class _DashboardPageState extends State<DashboardPage> {
     widget.onNavigateToOrder?.call();
   }
 
-  void _handlePrinterAction(bool isConnected) {
-    // TODO: Implement printer connect/disconnect logic
-  }
-
   void _handleRefreshPrinters() {
     // TODO: Implement refresh printers logic
   }
+
+  // Widget _buildPrinterItem(String printerName, String printerStatus) {
+  //   return Container(
+  //     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  //     decoration: BoxDecoration(
+  //       color: AppColors.gray50,
+  //       borderRadius: BorderRadius.circular(8),
+  //       border: Border.all(color: AppColors.gray300, width: 1),
+  //     ),
+  //     child: Row(
+  //       children: [
+  //         Icon(
+  //           Icons.print,
+  //           color: printerStatus == 'Connected'
+  //               ? AppColors.pepsiBlue
+  //               : AppColors.gray400,
+  //           size: 20,
+  //         ),
+  //         const SizedBox(width: 10),
+  //         Expanded(
+  //           child: Column(
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               Text(
+  //                 printerName,
+  //                 style: AppTextStyles.productItemName.copyWith(
+  //                   fontSize: 13,
+  //                   fontWeight: FontWeight.w600,
+  //                 ),
+  //               ),
+  //               const SizedBox(height: 2),
+  //               Text(
+  //                 printerStatus,
+  //                 style: AppTextStyles.helperText.copyWith(
+  //                   fontSize: 11,
+  //                   color: printerStatus == 'Connected'
+  //                       ? AppColors.pepsiBlue
+  //                       : AppColors.gray500,
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //         _buildPrinterActionButton(printerStatus),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+  // Widget _buildPrinterActionButton(String printerStatus) {
+  //   return TextButton(
+  //     onPressed: () => _handlePrinterAction(printerStatus),
+  //     style: TextButton.styleFrom(
+  //       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+  //       minimumSize: Size.zero,
+  //       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  //     ),
+  //     child: Text(
+  //       printerStatus == 'Connected' ? 'Disconnect' : 'Connect',
+  //       style: AppTextStyles.helperText.copyWith(
+  //         fontSize: 11,
+  //         color: printerStatus == 'Connected'
+  //             ? AppColors.pepsiRed
+  //             : AppColors.pepsiBlue,
+  //         fontWeight: FontWeight.w600,
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  // void _handlePrinterAction(String printerStatus) {
+  //   // TODO: Implement connect/disconnect printer logic
+  // }
 }

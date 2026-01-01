@@ -12,6 +12,7 @@ Notes:  The splash screen file is not being used in the project.
 
 *   After printing bill reset the products list view to top. 
 
+* Dispose Providers properly.
 
 ************* DONE **************
 Remove the Keyborad first and then start the login Process.

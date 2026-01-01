@@ -420,7 +420,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_loading) {
       return const Scaffold(
         backgroundColor: AppColors.backgroundBlue,
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.pepsiWhite),
+        ),
       );
     }
     return Scaffold(

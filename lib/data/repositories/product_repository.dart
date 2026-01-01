@@ -109,33 +109,4 @@ class ProductRepository {
       return [];
     }
   }
-
-  /// Fetches a single product by name.
-  ///
-  /// [productName] - The name of the product (document ID)
-  ///
-  /// Returns the [Product] object if found, null otherwise.
-  Future<Product?> fetchProductByName(String productName) async {
-    try {
-      final doc = await _firestore
-          .collection(_collectionName)
-          .doc(productName)
-          .get();
-
-      if (!doc.exists) {
-        debugPrint('Product not found: $productName');
-        return null;
-      }
-
-      final data = doc.data()!;
-      return Product(
-        name: doc.id,
-        price: (data['price'] as num?)?.toInt() ?? 0,
-        quantity: 0,
-      );
-    } catch (e) {
-      debugPrint('Error fetching product $productName: $e');
-      return null;
-    }
-  }
 }

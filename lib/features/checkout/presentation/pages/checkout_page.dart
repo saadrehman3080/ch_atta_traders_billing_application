@@ -1,9 +1,17 @@
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
+import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
+import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
+import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_provider.dart';
+import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 class CheckoutPage extends StatefulWidget {
   final List<Product> products;
@@ -22,6 +30,9 @@ class CheckoutPage extends StatefulWidget {
 }
 
 class _CheckoutPageState extends State<CheckoutPage> {
+  late final SaleProvider _saleProvider;
+  late final CreditProvider _creditProvider;
+  final _uuid = const Uuid();
   bool _hasCustomerName = false;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _customerNameController = TextEditingController();
@@ -35,6 +46,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   @override
   void initState() {
     super.initState();
+    _saleProvider = SaleProvider();
+    _creditProvider = CreditProvider();
     _customerNameController.addListener(_updateButtonState);
     _discountController.addListener(_updateDiscount);
     _mtController.addListener(_updateMt);
@@ -52,23 +65,31 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _customerNameController.dispose();
     _discountController.dispose();
     _mtController.dispose();
+    _saleProvider.dispose();
+    _creditProvider.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: _buildContainerDecoration(),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildDragHandle(),
-          _buildSummaryInfo(),
-          const SizedBox(height: 12),
-          _buildScrollableContent(),
-        ],
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _saleProvider),
+        ChangeNotifierProvider.value(value: _creditProvider),
+      ],
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        decoration: _buildContainerDecoration(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDragHandle(),
+            _buildSummaryInfo(),
+            const SizedBox(height: 12),
+            _buildScrollableContent(),
+          ],
+        ),
       ),
     );
   }
@@ -172,6 +193,116 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return _selectedProducts
         .where((product) => product.name.toUpperCase().endsWith('RB'))
         .fold(0, (sum, product) => sum + product.quantity);
+  }
+
+  Future<void> _handlePrintBill() async {
+    // Generate bill ID using UUID
+    final billId = _uuid.v4();
+
+    // Get salesman name from SharedPreferences
+    final salesmanName = await AppPreferences.instance.salesmanName;
+    if (salesmanName == null || salesmanName.isEmpty) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Salesman name not found. Please login again.',
+          type: SnackBarType.error,
+        );
+      }
+      return;
+    }
+
+    // Determine if MT is collected
+    final bool hasMt = _mtController.text.trim().isNotEmpty;
+
+    // Save to Daily Sales only if: payment is cash AND MT is empty
+    if (_paymentType == 'cash' && !hasMt) {
+      // Create SaleHistory object
+      final sale = SaleHistory(
+        billId: billId,
+        customerName: _customerNameController.text.trim(),
+        date: DateTime.now(),
+        products: _selectedProducts
+            .map(
+              (p) =>
+                  Product(name: p.name, price: p.price, quantity: p.quantity),
+            )
+            .toList(),
+        discount: _discount,
+      );
+
+      // Save to Firebase
+      final success = await _saleProvider.saveSale(sale, salesmanName);
+
+      if (success) {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Bill saved successfully',
+            type: SnackBarType.success,
+          );
+        }
+        // Call the original onPrint callback
+        widget.onPrint();
+      } else {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: _saleProvider.errorMessage ?? 'Failed to save bill',
+            type: SnackBarType.error,
+          );
+        }
+      }
+    } else {
+      // Save to Credit History if:
+      // 1. Payment is credit AND MT is not empty
+      // 2. Payment is cash AND MT is not empty
+      // 3. Payment is credit AND MT is empty
+
+      // Calculate cratesDue: 0 if MT not collected, otherwise Remaining MT - Collected MT
+      final totalRbQuantity = _getTotalRbQuantity();
+      final cratesDue = hasMt ? (totalRbQuantity - _mt) : 0;
+
+      final credit = CreditHistory(
+        billId: billId,
+        customerName: _customerNameController.text.trim(),
+        date: DateTime.now(),
+        products: _selectedProducts
+            .map(
+              (p) =>
+                  Product(name: p.name, price: p.price, quantity: p.quantity),
+            )
+            .toList(),
+        discount: _discount,
+        isPaid: _paymentType == 'cash', // true if cash, false if credit
+        amountDue:
+            _grandTotal, // grandTotal already includes discount calculation
+        cratesDue: cratesDue, // Remaining MT - Collected MT
+      );
+
+      // Save to Firebase
+      final success = await _creditProvider.saveCredit(credit, salesmanName);
+
+      if (success) {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Credit saved successfully',
+            type: SnackBarType.success,
+          );
+        }
+        // Call the original onPrint callback
+        widget.onPrint();
+      } else {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: _creditProvider.errorMessage ?? 'Failed to save credit',
+            type: SnackBarType.error,
+          );
+        }
+      }
+    }
   }
 
   // ========== Main Container Building Methods ==========
@@ -635,29 +766,51 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildPrintButton() {
-    return SizedBox(
-      height: 46,
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: _hasCustomerName
-            ? () {
-                _customerNameController.clear();
-                _discountController.clear();
-                _mtController.clear();
-                widget.onPrint();
-              }
-            : null,
-        icon: const Icon(Icons.print, size: 20),
-        label: Text(
-          "Print Bill",
-          style: AppTextStyles.smallButton.copyWith(
-            color: _hasCustomerName ? Colors.white : AppColors.gray500,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+    return Consumer2<SaleProvider, CreditProvider>(
+      builder: (context, saleProvider, creditProvider, child) {
+        final isLoading = saleProvider.isSaving || creditProvider.isSaving;
+        final isSaved =
+            saleProvider.state == SaleState.saved ||
+            creditProvider.state == CreditState.saved;
+
+        return SizedBox(
+          height: 46,
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: (_hasCustomerName && !isLoading)
+                ? () async {
+                    await _handlePrintBill();
+                    if (mounted && isSaved) {
+                      _customerNameController.clear();
+                      _discountController.clear();
+                      _mtController.clear();
+                    }
+                  }
+                : null,
+            icon: isLoading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.pepsiBlueLight.withValues(alpha: 0.7),
+                    ),
+                  )
+                : const Icon(Icons.print, size: 20),
+            label: Text(
+              isLoading ? 'Saving...' : "Print Bill",
+              style: AppTextStyles.smallButton.copyWith(
+                color: (_hasCustomerName && !isLoading)
+                    ? Colors.white
+                    : AppColors.gray500,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: _buildPrintButtonStyle(),
           ),
-        ),
-        style: _buildPrintButtonStyle(),
-      ),
+        );
+      },
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:ch_atta_traders_billing_application/common/constants/formated_nu
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:flutter/material.dart';
@@ -73,7 +74,7 @@ class BillDetailsDialog extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                bill.customerName,
+                                toTitleCase(bill.customerName),
                                 style: AppTextStyles.pageTitleBlack.copyWith(
                                   fontSize: 20,
                                 ),
@@ -97,7 +98,7 @@ class BillDetailsDialog extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              bill.formattedDate,
+                              formatDateShort(bill.date),
                               style: AppTextStyles.inputText.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: Colors.black,
@@ -310,7 +311,7 @@ class BillDetailsDialog extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              bill.billId,
+              truncateBillId(bill.billId),
               style: AppTextStyles.helperText.copyWith(
                 color: AppColors.gray500,
               ),
