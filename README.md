@@ -1,18 +1,15 @@
 # ch_atta_traders_billing_application
-Notes:  The splash screen file is not being used in the project.
 
 
-
-
-*   When the bill is deleted from the credit it will move to the     history section, ispaid to true, amountdue to 0 and update the dashboard cash as well.
-
-*   Treat the customer name properly before storing into database     like Saad Ur Rehman.
+*   When the bill is deleted from the credit it will move to the        history section, ispaid to true, amountdue to 0 and update the dashboard cash as well.
 
 *   After editing the cash received update the dashboard data.
 
-*   After printing bill reset the products list view to top. 
+*   Remove all the dummy data as soon as its need ended.
 
-* Dispose Providers properly.
+*   Dispose Providers properly.
+
+*   In the credit and sales model the date formate models should be constant.
 
 ************* DONE **************
 Remove the Keyborad first and then start the login Process.
@@ -25,3 +22,5 @@ Make the snackbar consistant and constant(Widget).
 Dont allow the dialog to enter the empty and amount more than remaning.
 In the bill detail widget if bill is paid add indication for it.
 Update the snackbar Theme.
+Treat the customer name properly before storing into database     like Saad Ur Rehman.
+After printing bill reset the products list view to top. 

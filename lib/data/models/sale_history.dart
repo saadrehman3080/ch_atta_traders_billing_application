@@ -76,49 +76,4 @@ class SaleHistory implements BillBase {
     final minute = date.minute.toString().padLeft(2, '0');
     return '$hour:$minute $period';
   }
-
-  // Dummy data for testing (will be replaced with Firebase data)
-  static List<SaleHistory> getDummySaleHistory() {
-    return [
-      SaleHistory(
-        billId: 'SALE001',
-        customerName: 'Ahmed Khan',
-        date: DateTime(2025, 12, 20, 10, 30),
-        products: [
-          Product(name: 'Pepsi 1500ml', quantity: 2, price: 990),
-          Product(name: 'Sting 240ml RB', quantity: 1, price: 1200),
-          Product(name: 'Aquafina 1500ml', quantity: 3, price: 450),
-        ],
-        discount: 150,
-      ),
-      SaleHistory(
-        billId: 'SALE002',
-        customerName: 'Naiz Bakers',
-        date: DateTime(2025, 12, 20, 11, 15),
-        products: [
-          Product(name: 'Coke 1500ml', quantity: 3, price: 1020),
-          Product(name: 'Pepsi Can 330ml', quantity: 2, price: 1160),
-        ],
-        discount: 100,
-      ),
-      SaleHistory(
-        billId: 'SALE003',
-        customerName: 'Babu Ismail',
-        date: DateTime(2025, 12, 19, 14, 45),
-        products: [
-          Product(name: 'Pepsi 2250ml', quantity: 5, price: 920),
-          Product(name: 'Master Cola 1500ml', quantity: 4, price: 700),
-        ],
-      ),
-      SaleHistory(
-        billId: 'SALE004',
-        customerName: 'Ayesha Malik',
-        date: DateTime(2025, 12, 19, 16, 20),
-        products: [
-          Product(name: 'Gatorade 500ml', quantity: 4, price: 990),
-          Product(name: 'Sting 500ml', quantity: 2, price: 1260),
-        ],
-      ),
-    ];
-  }
 }

@@ -21,14 +21,4 @@ class Salesman {
       salesmanId: data['salesmanId'] as int? ?? 0,
     );
   }
-
-  /// Converts the [Salesman] instance to a map for Firestore.
-  Map<String, dynamic> toFirestore() {
-    return {'name': name, 'password': password, 'salesmanId': salesmanId};
-  }
-
-  @override
-  String toString() {
-    return 'Salesman(id: $id, name: $name, salesmanId: $salesmanId)';
-  }
 }

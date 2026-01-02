@@ -1,4 +1,3 @@
-import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
@@ -261,24 +260,23 @@ class _DailySalePageState extends State<DailySalePage> {
             fontSize: 16,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2,
-            color: Colors.black87,
           ),
         ),
         const SizedBox(height: 6),
         Row(
           children: [
-            Icon(Icons.access_time_rounded, size: 12, color: AppColors.gray500),
+            Icon(Icons.access_time_rounded, size: 16, color: AppColors.gray500),
             const SizedBox(width: 4),
             Text(
               sale.formattedTime,
               style: AppTextStyles.helperText.copyWith(
-                fontSize: 12,
+                fontSize: 16,
                 color: AppColors.gray500,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -307,29 +305,15 @@ class _DailySalePageState extends State<DailySalePage> {
       decoration: BoxDecoration(
         color: AppColors.pepsiBlueLight.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: AppColors.pepsiBlueLight.withValues(alpha: 0.2),
-          width: 0.5,
-        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.payments_outlined,
-            size: 14,
-            color: AppColors.pepsiBlueLight,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            'Rs. ${formatNumber(amount)}',
-            style: AppTextStyles.productItemTotal.copyWith(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.pepsiBlueLight,
-            ),
-          ),
-        ],
+      child: Text(
+        'Rs. ${formatCashAmount(amount)}',
+        style: AppTextStyles.productItemTotal.copyWith(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: AppColors.pepsiBlueLight,
+          letterSpacing: -0.3,
+        ),
       ),
     );
   }
@@ -346,7 +330,7 @@ class _DailySalePageState extends State<DailySalePage> {
         '$count items',
         style: AppTextStyles.helperText.copyWith(
           fontSize: 11,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
           color: AppColors.gray500,
         ),
       ),

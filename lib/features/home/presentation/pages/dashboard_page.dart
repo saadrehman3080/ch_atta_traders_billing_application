@@ -1,6 +1,6 @@
-import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
@@ -184,7 +184,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildCollectionAmount() {
     return Text(
-      'Rs. ${formatNumber(_dashboardData.totalCollection)}',
+      'Rs. ${formatCashAmount(_dashboardData.totalCollection)}',
       style: AppTextStyles.billingTotal.copyWith(fontSize: 32),
     );
   }
@@ -217,7 +217,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: _buildStatItem(
                 'Credit',
-                'Rs. ${formatNumber(_dashboardData.totalCredit)}',
+                'Rs. ${formatCashAmount(_dashboardData.totalCredit)}',
                 Icons.credit_card_outlined,
               ),
             ),
@@ -225,7 +225,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: _buildStatItem(
                 'Discount',
-                'Rs. ${formatNumber(_dashboardData.totalDiscount)}',
+                'Rs. ${formatCashAmount(_dashboardData.totalDiscount)}',
                 Icons.discount_outlined,
               ),
             ),

@@ -1,11 +1,14 @@
-import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
+import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 /// Displays a list of credit transaction records with delete functionality.
 class CreditRecordPage extends StatefulWidget {
@@ -16,72 +19,121 @@ class CreditRecordPage extends StatefulWidget {
 }
 
 class _CreditRecordPageState extends State<CreditRecordPage> {
-  late List<CreditHistory> billHistory;
+  late final CreditHistoryProvider _creditProvider;
+  bool _hasLoadedOnce = false;
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _cratesController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _initializeBillHistory();
+    _creditProvider = CreditHistoryProvider();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Load credits every time the page comes into view
+    if (!_hasLoadedOnce || ModalRoute.of(context)?.isCurrent == true) {
+      _hasLoadedOnce = true;
+      _loadCredits();
+    }
   }
 
   @override
   void dispose() {
     _amountController.dispose();
     _cratesController.dispose();
+    _creditProvider.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCredits() async {
+    final salesmanName = await AppPreferences.instance.salesmanName;
+    if (salesmanName != null && salesmanName.isNotEmpty) {
+      await _creditProvider.loadAllCreditHistory(salesmanName);
+    }
+  }
+
+  Future<void> _refreshCredits() async {
+    final salesmanName = await AppPreferences.instance.salesmanName;
+    if (salesmanName != null && salesmanName.isNotEmpty) {
+      await _creditProvider.refreshCreditHistory(salesmanName);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.gray100,
-      appBar: _buildAppBar(),
-      body: billHistory.isEmpty ? _buildEmptyState() : _buildBillList(),
+    return ChangeNotifierProvider.value(
+      value: _creditProvider,
+      child: Scaffold(
+        backgroundColor: AppColors.gray100,
+        appBar: _buildAppBar(),
+        body: Consumer<CreditHistoryProvider>(
+          builder: (context, provider, child) {
+            if (provider.isLoading && provider.credits.isEmpty) {
+              return _buildLoadingState();
+            }
+
+            if (provider.hasError) {
+              return _buildErrorState(provider.errorMessage);
+            }
+
+            if (provider.credits.isEmpty && !provider.isLoading) {
+              return _buildEmptyState();
+            }
+
+            return RefreshIndicator(
+              onRefresh: _refreshCredits,
+              color: AppColors.pepsiBlue,
+              child: _buildBillList(provider.credits),
+            );
+          },
+        ),
+      ),
     );
   }
 
   // ========== Business Logic Methods ==========
 
-  void _initializeBillHistory() {
-    billHistory = CreditHistory.getDummyCreditHistory();
-  }
-
-  void _deleteItem(int index) {
-    if (!_isValidIndex(index)) return;
+  void _deleteItem(int index, List<CreditHistory> billHistory) {
+    if (!_isValidIndex(index, billHistory)) return;
 
     final deletedBill = billHistory[index];
-    setState(() {
-      billHistory.removeAt(index);
-    });
+    // TODO: Implement Firebase delete functionality
     _showDeleteSnackBar(deletedBill.customerName);
   }
 
-  bool _isValidIndex(int index) {
+  bool _isValidIndex(int index, List<CreditHistory> billHistory) {
     return index >= 0 && index < billHistory.length;
   }
 
-  void _showDeleteConfirmation(int index) {
+  void _showDeleteConfirmation(int index, List<CreditHistory> billHistory) {
     final bill = billHistory[index];
     showDialog(
       context: context,
-      builder: (context) => _buildDeleteConfirmationDialog(bill, index),
+      builder: (context) =>
+          _buildDeleteConfirmationDialog(bill, index, billHistory),
     );
   }
 
-  void _showEditDialog(int index) {
+  void _showEditDialog(int index, List<CreditHistory> billHistory) {
     final bill = billHistory[index];
     _amountController.clear();
     _cratesController.clear();
     showDialog(
       context: context,
-      builder: (context) => _buildEditDialog(bill, index),
+      builder: (context) => _buildEditDialog(bill, index, billHistory),
     );
   }
 
-  void _updateBillRecord(int index, int? amountReceived, int? cratesReceived) {
-    if (!_isValidIndex(index)) return;
+  void _updateBillRecord(
+    int index,
+    int? amountReceived,
+    int? cratesReceived,
+    List<CreditHistory> billHistory,
+  ) {
+    if (!_isValidIndex(index, billHistory)) return;
 
     final bill = billHistory[index];
 
@@ -103,14 +155,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       newCratesDue = (bill.cratesDue - cratesReceived).clamp(0, bill.cratesDue);
     }
 
-    setState(() {
-      billHistory[index] = bill.copyWith(
-        isPaid: newIsPaid,
-        amountDue: newAmountDue,
-        cratesDue: newCratesDue,
-      );
-    });
-
+    // TODO: Implement Firebase update functionality
     _showUpdateSnackBar();
   }
 
@@ -150,6 +195,62 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(color: AppColors.gray300, height: 1),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: CircularProgressIndicator(color: AppColors.pepsiBlue),
+    );
+  }
+
+  Widget _buildErrorState(String? errorMessage) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.pepsiRedLight.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.error_outline,
+                size: 48,
+                color: AppColors.pepsiRedLight,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Error Loading Credits',
+              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage ?? 'Something went wrong',
+              style: AppTextStyles.helperText.copyWith(
+                color: AppColors.gray500,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadCredits,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.pepsiBlue,
+                foregroundColor: AppColors.pepsiWhite,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -194,20 +295,24 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildBillList() {
+  Widget _buildBillList(List<CreditHistory> billHistory) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: billHistory.length,
       itemBuilder: (context, index) {
         final bill = billHistory[index];
-        return _buildCreditCard(bill, index);
+        return _buildCreditCard(bill, index, billHistory);
       },
     );
   }
 
   // ========== Card Building Methods ==========
 
-  Widget _buildCreditCard(CreditHistory bill, int index) {
+  Widget _buildCreditCard(
+    CreditHistory bill,
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -240,7 +345,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                   ),
                 ),
               ),
-              _buildActionButtons(index),
+              _buildActionButtons(index, billHistory),
             ],
           ),
         ),
@@ -270,7 +375,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   Widget _buildCustomerName(String name) {
     return Text(
-      name,
+      toTitleCase(name),
       style: AppTextStyles.productItemName.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w700,
@@ -285,7 +390,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         Icon(Icons.calendar_today_outlined, size: 12, color: AppColors.gray500),
         const SizedBox(width: 4),
         Text(
-          '$date • $time',
+          '$date; • $time',
           style: AppTextStyles.helperText.copyWith(
             fontSize: 12,
             color: AppColors.gray500,
@@ -336,7 +441,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             const SizedBox(width: 6),
           ],
           Text(
-            isPaid && amount == 0 ? 'Paid' : 'Rs. ${formatNumber(amount)}',
+            isPaid && amount == 0 ? 'Paid' : 'Rs. ${formatCashAmount(amount)}',
             style: AppTextStyles.productItemTotal.copyWith(
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -394,14 +499,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildActionButtons(int index) {
+  Widget _buildActionButtons(int index, List<CreditHistory> billHistory) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _showEditDialog(index),
+            onTap: () => _showEditDialog(index, billHistory),
             borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.all(8),
@@ -421,7 +526,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _showDeleteConfirmation(index),
+            onTap: () => _showDeleteConfirmation(index, billHistory),
             borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.all(8),
@@ -443,7 +548,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   // ========== Dialog Building Methods ==========
 
-  Dialog _buildDeleteConfirmationDialog(CreditHistory bill, int index) {
+  Dialog _buildDeleteConfirmationDialog(
+    CreditHistory bill,
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
     return Dialog(
       backgroundColor: AppColors.pepsiWhite,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -459,7 +568,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             const SizedBox(height: 12),
             _buildDeleteMessage(bill.customerName),
             const SizedBox(height: 24),
-            _buildDeleteDialogActions(index),
+            _buildDeleteDialogActions(index, billHistory),
           ],
         ),
       ),
@@ -500,7 +609,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildDeleteDialogActions(int index) {
+  Widget _buildDeleteDialogActions(int index, List<CreditHistory> billHistory) {
     return Row(
       children: [
         Expanded(
@@ -530,7 +639,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                _deleteItem(index);
+                _deleteItem(index, billHistory);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.pepsiRedLight,
@@ -555,7 +664,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   // ========== Edit Dialog Methods ==========
 
-  Widget _buildEditDialog(CreditHistory bill, int index) {
+  Widget _buildEditDialog(
+    CreditHistory bill,
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
     final totalCrates = BillingCalculations.calculateTotalCrates(bill.products);
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
     final hasPendingAmount = bill.amountDue > 0;
@@ -631,6 +744,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                   _buildEditDialogActions(
                     index,
                     hasPendingAmount || hasPendingCrates,
+                    billHistory,
                   ),
                 ],
               ),
@@ -704,7 +818,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 ),
                 const Spacer(),
                 Text(
-                  'Rs. ${formatNumber(grandTotal)}',
+                  'Rs. ${formatCashAmount(grandTotal)}',
                   style: AppTextStyles.productItemTotal.copyWith(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -726,7 +840,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 ),
                 const Spacer(),
                 Text(
-                  'Rs. ${formatNumber(amountDue)}',
+                  'Rs. ${formatCashAmount(amountDue)}',
                   style: AppTextStyles.productItemTotal.copyWith(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -838,7 +952,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             if (displayRemainingAmount > 0) ...[
               const Spacer(),
               Text(
-                'Rs. ${formatNumber(displayRemainingAmount)}',
+                'Rs. ${formatCashAmount(displayRemainingAmount)}',
                 style: AppTextStyles.productItemTotal.copyWith(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -1057,7 +1171,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildEditDialogActions(int index, bool hasEditableFields) {
+  Widget _buildEditDialogActions(
+    int index,
+    bool hasEditableFields,
+    List<CreditHistory> billHistory,
+  ) {
     return Row(
       children: [
         Expanded(
@@ -1101,6 +1219,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                           index,
                           amountReceived,
                           cratesReceived,
+                          billHistory,
                         );
                       }
                     }

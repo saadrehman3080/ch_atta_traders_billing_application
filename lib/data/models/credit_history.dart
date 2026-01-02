@@ -85,7 +85,7 @@ class CreditHistory implements BillBase {
   // Helper methods
   @override
   String get formattedDate {
-    return '${date.day}/${date.month}/${date.year}';
+    return '${date.day}-${date.month}-${date.year}';
   }
 
   @override

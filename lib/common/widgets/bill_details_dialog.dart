@@ -1,4 +1,3 @@
-import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
@@ -124,8 +123,8 @@ class BillDetailsDialog extends StatelessWidget {
                             child: _buildBillItem(
                               '${product.quantity}x',
                               product.name,
-                              '@${formatNumber(product.price)}',
-                              'Rs. ${formatNumber(product.price * product.quantity)}',
+                              '@${formatCashAmount(product.price)}',
+                              'Rs. ${formatCashAmount(product.price * product.quantity)}',
                             ),
                           );
                         },
@@ -181,7 +180,7 @@ class BillDetailsDialog extends StatelessWidget {
                               const SizedBox(width: 6),
                             ],
                             Text(
-                              'Rs. ${formatNumber(grandTotal)}',
+                              'Rs. ${formatCashAmount(grandTotal)}',
                               style: AppTextStyles.productItemTotal.copyWith(
                                 fontSize: bill.discount > 0 ? 16 : 22,
                                 color: bill.discount > 0
@@ -213,7 +212,7 @@ class BillDetailsDialog extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '- Rs. ${formatNumber(bill.discount)}',
+                            '- Rs. ${formatCashAmount(bill.discount)}',
                             style: AppTextStyles.productItemTotal.copyWith(
                               fontSize: 16,
                               color: AppColors.pepsiRed,
@@ -245,7 +244,7 @@ class BillDetailsDialog extends StatelessWidget {
                             const SizedBox(width: 6),
                           ],
                           Text(
-                            'Rs. ${formatNumber(grandTotal - bill.discount)}',
+                            'Rs. ${formatCashAmount(grandTotal - bill.discount)}',
                             style: _isPaid
                                 ? AppTextStyles.productItemTotal.copyWith(
                                     color: Colors.green[600],

@@ -9,9 +9,9 @@ import 'package:ch_atta_traders_billing_application/features/credit/providers/cr
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
-import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 
 class CheckoutPage extends StatefulWidget {
   final List<Product> products;
@@ -196,6 +196,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _handlePrintBill() async {
+    FocusScope.of(context).unfocus();
     // Generate bill ID using UUID
     final billId = _uuid.v4();
 
@@ -403,7 +404,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         ),
         const SizedBox(height: 2),
         Text(
-          "Rs. ${formatNumber(_grandTotal)}",
+          "Rs. ${formatCashAmount(_grandTotal)}",
           style: AppTextStyles.billingTotal.copyWith(
             color: AppColors.pepsiBlue,
             fontSize: 24,
@@ -535,7 +536,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Expanded(
       flex: 2,
       child: Text(
-        'Rs. ${formatNumber(total)}',
+        'Rs. ${formatCashAmount(total)}',
         textAlign: TextAlign.right,
         style: AppTextStyles.productItemTotal.copyWith(
           fontSize: 13,

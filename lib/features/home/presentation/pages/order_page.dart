@@ -1,7 +1,7 @@
-import 'package:ch_atta_traders_billing_application/common/constants/formated_number.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/checkout_page.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
@@ -209,7 +209,7 @@ class _OrderPageState extends State<OrderPage> {
       _isCheckoutVisible
           ? 'CHECKOUT'
           : (selectedCount > 0
-                ? 'GT Rs. ${formatNumber(_grandTotal)}'
+                ? 'GT Rs. ${formatCashAmount(_grandTotal)}'
                 : 'New Order'),
       style: AppTextStyles.pageTitleBlack,
     );
@@ -452,11 +452,12 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildProductName(String name, bool isUnavailable) {
     return Expanded(
       child: Text(
-        name,
+        toTitleCase(name),
         semanticsLabel: name,
         style: AppTextStyles.productItemName.copyWith(
           fontSize: 16,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
           color: isUnavailable
               ? Colors.black.withValues(alpha: 0.4)
               : Colors.black,

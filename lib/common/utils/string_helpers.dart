@@ -30,3 +30,21 @@ String toTitleCase(String text) {
       })
       .join(' ');
 }
+
+/// Formats a cash amount by adding commas as thousand separators.
+///
+/// This method is used across the application to display
+/// cash values such as:
+/// - Grand Total
+/// - Total Cash Recovered
+/// - Other monetary amounts
+///
+/// Example:
+/// - 2500 → "2,500"
+/// - 1250000 → "1,250,000"
+String formatCashAmount(int amount) {
+  return amount.toString().replaceAllMapped(
+    RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+    (Match m) => '${m[1]},',
+  );
+}
