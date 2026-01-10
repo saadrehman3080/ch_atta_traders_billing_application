@@ -417,14 +417,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        backgroundColor: AppColors.backgroundBlue,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.pepsiWhite),
-        ),
-      );
-    }
     return Scaffold(
       backgroundColor: AppColors.backgroundBlue,
       body: SingleChildScrollView(
@@ -439,10 +431,11 @@ class _LoginScreenState extends State<LoginScreen> {
             _buildSubtitle(),
             const SizedBox(height: 30),
             const CredentialInputContainer(),
-            if (_showFingerprint) ...[
-              const SizedBox(height: 20),
-              _buildFingerprintButton(),
-            ],
+            const SizedBox(height: 20),
+            if (!_loading && _showFingerprint)
+              _buildFingerprintButton()
+            else if (!_loading && !_showFingerprint)
+              _buildFirstLoginMessage(),
             const SizedBox(height: 30),
             _buildFooter(),
           ],
@@ -520,6 +513,40 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFirstLoginMessage() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.loginCardBg.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.pepsiWhite.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.info_outline, size: 24, color: AppColors.pepsiWhite),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              'Verify your account to enable fingerprint login.',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.pepsiWhite.withValues(alpha: 0.85),
+                letterSpacing: 0.2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       ),
     );
   }

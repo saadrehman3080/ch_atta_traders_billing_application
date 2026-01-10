@@ -179,6 +179,58 @@ class CreditRepository {
     }
   }
 
+  /// Updates only the amountDue and cratesDue fields of a credit record
+  /// Also updates isPaid status when explicitly provided
+  Future<void> updateCreditBalance({
+    required String salesmanName,
+    required String date,
+    required String billId,
+    int? newAmountDue,
+    int? newCratesDue,
+    bool? isPaid,
+  }) async {
+    try {
+      print('Updating credit balance in Firestore...');
+      print('Salesman: $salesmanName');
+      print('Date: $date');
+      print('Bill ID: $billId');
+
+      final Map<String, dynamic> updates = {};
+
+      if (newAmountDue != null) {
+        updates['amountDue'] = newAmountDue;
+        print('New amountDue: $newAmountDue');
+      }
+
+      if (newCratesDue != null) {
+        updates['cratesDue'] = newCratesDue;
+        print('New cratesDue: $newCratesDue');
+      }
+
+      if (isPaid != null) {
+        updates['isPaid'] = isPaid;
+        print('New isPaid: $isPaid');
+      }
+
+      if (updates.isEmpty) {
+        print('No updates to apply');
+        return;
+      }
+
+      await _firestore
+          .collection('Credit History')
+          .doc(salesmanName)
+          .collection(date)
+          .doc(billId)
+          .update(updates);
+
+      print('Credit balance updated successfully!');
+    } catch (e) {
+      print('Error updating credit balance: $e');
+      rethrow;
+    }
+  }
+
   /// Fetches all credit records for a salesman across all dates
   ///
   /// This method uses optimized parallel queries with batching to fetch

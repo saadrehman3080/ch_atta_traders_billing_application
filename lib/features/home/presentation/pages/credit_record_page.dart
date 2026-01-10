@@ -8,6 +8,7 @@ import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.d
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 /// Displays a list of credit transaction records with delete functionality.
@@ -127,36 +128,65 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  void _updateBillRecord(
+  Future<void> _updateBillRecord(
     int index,
     int? amountReceived,
     int? cratesReceived,
     List<CreditHistory> billHistory,
-  ) {
+  ) async {
     if (!_isValidIndex(index, billHistory)) return;
 
     final bill = billHistory[index];
+    final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
 
     // Calculate new amount due
-    int newAmountDue = bill.amountDue;
-    bool newIsPaid = bill.isPaid;
-
+    int? newAmountDue;
+    bool? isPaid;
     if (amountReceived != null && amountReceived > 0) {
-      newAmountDue = (bill.amountDue - amountReceived).clamp(0, bill.amountDue);
-      // Mark as paid if amount received covers the remaining amount
-      if (newAmountDue == 0) {
-        newIsPaid = true;
+      final calculatedAmount = (bill.amountDue - amountReceived).clamp(
+        0,
+        bill.amountDue,
+      );
+      if (calculatedAmount == 0) {
+        // When fully paid, set amountDue to grandTotal and mark as paid
+        newAmountDue = grandTotal;
+        isPaid = true;
+      } else {
+        newAmountDue = calculatedAmount;
       }
     }
 
     // Calculate new crates due
-    int newCratesDue = bill.cratesDue;
+    int? newCratesDue;
     if (cratesReceived != null && cratesReceived > 0) {
-      newCratesDue = (bill.cratesDue - cratesReceived).clamp(0, bill.cratesDue);
+      final calculatedCrates = (bill.cratesDue - cratesReceived).clamp(
+        0,
+        bill.cratesDue,
+      );
+      newCratesDue = calculatedCrates;
     }
 
-    // TODO: Implement Firebase update functionality
-    _showUpdateSnackBar();
+    // Get salesman name from shared preferences
+    final salesmanName = await AppPreferences.instance.salesmanName;
+    if (salesmanName == null || salesmanName.isEmpty) {
+      _showErrorSnackBar('Unable to get salesman information');
+      return;
+    }
+
+    // Update in Firebase using provider
+    final success = await _creditProvider.updateCreditBalance(
+      salesmanName: salesmanName,
+      credit: bill,
+      newAmountDue: newAmountDue,
+      newCratesDue: newCratesDue,
+      isPaid: isPaid,
+    );
+
+    if (success) {
+      _showUpdateSnackBar();
+    } else {
+      _showErrorSnackBar('Failed to update record');
+    }
   }
 
   void _showUpdateSnackBar() {
@@ -165,6 +195,10 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       message: 'Record updated successfully',
       type: SnackBarType.success,
     );
+  }
+
+  void _showErrorSnackBar(String message) {
+    CustomSnackBar.show(context, message: message, type: SnackBarType.error);
   }
 
   void _showDeleteSnackBar(String customerName) {
@@ -355,13 +389,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   Widget _buildCardContent(CreditHistory bill) {
     final totalItems = BillingCalculations.calculateTotalItems(bill.products);
+    final formattedDate = DateFormat('d-MMM').format(bill.date);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildCustomerName(bill.customerName),
         const SizedBox(height: 6),
-        _buildDateTimeInfo(bill.formattedDate, bill.formattedTime),
+        _buildDateTimeInfo(formattedDate, bill.formattedTime),
         const SizedBox(height: 8),
         _buildAmountSection(
           bill.amountDue,
@@ -390,7 +425,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         Icon(Icons.calendar_today_outlined, size: 12, color: AppColors.gray500),
         const SizedBox(width: 4),
         Text(
-          '$date; • $time',
+          '$date • $time',
           style: AppTextStyles.helperText.copyWith(
             fontSize: 12,
             color: AppColors.gray500,
@@ -671,7 +706,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   ) {
     final totalCrates = BillingCalculations.calculateTotalCrates(bill.products);
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
-    final hasPendingAmount = bill.amountDue > 0;
+    final hasPendingAmount = bill.amountDue > 0 && !bill.isPaid;
     final hasPendingCrates = bill.cratesDue > 0;
 
     return StatefulBuilder(
@@ -679,9 +714,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         int? enteredAmount = int.tryParse(_amountController.text);
         int? enteredCrates = int.tryParse(_cratesController.text);
 
+        // Check if user has entered values
+        final hasEnteredAmount = enteredAmount != null && enteredAmount > 0;
+        final hasEnteredCrates = enteredCrates != null && enteredCrates > 0;
+
         // Cap entered amount to amountDue
         int displayRemainingAmount = bill.amountDue;
-        if (enteredAmount != null && enteredAmount > 0) {
+        if (hasEnteredAmount) {
           int cappedAmount = enteredAmount > bill.amountDue
               ? bill.amountDue
               : enteredAmount;
@@ -690,7 +729,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
         // Cap entered crates to cratesDue
         int displayRemainingCrates = bill.cratesDue;
-        if (enteredCrates != null && enteredCrates > 0) {
+        if (hasEnteredCrates) {
           int cappedCrates = enteredCrates > bill.cratesDue
               ? bill.cratesDue
               : enteredCrates;
@@ -725,6 +764,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                       grandTotal,
                       bill.amountDue,
                       displayRemainingAmount,
+                      hasEnteredAmount,
                     ),
                   if (hasPendingAmount && hasPendingCrates) ...[
                     const SizedBox(height: 16),
@@ -737,6 +777,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                       totalCrates,
                       bill.cratesDue,
                       displayRemainingCrates,
+                      hasEnteredCrates,
                     ),
                   if (!hasPendingAmount && !hasPendingCrates)
                     _buildNothingToEdit(),
@@ -796,7 +837,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     int grandTotal,
     int amountDue,
     int displayRemainingAmount,
+    bool hasEnteredAmount,
   ) {
+    final showAmountDue = grandTotal != amountDue;
     return [
       Container(
         padding: const EdgeInsets.all(12),
@@ -827,28 +870,30 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text(
-                  'Amount Due:',
-                  style: AppTextStyles.helperText.copyWith(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.pepsiBlue,
+            if (showAmountDue) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text(
+                    'Amount Due:',
+                    style: AppTextStyles.helperText.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.pepsiBlue,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  'Rs. ${formatCashAmount(amountDue)}',
-                  style: AppTextStyles.productItemTotal.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.pepsiBlue,
+                  const Spacer(),
+                  Text(
+                    'Rs. ${formatCashAmount(amountDue)}',
+                    style: AppTextStyles.productItemTotal.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.pepsiBlue,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -912,57 +957,59 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           },
         ),
       ),
-      const SizedBox(height: 10),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: displayRemainingAmount == 0
-              ? Colors.green[50]
-              : AppColors.pepsiBlueLight.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
+      if (hasEnteredAmount) ...[
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
             color: displayRemainingAmount == 0
-                ? Colors.green[300]!
-                : AppColors.pepsiBlueLight.withValues(alpha: 0.25),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              displayRemainingAmount == 0
-                  ? Icons.check_circle
-                  : Icons.info_outline,
+                ? Colors.green[50]
+                : AppColors.pepsiBlueLight.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
               color: displayRemainingAmount == 0
-                  ? Colors.green[600]
-                  : AppColors.pepsiBlueLight,
-              size: 18,
+                  ? Colors.green[300]!
+                  : AppColors.pepsiBlueLight.withValues(alpha: 0.25),
+              width: 1,
             ),
-            const SizedBox(width: 10),
-            Text(
-              displayRemainingAmount == 0 ? 'Fully Paid' : 'Balance:',
-              style: AppTextStyles.helperText.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                displayRemainingAmount == 0
+                    ? Icons.check_circle
+                    : Icons.info_outline,
                 color: displayRemainingAmount == 0
-                    ? Colors.green[700]
-                    : AppColors.pepsiBlue,
+                    ? Colors.green[600]
+                    : AppColors.pepsiBlueLight,
+                size: 18,
               ),
-            ),
-            if (displayRemainingAmount > 0) ...[
-              const Spacer(),
+              const SizedBox(width: 10),
               Text(
-                'Rs. ${formatCashAmount(displayRemainingAmount)}',
-                style: AppTextStyles.productItemTotal.copyWith(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.pepsiBlue,
+                displayRemainingAmount == 0 ? 'Fully Paid' : 'Balance:',
+                style: AppTextStyles.helperText.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: displayRemainingAmount == 0
+                      ? Colors.green[700]
+                      : AppColors.pepsiBlue,
                 ),
               ),
+              if (displayRemainingAmount > 0) ...[
+                const Spacer(),
+                Text(
+                  'Rs. ${formatCashAmount(displayRemainingAmount)}',
+                  style: AppTextStyles.productItemTotal.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.pepsiBlue,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
+      ],
     ];
   }
 
@@ -971,7 +1018,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     int totalCrates,
     int cratesDue,
     int displayRemainingCrates,
+    bool hasEnteredCrates,
   ) {
+    final showCratesDue = totalCrates != cratesDue;
     return [
       Container(
         padding: const EdgeInsets.all(12),
@@ -1002,34 +1051,36 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.inventory_2_outlined,
-                  size: 18,
-                  color: AppColors.pepsiBlue,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Due:',
-                  style: AppTextStyles.helperText.copyWith(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+            if (showCratesDue) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.inventory_2_outlined,
+                    size: 18,
                     color: AppColors.pepsiBlue,
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  '$cratesDue',
-                  style: AppTextStyles.productItemTotal.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.pepsiBlue,
+                  const SizedBox(width: 8),
+                  Text(
+                    'Due:',
+                    style: AppTextStyles.helperText.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.pepsiBlue,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  const Spacer(),
+                  Text(
+                    '$cratesDue',
+                    style: AppTextStyles.productItemTotal.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.pepsiBlue,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1092,57 +1143,59 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           },
         ),
       ),
-      const SizedBox(height: 10),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: displayRemainingCrates == 0
-              ? Colors.green[50]
-              : AppColors.pepsiBlueLight.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
+      if (hasEnteredCrates) ...[
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
             color: displayRemainingCrates == 0
-                ? Colors.green[300]!
-                : AppColors.pepsiBlueLight.withValues(alpha: 0.25),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              displayRemainingCrates == 0
-                  ? Icons.check_circle
-                  : Icons.info_outline,
+                ? Colors.green[50]
+                : AppColors.pepsiBlueLight.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
               color: displayRemainingCrates == 0
-                  ? Colors.green[600]
-                  : AppColors.pepsiBlueLight,
-              size: 18,
+                  ? Colors.green[300]!
+                  : AppColors.pepsiBlueLight.withValues(alpha: 0.25),
+              width: 1,
             ),
-            const SizedBox(width: 10),
-            Text(
-              displayRemainingCrates == 0 ? 'All Returned' : 'Balance:',
-              style: AppTextStyles.helperText.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                displayRemainingCrates == 0
+                    ? Icons.check_circle
+                    : Icons.info_outline,
                 color: displayRemainingCrates == 0
-                    ? Colors.green[700]
-                    : AppColors.pepsiBlue,
+                    ? Colors.green[600]
+                    : AppColors.pepsiBlueLight,
+                size: 18,
               ),
-            ),
-            if (displayRemainingCrates > 0) ...[
-              const Spacer(),
+              const SizedBox(width: 10),
               Text(
-                '$displayRemainingCrates',
-                style: AppTextStyles.productItemTotal.copyWith(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.pepsiBlue,
+                displayRemainingCrates == 0 ? 'All Returned' : 'Balance:',
+                style: AppTextStyles.helperText.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: displayRemainingCrates == 0
+                      ? Colors.green[700]
+                      : AppColors.pepsiBlue,
                 ),
               ),
+              if (displayRemainingCrates > 0) ...[
+                const Spacer(),
+                Text(
+                  '$displayRemainingCrates',
+                  style: AppTextStyles.productItemTotal.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.pepsiBlue,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
+      ],
     ];
   }
 

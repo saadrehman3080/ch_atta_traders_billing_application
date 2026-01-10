@@ -9,6 +9,7 @@ class DailySalesProvider extends ChangeNotifier {
   DailySalesState _state = DailySalesState.initial;
   List<SaleHistory> _sales = [];
   String? _errorMessage;
+  bool _isDisposed = false;
 
   DailySalesState get state => _state;
   List<SaleHistory> get sales => _sales;
@@ -16,20 +17,32 @@ class DailySalesProvider extends ChangeNotifier {
   bool get isLoading => _state == DailySalesState.loading;
   bool get hasError => _state == DailySalesState.error;
 
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
+  void _safeNotifyListeners() {
+    if (!_isDisposed) {
+      notifyListeners();
+    }
+  }
+
   Future<void> loadDailySales(String salesmanName, DateTime date) async {
     _state = DailySalesState.loading;
     _errorMessage = null;
-    notifyListeners();
+    _safeNotifyListeners();
 
     try {
       _sales = await _repository.fetchDailySales(salesmanName, date);
       _state = DailySalesState.loaded;
-      notifyListeners();
+      _safeNotifyListeners();
     } catch (e) {
       _state = DailySalesState.error;
       _errorMessage = e.toString();
       _sales = [];
-      notifyListeners();
+      _safeNotifyListeners();
     }
   }
 
@@ -37,6 +50,6 @@ class DailySalesProvider extends ChangeNotifier {
     _sales = [];
     _state = DailySalesState.initial;
     _errorMessage = null;
-    notifyListeners();
+    _safeNotifyListeners();
   }
 }
