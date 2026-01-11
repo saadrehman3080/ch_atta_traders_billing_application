@@ -6,7 +6,9 @@ import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
+import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -97,12 +99,47 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   // ========== Business Logic Methods ==========
 
-  void _deleteItem(int index, List<CreditHistory> billHistory) {
+  Future<void> _deleteItem(int index, List<CreditHistory> billHistory) async {
     if (!_isValidIndex(index, billHistory)) return;
 
     final deletedBill = billHistory[index];
-    // TODO: Implement Firebase delete functionality
-    _showDeleteSnackBar(deletedBill.customerName);
+
+    // Get salesman name from shared preferences
+    final salesmanName = await AppPreferences.instance.salesmanName;
+    if (salesmanName == null || salesmanName.isEmpty) {
+      _showErrorSnackBar('Salesman name not found. Please log in again.');
+      return;
+    }
+
+    // Convert CreditHistory to SaleHistory
+    final saleHistory = SaleHistory(
+      billId: deletedBill.billId,
+      customerName: deletedBill.customerName,
+      date: deletedBill.date,
+      products: deletedBill.products,
+      discount: deletedBill.discount,
+    );
+
+    // Save to sale history using SaleProvider
+    final saleProvider = SaleProvider();
+    final savedAsSale = await saleProvider.saveSale(saleHistory, salesmanName);
+
+    if (!savedAsSale) {
+      _showErrorSnackBar('Failed to save as sale history. Delete cancelled.');
+      return;
+    }
+
+    // Delete from credit history using CreditHistoryProvider
+    final deletedFromCredit = await _creditProvider.deleteCreditRecord(
+      billId: deletedBill.billId,
+      salesmanName: salesmanName,
+    );
+
+    if (deletedFromCredit) {
+      _showDeleteSnackBar(deletedBill.customerName);
+    } else {
+      _showErrorSnackBar('Failed to delete from credit records.');
+    }
   }
 
   bool _isValidIndex(int index, List<CreditHistory> billHistory) {
@@ -142,6 +179,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     // Calculate new amount due
     int? newAmountDue;
     bool? isPaid;
+    bool isFullyPaid = false;
     if (amountReceived != null && amountReceived > 0) {
       final calculatedAmount = (bill.amountDue - amountReceived).clamp(
         0,
@@ -151,6 +189,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         // When fully paid, set amountDue to grandTotal and mark as paid
         newAmountDue = grandTotal;
         isPaid = true;
+        isFullyPaid = true;
       } else {
         newAmountDue = calculatedAmount;
       }
@@ -158,12 +197,16 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
     // Calculate new crates due
     int? newCratesDue;
+    bool isAllCratesReturned = false;
     if (cratesReceived != null && cratesReceived > 0) {
       final calculatedCrates = (bill.cratesDue - cratesReceived).clamp(
         0,
         bill.cratesDue,
       );
       newCratesDue = calculatedCrates;
+      if (calculatedCrates == 0) {
+        isAllCratesReturned = true;
+      }
     }
 
     // Get salesman name from shared preferences
@@ -173,26 +216,70 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       return;
     }
 
-    // Update in Firebase using provider
-    final success = await _creditProvider.updateCreditBalance(
-      salesmanName: salesmanName,
-      credit: bill,
-      newAmountDue: newAmountDue,
-      newCratesDue: newCratesDue,
-      isPaid: isPaid,
-    );
+    // Check if both amount and crates are fully cleared
+    final wasAmountFullyPaid =
+        isFullyPaid || (bill.isPaid && bill.amountDue == grandTotal);
+    final wereCratesFullyReturned = isAllCratesReturned || bill.cratesDue == 0;
 
-    if (success) {
-      _showUpdateSnackBar();
+    if (wasAmountFullyPaid && wereCratesFullyReturned) {
+      // Save to sale history and delete from credit
+      final saleHistory = SaleHistory(
+        billId: bill.billId,
+        customerName: bill.customerName,
+        date: bill.date,
+        products: bill.products,
+        discount: bill.discount,
+      );
+
+      // Save to sale history using SaleProvider
+      final saleProvider = SaleProvider();
+      final savedAsSale = await saleProvider.saveSale(
+        saleHistory,
+        salesmanName,
+      );
+
+      if (!savedAsSale) {
+        _showErrorSnackBar('Failed to save as sale history. Update cancelled.');
+        return;
+      }
+
+      // Delete from credit history using CreditHistoryProvider
+      final deletedFromCredit = await _creditProvider.deleteCreditRecord(
+        billId: bill.billId,
+        salesmanName: salesmanName,
+      );
+
+      if (deletedFromCredit) {
+        CustomSnackBar.show(
+          context,
+          message: 'Payment completed! Record moved to sales',
+          type: SnackBarType.success,
+        );
+      } else {
+        _showErrorSnackBar('Failed to delete from credit records.');
+      }
     } else {
-      _showErrorSnackBar('Failed to update record');
+      // Update in Firebase using provider
+      final success = await _creditProvider.updateCreditBalance(
+        salesmanName: salesmanName,
+        credit: bill,
+        newAmountDue: newAmountDue,
+        newCratesDue: newCratesDue,
+        isPaid: isPaid,
+      );
+
+      if (success) {
+        _showUpdateSnackBar();
+      } else {
+        _showErrorSnackBar('Failed to update record');
+      }
     }
   }
 
   void _showUpdateSnackBar() {
     CustomSnackBar.show(
       context,
-      message: 'Record updated successfully',
+      message: 'Payment received and record updated',
       type: SnackBarType.success,
     );
   }
@@ -204,8 +291,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   void _showDeleteSnackBar(String customerName) {
     CustomSnackBar.show(
       context,
-      message: 'Deleted $customerName',
-      type: SnackBarType.info,
+      message: 'Credit record moved to sales successfully',
+      type: SnackBarType.success,
     );
   }
 
@@ -361,27 +448,25 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           ),
         ],
       ),
-      child: InkWell(
-        onTap: () => _showBillDetails(bill),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(child: _buildCardContent(bill)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: SizedBox(
-                  height: 60,
-                  child: VerticalDivider(
-                    color: AppColors.gray300,
-                    thickness: 1,
-                  ),
-                ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () => _showBillDetails(bill),
+                child: _buildCardContent(bill),
               ),
-              _buildActionButtons(index, billHistory),
-            ],
-          ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(
+                height: 80,
+                child: VerticalDivider(color: AppColors.gray300, thickness: 1),
+              ),
+            ),
+            _buildActionButtons(index, billHistory),
+          ],
         ),
       ),
     );
@@ -544,7 +629,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             onTap: () => _showEditDialog(index, billHistory),
             borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.pepsiBlueLight.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -552,19 +637,19 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               child: Icon(
                 Icons.edit_outlined,
                 color: AppColors.pepsiBlueLight,
-                size: 20,
+                size: 22,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: () => _showDeleteConfirmation(index, billHistory),
             borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.pepsiRedLight.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -572,7 +657,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               child: Icon(
                 Icons.delete_outline,
                 color: AppColors.pepsiRedLight,
-                size: 20,
+                size: 22,
               ),
             ),
           ),
@@ -779,8 +864,6 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                       displayRemainingCrates,
                       hasEnteredCrates,
                     ),
-                  if (!hasPendingAmount && !hasPendingCrates)
-                    _buildNothingToEdit(),
                   const SizedBox(height: 24),
                   _buildEditDialogActions(
                     index,
@@ -823,7 +906,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   Widget _buildCustomerNameText(String customerName) {
     return Text(
-      customerName,
+      toTitleCase(customerName),
       style: AppTextStyles.productItemName.copyWith(
         fontSize: 16,
         color: AppColors.gray500,
@@ -912,26 +995,21 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             color: Colors.black87,
             fontSize: 14,
           ),
-          cursorColor: AppColors.pepsiBlueLight,
+          cursorColor: AppColors.pepsiBlue,
           keyboardType: TextInputType.number,
           textInputAction: TextInputAction.done,
-          onSubmitted: (value) => FocusScope.of(context).unfocus(),
+          onSubmitted: (value) {
+            FocusScope.of(context).unfocus();
+          },
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.white,
-            labelText: 'Amount Received',
-            labelStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
-            hintText: 'Enter amount',
+            hintText: "Amount Received",
             hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
             prefixIcon: const Icon(Icons.payments_outlined, size: 20),
-            prefixText: 'Rs. ',
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.gray300, width: 1),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -940,7 +1018,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(
-                color: AppColors.pepsiBlueLight,
+                color: AppColors.pepsiBlue,
                 width: 1.5,
               ),
             ),
@@ -1099,25 +1177,21 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             color: Colors.black87,
             fontSize: 14,
           ),
-          cursorColor: AppColors.pepsiBlueLight,
+          cursorColor: AppColors.pepsiBlue,
           keyboardType: TextInputType.number,
           textInputAction: TextInputAction.done,
-          onSubmitted: (value) => FocusScope.of(context).unfocus(),
+          onSubmitted: (value) {
+            FocusScope.of(context).unfocus();
+          },
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.white,
-            labelText: 'Crates Received',
-            labelStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
-            hintText: 'Enter crates count',
+            hintText: "Crates Received",
             hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
             prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.gray300, width: 1),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -1126,7 +1200,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(
-                color: AppColors.pepsiBlueLight,
+                color: AppColors.pepsiBlue,
                 width: 1.5,
               ),
             ),
@@ -1197,31 +1271,6 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         ),
       ],
     ];
-  }
-
-  Widget _buildNothingToEdit() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.green[50],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle_outline, color: Colors.green[600], size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'All payments received and crates returned',
-              style: AppTextStyles.helperText.copyWith(
-                fontSize: 14,
-                color: Colors.green[700],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildEditDialogActions(

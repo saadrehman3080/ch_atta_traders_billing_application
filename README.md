@@ -1,8 +1,5 @@
 # ch_atta_traders_billing_application
 
-
-*   When the bill is deleted from the credit it will move to the        history section, ispaid to true, amountdue to 0 and update the dashboard cash as well.
-
 *   After editing the cash received update the dashboard data.
 
 *   Remove all the dummy data as soon as its need ended.
@@ -10,6 +7,11 @@
 *   Dispose Providers properly.
 
 *   In the credit and sales model the date formate models should be constant.
+
+*   handle no internet.
+
+*   Make Empty list icon consistant for sale and credit section.
+
 
 ************* DONE **************
 Remove the Keyborad first and then start the login Process.
@@ -24,3 +26,5 @@ In the bill detail widget if bill is paid add indication for it.
 Update the snackbar Theme.
 Treat the customer name properly before storing into database     like Saad Ur Rehman.
 After printing bill reset the products list view to top. 
+
+When the bill is deleted from the credit it will move to the history section, ispaid to true, amountdue to 0 and update the dashboard cash as well.

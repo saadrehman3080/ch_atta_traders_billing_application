@@ -5,8 +5,9 @@ import 'package:intl/intl.dart';
 class CreditRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Saves a credit transaction to Firestore
+  /// Saves a credit transaction to Firestore and updates the dashboard summary
   /// Path: Credit History/{salesmanName}/{dd-MMM-yyyy}/{billId}
+  /// Summary Path: Dashboard Summary/{salesmanName}/{dd-MMM-yyyy}/summary
   Future<void> saveCredit(CreditHistory credit, String salesmanName) async {
     try {
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
@@ -18,15 +19,51 @@ class CreditRepository {
       print('Date: $formattedDate');
       print('Bill ID: ${credit.billId}');
 
-      // Save to Credit History/{salesmanName}/{date}/{billId}
-      await _firestore
-          .collection('Credit History')
-          .doc(salesmanName)
-          .collection(formattedDate)
-          .doc(credit.billId)
-          .set(credit.toJson());
+      // Calculate totals for dashboard
+      final itemsSold = credit.products.fold<int>(
+        0,
+        (sum, product) => sum + product.quantity,
+      );
 
-      print('Credit saved successfully!');
+      // Calculate MT remaining (RB products only)
+      final mtRemaining = credit.products
+          .where((product) => product.name.toUpperCase().endsWith('RB'))
+          .fold<int>(0, (sum, product) => sum + product.quantity);
+
+      // Determine credit amount (only if not paid)
+      final creditAmount = credit.isPaid ? 0 : credit.amountDue;
+
+      // Use transaction to atomically update both credit and dashboard summary
+      await _firestore.runTransaction((transaction) async {
+        // Reference to the credit document (in Credit History)
+        final creditRef = _firestore
+            .collection('Credit History')
+            .doc(salesmanName)
+            .collection(formattedDate)
+            .doc(credit.billId);
+
+        // Reference to the dashboard summary document (separate collection)
+        final dashboardSummaryRef = _firestore
+            .collection('Dashboard Summary')
+            .doc(salesmanName)
+            .collection(formattedDate)
+            .doc('summary');
+
+        // Save the credit document
+        transaction.set(creditRef, credit.toJson());
+
+        // Update dashboard summary - CREDIT BILL: creditAmount, itemsSold, mtRemaining, discount, customersServed
+        transaction.set(dashboardSummaryRef, {
+          'totalCredit': FieldValue.increment(creditAmount),
+          'totalItemsSold': FieldValue.increment(itemsSold),
+          'totalMtRemaining': FieldValue.increment(mtRemaining),
+          'totalDiscount': FieldValue.increment(credit.discount),
+          'customersServed': FieldValue.increment(1),
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+
+      print('Credit and dashboard summary saved successfully!');
     } catch (e) {
       print('Error saving credit: $e');
       rethrow;
@@ -163,18 +200,13 @@ class CreditRepository {
     required String billId,
   }) async {
     try {
-      print('Deleting credit from Firestore...');
-
       await _firestore
           .collection('Credit History')
           .doc(salesmanName)
           .collection(date)
           .doc(billId)
           .delete();
-
-      print('Credit deleted successfully!');
     } catch (e) {
-      print('Error deleting credit: $e');
       rethrow;
     }
   }
@@ -233,127 +265,83 @@ class CreditRepository {
 
   /// Fetches all credit records for a salesman across all dates
   ///
-  /// This method uses optimized parallel queries with batching to fetch
-  /// credit records efficiently. It queries multiple dates concurrently
-  /// and implements early termination when no more data is found.
+  /// This method uses a two-step optimized approach:
+  /// 1. First, gets metadata (list of date subcollections) with a minimal query
+  /// 2. Then, fetches only existing date collections in parallel
   ///
   /// [salesmanName] - The name of the salesman
-  /// [daysToLookBack] - Number of days to look back (default: 30 days)
-  /// [batchSize] - Number of concurrent queries per batch (default: 10)
-  /// [maxEmptyDays] - Stop after this many consecutive empty days (default: 14)
+  /// [daysToLookBack] - Number of days to look back (default: 365 days)
   ///
   /// Returns a list of all credit records found, sorted by date descending.
   Future<List<CreditHistory>> getAllCreditsForSalesman({
     required String salesmanName,
-    int daysToLookBack = 30,
-    int batchSize = 10,
-    int maxEmptyDays = 14,
+    int daysToLookBack = 14,
   }) async {
     try {
-      print('Fetching all credits for salesman: $salesmanName');
-      print('Looking back $daysToLookBack days with batch size: $batchSize');
-
       final dateFormat = DateFormat('dd-MMM-yyyy');
       final now = DateTime.now();
-      List<CreditHistory> allCredits = [];
-      int consecutiveEmptyDays = 0;
 
-      // Process dates in batches for parallel queries
-      for (int startDay = 0; startDay < daysToLookBack; startDay += batchSize) {
-        // Early termination if we've seen too many consecutive empty days
-        if (consecutiveEmptyDays >= maxEmptyDays) {
-          print('Stopping early: $consecutiveEmptyDays consecutive empty days');
-          break;
-        }
+      // Step 1: Get metadata - check which date subcollections exist
+      // We do this by querying each collection but only checking if it's empty
+      final existingDates = <String>[];
+      final metadataCheckFutures = <Future<void>>[];
 
-        final endDay = (startDay + batchSize > daysToLookBack)
-            ? daysToLookBack
-            : startDay + batchSize;
+      for (int i = 0; i < daysToLookBack; i++) {
+        final date = now.subtract(Duration(days: i));
+        final formattedDate = dateFormat.format(date);
 
-        // Create batch of date queries
-        List<Future<QuerySnapshot>> batchQueries = [];
-        List<String> batchDates = [];
-
-        for (int i = startDay; i < endDay; i++) {
-          final date = now.subtract(Duration(days: i));
-          final formattedDate = dateFormat.format(date);
-          batchDates.add(formattedDate);
-
-          batchQueries.add(
-            _firestore
-                .collection('Credit History')
-                .doc(salesmanName)
-                .collection(formattedDate)
-                .get(),
-          );
-        }
-
-        // Execute all queries in this batch concurrently
-        try {
-          final results = await Future.wait(
-            batchQueries,
-            eagerError: false, // Continue even if some queries fail
-          );
-
-          // Process results
-          bool foundDataInBatch = false;
-          for (int i = 0; i < results.length; i++) {
-            try {
-              final querySnapshot = results[i];
-              if (querySnapshot.docs.isNotEmpty) {
-                foundDataInBatch = true;
-                consecutiveEmptyDays = 0;
-
-                final credits = querySnapshot.docs
-                    .map((doc) {
-                      try {
-                        final data = doc.data();
-                        if (data == null) return null;
-                        return CreditHistory.fromJson(
-                          data as Map<String, dynamic>,
-                        );
-                      } catch (e) {
-                        print('Error parsing document ${doc.id}: $e');
-                        return null;
-                      }
-                    })
-                    .whereType<CreditHistory>() // Filter out nulls
-                    .toList();
-
-                if (credits.isNotEmpty) {
-                  allCredits.addAll(credits);
-                  print('Found ${credits.length} records for ${batchDates[i]}');
+        metadataCheckFutures.add(
+          _firestore
+              .collection('Credit History')
+              .doc(salesmanName)
+              .collection(formattedDate)
+              .limit(1)
+              .get()
+              .then((snapshot) {
+                if (snapshot.docs.isNotEmpty) {
+                  existingDates.add(formattedDate);
                 }
-              } else {
-                consecutiveEmptyDays++;
-              }
-            } catch (e) {
-              print('Error processing result for ${batchDates[i]}: $e');
-              consecutiveEmptyDays++;
-            }
-          }
+              })
+              .catchError((_) {
+                // Silently skip failed checks
+              }),
+        );
+      }
 
-          // Reset counter if we found data in this batch
-          if (foundDataInBatch) {
-            consecutiveEmptyDays = 0;
-          }
-        } catch (e) {
-          print('Error in batch query: $e');
-        }
+      // Execute all metadata checks in parallel
+      await Future.wait(metadataCheckFutures, eagerError: false);
 
-        // Small delay between batches to avoid overwhelming Firestore
-        if (startDay + batchSize < daysToLookBack) {
-          await Future.delayed(const Duration(milliseconds: 50));
+      // Step 2: Fetch full data only from existing collections
+      final dataQueries = existingDates.map((date) {
+        return _firestore
+            .collection('Credit History')
+            .doc(salesmanName)
+            .collection(date)
+            .get();
+      }).toList();
+
+      // Execute all data queries in parallel
+      final results = await Future.wait(dataQueries, eagerError: false);
+
+      // Step 3: Process all results in parallel
+      final List<CreditHistory> allCredits = [];
+
+      for (final querySnapshot in results) {
+        for (final doc in querySnapshot.docs) {
+          try {
+            final data = doc.data();
+            allCredits.add(CreditHistory.fromJson(data));
+          } catch (e) {
+            // Skip invalid documents silently
+          }
         }
       }
 
       // Sort by date descending (most recent first)
       allCredits.sort((a, b) => b.date.compareTo(a.date));
 
-      print('Successfully fetched ${allCredits.length} total credit records');
       return allCredits;
     } catch (e) {
-      print('Error fetching all credits: $e');
       rethrow;
     }
   }

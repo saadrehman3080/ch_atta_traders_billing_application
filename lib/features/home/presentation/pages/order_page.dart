@@ -452,7 +452,7 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildProductName(String name, bool isUnavailable) {
     return Expanded(
       child: Text(
-        toTitleCase(name),
+        name,
         semanticsLabel: name,
         style: AppTextStyles.productItemName.copyWith(
           fontSize: 16,

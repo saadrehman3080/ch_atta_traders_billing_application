@@ -33,16 +33,14 @@ class CreditHistoryProvider extends ChangeNotifier {
   }
 
   /// Loads all credit history records for a salesman across all dates
-  /// Uses optimized parallel queries with configurable parameters
+  /// Uses optimized parallel queries for maximum speed
   ///
   /// [salesmanName] - The name of the salesman
-  /// [daysToLookBack] - Number of days to look back (default: 30 days)
-  /// [batchSize] - Number of concurrent queries (default: 10 for optimal performance)
+  /// [daysToLookBack] - Number of days to look back (default: 365 days)
   /// [forceRefresh] - Skip cache and force fresh data (default: false)
   Future<void> loadAllCreditHistory(
     String salesmanName, {
-    int daysToLookBack = 30,
-    int batchSize = 10,
+    int daysToLookBack = 365,
     bool forceRefresh = false,
   }) async {
     // Check if we have recent data and don't need to refresh
@@ -51,7 +49,7 @@ class CreditHistoryProvider extends ChangeNotifier {
         _lastFetchTime != null &&
         DateTime.now().difference(_lastFetchTime!) <
             const Duration(minutes: 5)) {
-      print(
+      debugPrint(
         'Using cached credit data (fetched ${DateTime.now().difference(_lastFetchTime!).inSeconds}s ago)',
       );
       return;
@@ -67,14 +65,13 @@ class CreditHistoryProvider extends ChangeNotifier {
       _credits = await _repository.getAllCreditsForSalesman(
         salesmanName: salesmanName,
         daysToLookBack: daysToLookBack,
-        batchSize: batchSize,
       );
 
       _lastFetchTime = DateTime.now();
       _state = CreditHistoryState.loaded;
 
       final loadTime = DateTime.now().difference(startTime).inMilliseconds;
-      print(
+      debugPrint(
         'Credit history loaded in ${loadTime}ms (${_credits.length} records)',
       );
 
@@ -145,6 +142,41 @@ class CreditHistoryProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error updating credit balance: $e');
+      return false;
+    }
+  }
+
+  /// Deletes a credit record from Firestore
+  /// Returns true if deletion was successful, false otherwise
+  Future<bool> deleteCreditRecord({
+    required String billId,
+    required String salesmanName,
+  }) async {
+    try {
+      // Find the credit in local cache to get the date
+      final creditToDelete = _credits.firstWhere(
+        (c) => c.billId == billId,
+        orElse: () => throw Exception('Credit record not found in cache'),
+      );
+
+      // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
+      final dateFormat = DateFormat('dd-MMM-yyyy');
+      final formattedDate = dateFormat.format(creditToDelete.date);
+
+      // Delete from Firebase
+      await _repository.deleteCredit(
+        salesmanName: salesmanName,
+        date: formattedDate,
+        billId: billId,
+      );
+
+      // Remove from local cache
+      _credits.removeWhere((c) => c.billId == billId);
+      _safeNotifyListeners();
+
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting credit record: $e');
       return false;
     }
   }

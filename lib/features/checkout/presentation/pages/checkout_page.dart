@@ -113,7 +113,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     final value = int.tryParse(text) ?? 0;
 
-    if (value < 0 || value > 200) {
+    if (value < 0) {
       _discountController.text = '0';
       _discountController.selection = TextSelection.fromPosition(
         TextPosition(offset: _discountController.text.length),
@@ -706,7 +706,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return InputDecoration(
       filled: true,
       fillColor: Colors.white,
-      hintText: "Discount (max 200)",
+      hintText: "Discount (Optional)",
       hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
       prefixIcon: const Icon(Icons.discount_outlined, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

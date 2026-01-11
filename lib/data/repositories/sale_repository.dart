@@ -16,9 +16,10 @@ class SaleRepository {
   /// Collection reference for daily sales
   static const String _collectionName = 'Daily Sales';
 
-  /// Saves a sale to Firestore.
+  /// Saves a sale to Firestore and updates the dashboard summary.
   ///
   /// Path: Daily Sales/{salesmanName}/{formattedDate}/{billId}
+  /// Summary Path: Dashboard Summary/{salesmanName}/{formattedDate}/summary
   ///
   /// [sale] - The SaleHistory object to save
   /// [salesmanName] - The name of the salesman (from SharedPreferences)
@@ -34,14 +35,51 @@ class SaleRepository {
         'Path: $_collectionName/$salesmanName/$formattedDate/${sale.billId}',
       );
 
-      await _firestore
-          .collection(_collectionName)
-          .doc(salesmanName)
-          .collection(formattedDate)
-          .doc(sale.billId)
-          .set(sale.toJson());
+      // Calculate totals for dashboard
+      final totalAmount =
+          sale.products.fold<int>(
+            0,
+            (sum, product) => sum + (product.price * product.quantity),
+          ) -
+          sale.discount;
 
-      debugPrint('Sale saved successfully: ${sale.billId}');
+      final itemsSold = sale.products.fold<int>(
+        0,
+        (sum, product) => sum + product.quantity,
+      );
+
+      // Use transaction to atomically update both bill and dashboard summary
+      await _firestore.runTransaction((transaction) async {
+        // Reference to the sale document (in Daily Sales)
+        final saleRef = _firestore
+            .collection(_collectionName)
+            .doc(salesmanName)
+            .collection(formattedDate)
+            .doc(sale.billId);
+
+        // Reference to the dashboard summary document (separate collection)
+        final dashboardSummaryRef = _firestore
+            .collection('Dashboard Summary')
+            .doc(salesmanName)
+            .collection(formattedDate)
+            .doc('summary');
+
+        // Save the sale document
+        transaction.set(saleRef, sale.toJson());
+
+        // Update dashboard summary - CASH BILL: totalCollection, itemsSold, discount, customersServed
+        transaction.set(dashboardSummaryRef, {
+          'totalCollection': FieldValue.increment(totalAmount),
+          'totalItemsSold': FieldValue.increment(itemsSold),
+          'totalDiscount': FieldValue.increment(sale.discount),
+          'customersServed': FieldValue.increment(1),
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+
+      debugPrint(
+        'Sale and dashboard summary saved successfully: ${sale.billId}',
+      );
       return true;
     } catch (e, stackTrace) {
       debugPrint('Error saving sale: $e');

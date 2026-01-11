@@ -4,6 +4,7 @@ import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
+import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -18,20 +19,22 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  late DashboardData _dashboardData;
+  late final DashboardProvider _dashboardProvider;
   String _salesmanName = 'Salesman';
   // final bool hasPrinters = false; // TODO: Replace with actual printer check
 
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    _dashboardProvider = DashboardProvider();
     _loadSalesmanName();
+    _dashboardProvider.loadDashboardData();
   }
 
-  void _loadDashboardData() {
-    // TODO: Replace with actual data from Firebase/local storage
-    _dashboardData = DashboardData.getDummyData();
+  @override
+  void dispose() {
+    _dashboardProvider.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSalesmanName() async {
@@ -45,12 +48,20 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.gray50,
-      appBar: _buildAppBar(context),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [_buildTodayCollectionCard(), _buildPrintersCard()],
+    return ChangeNotifierProvider.value(
+      value: _dashboardProvider,
+      child: Scaffold(
+        backgroundColor: AppColors.gray50,
+        appBar: _buildAppBar(context),
+        body: RefreshIndicator(
+          onRefresh: () => _dashboardProvider.refreshDashboardData(),
+          color: AppColors.pepsiBlue,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [_buildTodayCollectionCard(), _buildPrintersCard()],
+            ),
+          ),
         ),
       ),
     );
@@ -136,24 +147,42 @@ class _DashboardPageState extends State<DashboardPage> {
   // ========== Collection Card Building Methods ==========
 
   Widget _buildTodayCollectionCard() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-      decoration: _buildCollectionCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildCollectionLabel(),
-          const SizedBox(height: 6),
-          _buildCollectionAmount(),
-          const SizedBox(height: 12),
-          _buildStatsGrid(),
-          const SizedBox(height: 10),
-          _buildCustomersServedSection(),
-          const SizedBox(height: 10),
-          _buildNewBillButton(),
-        ],
-      ),
+    return Consumer<DashboardProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading) {
+          return _buildLoadingCard();
+        }
+
+        if (provider.hasError) {
+          return _buildErrorCard(provider.errorMessage ?? 'Unknown error');
+        }
+
+        final data = provider.dashboardData;
+
+        if (data == null) {
+          return _buildNoDataCard();
+        }
+
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+          decoration: _buildCollectionCardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildCollectionLabel(),
+              const SizedBox(height: 6),
+              _buildCollectionAmount(data),
+              const SizedBox(height: 12),
+              _buildStatsGrid(data),
+              const SizedBox(height: 10),
+              _buildCustomersServedSection(data),
+              const SizedBox(height: 10),
+              _buildNewBillButton(),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -182,14 +211,14 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildCollectionAmount() {
+  Widget _buildCollectionAmount(DashboardData data) {
     return Text(
-      'Rs. ${formatCashAmount(_dashboardData.totalCollection)}',
+      'Rs. ${formatCashAmount(data.totalCollection)}',
       style: AppTextStyles.billingTotal.copyWith(fontSize: 32),
     );
   }
 
-  Widget _buildStatsGrid() {
+  Widget _buildStatsGrid(DashboardData data) {
     return Column(
       children: [
         Row(
@@ -197,7 +226,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: _buildStatItem(
                 'Items Sold',
-                '${_dashboardData.totalItemsSold}',
+                '${data.totalItemsSold}',
                 Icons.inventory_2_outlined,
               ),
             ),
@@ -205,7 +234,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: _buildStatItem(
                 'MT Remaining',
-                '${_dashboardData.totalMtRemaining}',
+                '${data.totalMtRemaining}',
                 Icons.recycling_outlined,
               ),
             ),
@@ -217,7 +246,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: _buildStatItem(
                 'Credit',
-                'Rs. ${formatCashAmount(_dashboardData.totalCredit)}',
+                'Rs. ${formatCashAmount(data.totalCredit)}',
                 Icons.credit_card_outlined,
               ),
             ),
@@ -225,7 +254,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: _buildStatItem(
                 'Discount',
-                'Rs. ${formatCashAmount(_dashboardData.totalDiscount)}',
+                'Rs. ${formatCashAmount(data.totalDiscount)}',
                 Icons.discount_outlined,
               ),
             ),
@@ -235,7 +264,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildCustomersServedSection() {
+  Widget _buildCustomersServedSection(DashboardData data) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -260,7 +289,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(width: 6),
           Text(
-            '${_dashboardData.customersServed}',
+            '${data.customersServed}',
             style: AppTextStyles.productItemName.copyWith(
               color: Colors.white,
               fontSize: 15,
@@ -309,6 +338,129 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingCard() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 40),
+      decoration: _buildCollectionCardDecoration(),
+      child: Center(
+        child: Column(
+          children: [
+            CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+            const SizedBox(height: 16),
+            Text(
+              'Loading dashboard data...',
+              style: AppTextStyles.helperText.copyWith(
+                color: Colors.white70,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorCard(String errorMessage) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 30),
+      decoration: BoxDecoration(
+        color: AppColors.pepsiRed.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.pepsiRed.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.error_outline,
+            color: const Color.fromARGB(255, 145, 107, 107),
+            size: 48,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Failed to load dashboard',
+            style: AppTextStyles.productItemName.copyWith(
+              color: AppColors.pepsiRed,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            errorMessage,
+            style: AppTextStyles.helperText.copyWith(
+              color: AppColors.gray300,
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () => _dashboardProvider.refreshDashboardData(),
+            icon: Icon(Icons.refresh, size: 18),
+            label: Text('Retry'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.pepsiRed,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoDataCard() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 40),
+      decoration: _buildCollectionCardDecoration(),
+      child: Center(
+        child: Column(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.assessment_outlined,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No Data Available',
+              style: AppTextStyles.productItemName.copyWith(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Start creating bills to see your dashboard',
+              style: AppTextStyles.helperText.copyWith(
+                color: Colors.white70,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            _buildNewBillButton(),
+          ],
+        ),
       ),
     );
   }
