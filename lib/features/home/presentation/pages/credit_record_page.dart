@@ -7,11 +7,14 @@ import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackb
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
+import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
 
 /// Displays a list of credit transaction records with delete functionality.
 class CreditRecordPage extends StatefulWidget {
@@ -26,11 +29,17 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   bool _hasLoadedOnce = false;
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _cratesController = TextEditingController();
+  int? _deletingIndex;
+  int? _editingIndex;
+  bool _hasInternetConnection = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _creditProvider = CreditHistoryProvider();
+    _initConnectivity();
+    _setupConnectivityListener();
   }
 
   @override
@@ -43,11 +52,48 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     }
   }
 
+  /// Initialize connectivity check on app start
+  Future<void> _initConnectivity() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      _updateConnectionStatus(result);
+    } catch (e) {
+      debugPrint('Error checking connectivity: $e');
+      setState(() => _hasInternetConnection = false);
+    }
+  }
+
+  /// Setup listener for connectivity changes
+  void _setupConnectivityListener() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
+      _updateConnectionStatus(results);
+    });
+  }
+
+  /// Update connection status based on connectivity results
+  void _updateConnectionStatus(List<ConnectivityResult> results) {
+    final hasConnection =
+        results.isNotEmpty &&
+        !results.every((result) => result == ConnectivityResult.none);
+
+    if (mounted && _hasInternetConnection != hasConnection) {
+      setState(() => _hasInternetConnection = hasConnection);
+
+      // Reload data when connection is restored
+      if (hasConnection && _hasLoadedOnce) {
+        _loadCredits();
+      }
+    }
+  }
+
   @override
   void dispose() {
     _amountController.dispose();
     _cratesController.dispose();
     _creditProvider.dispose();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -72,27 +118,29 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       child: Scaffold(
         backgroundColor: AppColors.gray100,
         appBar: _buildAppBar(),
-        body: Consumer<CreditHistoryProvider>(
-          builder: (context, provider, child) {
-            if (provider.isLoading && provider.credits.isEmpty) {
-              return _buildLoadingState();
-            }
+        body: !_hasInternetConnection
+            ? _buildNoInternetState()
+            : Consumer<CreditHistoryProvider>(
+                builder: (context, provider, child) {
+                  if (provider.isLoading && provider.credits.isEmpty) {
+                    return _buildLoadingState();
+                  }
 
-            if (provider.hasError) {
-              return _buildErrorState(provider.errorMessage);
-            }
+                  if (provider.hasError) {
+                    return _buildErrorState(provider.errorMessage);
+                  }
 
-            if (provider.credits.isEmpty && !provider.isLoading) {
-              return _buildEmptyState();
-            }
+                  if (provider.credits.isEmpty && !provider.isLoading) {
+                    return _buildEmptyState();
+                  }
 
-            return RefreshIndicator(
-              onRefresh: _refreshCredits,
-              color: AppColors.pepsiBlue,
-              child: _buildBillList(provider.credits),
-            );
-          },
-        ),
+                  return RefreshIndicator(
+                    onRefresh: _refreshCredits,
+                    color: AppColors.pepsiBlue,
+                    child: _buildBillList(provider.credits),
+                  );
+                },
+              ),
       ),
     );
   }
@@ -102,11 +150,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   Future<void> _deleteItem(int index, List<CreditHistory> billHistory) async {
     if (!_isValidIndex(index, billHistory)) return;
 
+    setState(() => _deletingIndex = index);
+
     final deletedBill = billHistory[index];
 
     // Get salesman name from shared preferences
     final salesmanName = await AppPreferences.instance.salesmanName;
     if (salesmanName == null || salesmanName.isEmpty) {
+      setState(() => _deletingIndex = null);
       _showErrorSnackBar('Salesman name not found. Please log in again.');
       return;
     }
@@ -125,8 +176,33 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     final savedAsSale = await saleProvider.saveSale(saleHistory, salesmanName);
 
     if (!savedAsSale) {
+      setState(() => _deletingIndex = null);
       _showErrorSnackBar('Failed to save as sale history. Delete cancelled.');
       return;
+    }
+
+    // Update dashboard summary if bill is from today
+    final today = DateTime.now();
+    final billDate = deletedBill.date;
+    final isTodaysBill =
+        billDate.year == today.year &&
+        billDate.month == today.month &&
+        billDate.day == today.day;
+
+    if (isTodaysBill) {
+      final dashboardRepo = DashboardRepository();
+      final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
+        salesmanName: salesmanName,
+        date: deletedBill.date,
+        amountDue: deletedBill.amountDue,
+        cratesDue: deletedBill.cratesDue,
+      );
+
+      if (!summaryUpdated) {
+        setState(() => _deletingIndex = null);
+        _showErrorSnackBar('Failed to update dashboard. Delete cancelled.');
+        return;
+      }
     }
 
     // Delete from credit history using CreditHistoryProvider
@@ -140,6 +216,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     } else {
       _showErrorSnackBar('Failed to delete from credit records.');
     }
+
+    setState(() => _deletingIndex = null);
   }
 
   bool _isValidIndex(int index, List<CreditHistory> billHistory) {
@@ -172,6 +250,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     List<CreditHistory> billHistory,
   ) async {
     if (!_isValidIndex(index, billHistory)) return;
+
+    setState(() => _editingIndex = index);
 
     final bill = billHistory[index];
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
@@ -212,6 +292,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     // Get salesman name from shared preferences
     final salesmanName = await AppPreferences.instance.salesmanName;
     if (salesmanName == null || salesmanName.isEmpty) {
+      setState(() => _editingIndex = null);
       _showErrorSnackBar('Unable to get salesman information');
       return;
     }
@@ -239,8 +320,33 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       );
 
       if (!savedAsSale) {
+        setState(() => _editingIndex = null);
         _showErrorSnackBar('Failed to save as sale history. Update cancelled.');
         return;
+      }
+
+      // Update dashboard summary if bill is from today
+      final today = DateTime.now();
+      final billDate = bill.date;
+      final isTodaysBill =
+          billDate.year == today.year &&
+          billDate.month == today.month &&
+          billDate.day == today.day;
+
+      if (isTodaysBill) {
+        final dashboardRepo = DashboardRepository();
+        final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
+          salesmanName: salesmanName,
+          date: bill.date,
+          amountDue: bill.amountDue,
+          cratesDue: bill.cratesDue,
+        );
+
+        if (!summaryUpdated) {
+          setState(() => _editingIndex = null);
+          _showErrorSnackBar('Failed to update dashboard. Update cancelled.');
+          return;
+        }
       }
 
       // Delete from credit history using CreditHistoryProvider
@@ -258,7 +364,34 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       } else {
         _showErrorSnackBar('Failed to delete from credit records.');
       }
+
+      setState(() => _editingIndex = null);
     } else {
+      // Partial payment - update dashboard summary if bill is from today
+      final today = DateTime.now();
+      final billDate = bill.date;
+      final isTodaysBill =
+          billDate.year == today.year &&
+          billDate.month == today.month &&
+          billDate.day == today.day;
+
+      if (isTodaysBill) {
+        final dashboardRepo = DashboardRepository();
+        final summaryUpdated = await dashboardRepo
+            .updateSummaryOnPartialPayment(
+              salesmanName: salesmanName,
+              date: bill.date,
+              cashReceived: amountReceived,
+              cratesReceived: cratesReceived,
+            );
+
+        if (!summaryUpdated) {
+          setState(() => _editingIndex = null);
+          _showErrorSnackBar('Failed to update dashboard. Update cancelled.');
+          return;
+        }
+      }
+
       // Update in Firebase using provider
       final success = await _creditProvider.updateCreditBalance(
         salesmanName: salesmanName,
@@ -269,19 +402,31 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       );
 
       if (success) {
-        _showUpdateSnackBar();
+        _showUpdateSnackBar(amountReceived, cratesReceived);
       } else {
         _showErrorSnackBar('Failed to update record');
       }
+
+      setState(() => _editingIndex = null);
     }
   }
 
-  void _showUpdateSnackBar() {
-    CustomSnackBar.show(
-      context,
-      message: 'Payment received and record updated',
-      type: SnackBarType.success,
-    );
+  void _showUpdateSnackBar(int? amountReceived, int? cratesReceived) {
+    String message;
+    final hasAmount = amountReceived != null && amountReceived > 0;
+    final hasCrates = cratesReceived != null && cratesReceived > 0;
+
+    if (hasAmount && hasCrates) {
+      message = 'Payment and crates received, record updated';
+    } else if (hasAmount) {
+      message = 'Payment received and record updated';
+    } else if (hasCrates) {
+      message = 'Crates received and record updated';
+    } else {
+      message = 'Record updated';
+    }
+
+    CustomSnackBar.show(context, message: message, type: SnackBarType.success);
   }
 
   void _showErrorSnackBar(String message) {
@@ -387,13 +532,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               width: 96,
               height: 96,
               decoration: BoxDecoration(
-                color: AppColors.pepsiBlueLight.withValues(alpha: 0.12),
+                color: AppColors.pepsiRedLight.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.receipt_long_outlined,
+                Icons.credit_card_outlined,
                 size: 48,
-                color: AppColors.pepsiBlueLight,
+                color: AppColors.pepsiRedLight,
               ),
             ),
             const SizedBox(height: 24),
@@ -403,12 +548,88 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Credit transactions will appear here',
+              'Credit transactions from last 14 days will appear here',
               style: AppTextStyles.helperText.copyWith(
                 color: AppColors.gray500,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _refreshCredits,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: const Text(
+                'Refresh List',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.pepsiRedLight,
+                foregroundColor: AppColors.pepsiWhite,
+                elevation: 2,
+                shadowColor: AppColors.pepsiRedLight.withValues(alpha: 0.4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoInternetState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.pepsiBlue.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.wifi_off_outlined,
+                size: 48,
+                color: AppColors.pepsiBlue,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Internet Connection',
+              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please check your internet connection and try again',
+              style: AppTextStyles.helperText.copyWith(
+                color: AppColors.gray500,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _initConnectivity,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.pepsiBlue,
+                foregroundColor: AppColors.pepsiWhite,
+              ),
             ),
           ],
         ),
@@ -620,25 +841,46 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   }
 
   Widget _buildActionButtons(int index, List<CreditHistory> billHistory) {
+    final isEditLoading = _editingIndex == index;
+    final isDeleteLoading = _deletingIndex == index;
+    final isAnyLoading = isEditLoading || isDeleteLoading;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _showEditDialog(index, billHistory),
+            onTap: isAnyLoading
+                ? null
+                : () => _showEditDialog(index, billHistory),
             borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.pepsiBlueLight.withValues(alpha: 0.1),
+                color: AppColors.pepsiBlueLight.withValues(
+                  alpha: isAnyLoading ? 0.05 : 0.1,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                Icons.edit_outlined,
-                color: AppColors.pepsiBlueLight,
-                size: 22,
-              ),
+              child: isEditLoading
+                  ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.pepsiBlueLight,
+                        ),
+                      ),
+                    )
+                  : Icon(
+                      Icons.edit_outlined,
+                      color: AppColors.pepsiBlueLight.withValues(
+                        alpha: isAnyLoading ? 0.4 : 1.0,
+                      ),
+                      size: 22,
+                    ),
             ),
           ),
         ),
@@ -646,19 +888,36 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _showDeleteConfirmation(index, billHistory),
+            onTap: isAnyLoading
+                ? null
+                : () => _showDeleteConfirmation(index, billHistory),
             borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.pepsiRedLight.withValues(alpha: 0.1),
+                color: AppColors.pepsiRedLight.withValues(
+                  alpha: isAnyLoading ? 0.05 : 0.1,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                Icons.delete_outline,
-                color: AppColors.pepsiRedLight,
-                size: 22,
-              ),
+              child: isDeleteLoading
+                  ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.pepsiRedLight,
+                        ),
+                      ),
+                    )
+                  : Icon(
+                      Icons.delete_outline,
+                      color: AppColors.pepsiRedLight.withValues(
+                        alpha: isAnyLoading ? 0.4 : 1.0,
+                      ),
+                      size: 22,
+                    ),
             ),
           ),
         ),

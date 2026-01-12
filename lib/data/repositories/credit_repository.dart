@@ -25,10 +25,11 @@ class CreditRepository {
         (sum, product) => sum + product.quantity,
       );
 
-      // Calculate MT remaining (RB products only)
-      final mtRemaining = credit.products
-          .where((product) => product.name.toUpperCase().endsWith('RB'))
-          .fold<int>(0, (sum, product) => sum + product.quantity);
+      // Use cratesDue directly from credit:
+      // - MT field not filled (empty): cratesDue = 0 (don't track MT)
+      // - MT field filled with 0: cratesDue = total - 0 = all crates remaining
+      // - MT field filled with value: cratesDue = total - collected = remaining crates
+      final mtRemaining = credit.cratesDue;
 
       // Determine credit amount (only if not paid)
       final creditAmount = credit.isPaid ? 0 : credit.amountDue;

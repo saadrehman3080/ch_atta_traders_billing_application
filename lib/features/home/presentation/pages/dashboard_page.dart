@@ -8,6 +8,8 @@ import 'package:ch_atta_traders_billing_application/features/home/providers/dash
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
 
 class DashboardPage extends StatefulWidget {
   final VoidCallback? onNavigateToOrder;
@@ -21,6 +23,8 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   late final DashboardProvider _dashboardProvider;
   String _salesmanName = 'Salesman';
+  bool _hasInternetConnection = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   // final bool hasPrinters = false; // TODO: Replace with actual printer check
 
   @override
@@ -28,12 +32,15 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _dashboardProvider = DashboardProvider();
     _loadSalesmanName();
+    _initConnectivity();
+    _setupConnectivityListener();
     _dashboardProvider.loadDashboardData();
   }
 
   @override
   void dispose() {
     _dashboardProvider.dispose();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -43,6 +50,42 @@ class _DashboardPageState extends State<DashboardPage> {
       setState(() {
         _salesmanName = name;
       });
+    }
+  }
+
+  /// Initialize connectivity check on app start
+  Future<void> _initConnectivity() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      _updateConnectionStatus(result);
+    } catch (e) {
+      debugPrint('Error checking connectivity: $e');
+      setState(() => _hasInternetConnection = false);
+    }
+  }
+
+  /// Setup listener for connectivity changes
+  void _setupConnectivityListener() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
+      _updateConnectionStatus(results);
+    });
+  }
+
+  /// Update connection status based on connectivity results
+  void _updateConnectionStatus(List<ConnectivityResult> results) {
+    final hasConnection =
+        results.isNotEmpty &&
+        !results.every((result) => result == ConnectivityResult.none);
+
+    if (mounted && _hasInternetConnection != hasConnection) {
+      setState(() => _hasInternetConnection = hasConnection);
+
+      // Reload data when connection is restored
+      if (hasConnection) {
+        _dashboardProvider.refreshDashboardData();
+      }
     }
   }
 
@@ -149,7 +192,13 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildTodayCollectionCard() {
     return Consumer<DashboardProvider>(
       builder: (context, provider, child) {
-        if (provider.isLoading) {
+        // Show no internet state first
+        if (!_hasInternetConnection) {
+          return _buildNoInternetCard();
+        }
+
+        // Show loading card only on initial load (when no data exists)
+        if (provider.isLoading && provider.dashboardData == null) {
           return _buildLoadingCard();
         }
 
@@ -163,6 +212,20 @@ class _DashboardPageState extends State<DashboardPage> {
           return _buildNoDataCard();
         }
 
+        // Check if all values are zero (no bills generated yet)
+        final allValuesZero =
+            data.totalCollection == 0 &&
+            data.totalItemsSold == 0 &&
+            data.totalMtRemaining == 0 &&
+            data.totalCredit == 0 &&
+            data.totalDiscount == 0 &&
+            data.customersServed == 0;
+
+        if (allValuesZero) {
+          return _buildWelcomeCard();
+        }
+
+        // Show data card during refresh (when data exists and loading)
         return Container(
           margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
@@ -342,6 +405,60 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildNoInternetCard() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 40),
+      decoration: _buildCollectionCardDecoration(),
+      child: Center(
+        child: Column(
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.25),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.wifi_off_outlined,
+                size: 48,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Internet Connection',
+              style: AppTextStyles.pageTitleBlack.copyWith(
+                fontSize: 20,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please check your internet connection and try again',
+              style: AppTextStyles.helperText.copyWith(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _initConnectivity,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.pepsiWhite,
+                foregroundColor: AppColors.pepsiBlue,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLoadingCard() {
     return Container(
       margin: const EdgeInsets.all(16),
@@ -458,6 +575,62 @@ class _DashboardPageState extends State<DashboardPage> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
+            _buildNewBillButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWelcomeCard() {
+    final greeting = _getGreeting();
+    final greetingIcon = _getGreetingIcon();
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 40),
+      decoration: _buildCollectionCardDecoration(),
+      child: Center(
+        child: Column(
+          children: [
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(greetingIcon, color: Colors.white, size: 45),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              '$greeting, $_salesmanName!',
+              style: AppTextStyles.productItemName.copyWith(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Ready to start your day?',
+              style: AppTextStyles.helperText.copyWith(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Create your first bill to begin tracking',
+              style: AppTextStyles.helperText.copyWith(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
             _buildNewBillButton(),
           ],
         ),
@@ -628,6 +801,32 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ========== Business Logic Methods ==========
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good Morning';
+    } else if (hour < 17) {
+      return 'Good Afternoon';
+    } else if (hour < 21) {
+      return 'Good Evening';
+    } else {
+      return 'Good Night';
+    }
+  }
+
+  IconData _getGreetingIcon() {
+    final hour = DateTime.now().hour;
+    if (hour < 10) {
+      return Icons.wb_sunny_outlined; // Morning sun
+    } else if (hour < 16) {
+      return Icons.wb_sunny; // Afternoon sun
+    } else if (hour < 19) {
+      return Icons.wb_twilight; // Evening
+    } else {
+      return Icons.nightlight_outlined; // Night
+    }
+  }
 
   Future<void> _handleLogout(BuildContext context) async {
     try {

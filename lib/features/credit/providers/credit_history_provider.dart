@@ -36,11 +36,11 @@ class CreditHistoryProvider extends ChangeNotifier {
   /// Uses optimized parallel queries for maximum speed
   ///
   /// [salesmanName] - The name of the salesman
-  /// [daysToLookBack] - Number of days to look back (default: 365 days)
+  /// [daysToLookBack] - Number of days to look back (default: 14 days)
   /// [forceRefresh] - Skip cache and force fresh data (default: false)
   Future<void> loadAllCreditHistory(
     String salesmanName, {
-    int daysToLookBack = 365,
+    int daysToLookBack = 14,
     bool forceRefresh = false,
   }) async {
     // Check if we have recent data and don't need to refresh

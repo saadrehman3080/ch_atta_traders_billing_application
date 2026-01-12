@@ -8,6 +8,8 @@ import 'package:ch_atta_traders_billing_application/data/models/sale_history.dar
 import 'package:ch_atta_traders_billing_application/features/sales/providers/daily_sales_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
 
 class DailySalePage extends StatefulWidget {
   const DailySalePage({super.key});
@@ -19,11 +21,15 @@ class DailySalePage extends StatefulWidget {
 class _DailySalePageState extends State<DailySalePage> {
   late final DailySalesProvider _salesProvider;
   bool _hasLoadedOnce = false;
+  bool _hasInternetConnection = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _salesProvider = DailySalesProvider();
+    _initConnectivity();
+    _setupConnectivityListener();
   }
 
   @override
@@ -36,9 +42,46 @@ class _DailySalePageState extends State<DailySalePage> {
     }
   }
 
+  /// Initialize connectivity check on app start
+  Future<void> _initConnectivity() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      _updateConnectionStatus(result);
+    } catch (e) {
+      debugPrint('Error checking connectivity: $e');
+      setState(() => _hasInternetConnection = false);
+    }
+  }
+
+  /// Setup listener for connectivity changes
+  void _setupConnectivityListener() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
+      _updateConnectionStatus(results);
+    });
+  }
+
+  /// Update connection status based on connectivity results
+  void _updateConnectionStatus(List<ConnectivityResult> results) {
+    final hasConnection =
+        results.isNotEmpty &&
+        !results.every((result) => result == ConnectivityResult.none);
+
+    if (mounted && _hasInternetConnection != hasConnection) {
+      setState(() => _hasInternetConnection = hasConnection);
+
+      // Reload data when connection is restored
+      if (hasConnection && _hasLoadedOnce) {
+        _loadSales();
+      }
+    }
+  }
+
   @override
   void dispose() {
     _salesProvider.dispose();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -56,23 +99,25 @@ class _DailySalePageState extends State<DailySalePage> {
       child: Scaffold(
         backgroundColor: AppColors.gray100,
         appBar: _buildAppBar(),
-        body: Consumer<DailySalesProvider>(
-          builder: (context, provider, child) {
-            if (provider.isLoading) {
-              return _buildLoadingState();
-            }
+        body: !_hasInternetConnection
+            ? _buildNoInternetState()
+            : Consumer<DailySalesProvider>(
+                builder: (context, provider, child) {
+                  if (provider.isLoading) {
+                    return _buildLoadingState();
+                  }
 
-            if (provider.hasError) {
-              return _buildErrorState(provider.errorMessage);
-            }
+                  if (provider.hasError) {
+                    return _buildErrorState(provider.errorMessage);
+                  }
 
-            if (provider.sales.isEmpty) {
-              return _buildEmptyState();
-            }
+                  if (provider.sales.isEmpty) {
+                    return _buildEmptyState();
+                  }
 
-            return _buildSaleList(provider.sales);
-          },
-        ),
+                  return _buildSaleList(provider.sales);
+                },
+              ),
       ),
     );
   }
@@ -160,6 +205,32 @@ class _DailySalePageState extends State<DailySalePage> {
             _buildEmptyStateTitle(),
             const SizedBox(height: 8),
             _buildEmptyStateSubtitle(),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadSales,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: const Text(
+                'Refresh List',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.pepsiBlue,
+                foregroundColor: AppColors.pepsiWhite,
+                elevation: 2,
+                shadowColor: AppColors.pepsiBlue.withValues(alpha: 0.4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -185,15 +256,15 @@ class _DailySalePageState extends State<DailySalePage> {
 
   Widget _buildEmptyStateIcon() {
     return Container(
-      width: 80,
-      height: 80,
+      width: 96,
+      height: 96,
       decoration: BoxDecoration(
-        color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+        color: AppColors.pepsiBlue.withValues(alpha: 0.12),
         shape: BoxShape.circle,
       ),
       child: const Icon(
         Icons.receipt_long_outlined,
-        size: 40,
+        size: 48,
         color: AppColors.pepsiBlue,
       ),
     );
@@ -214,6 +285,56 @@ class _DailySalePageState extends State<DailySalePage> {
         fontSize: 14,
       ),
       textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildNoInternetState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppColors.pepsiBlue.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.wifi_off_outlined,
+                size: 48,
+                color: AppColors.pepsiBlue,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Internet Connection',
+              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please check your internet connection and try again',
+              style: AppTextStyles.helperText.copyWith(
+                color: AppColors.gray500,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _initConnectivity,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.pepsiBlue,
+                foregroundColor: AppColors.pepsiWhite,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

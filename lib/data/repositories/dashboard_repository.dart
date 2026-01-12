@@ -71,4 +71,110 @@ class DashboardRepository {
       customersServed: 0,
     );
   }
+
+  /// Updates dashboard summary when converting a credit bill to sale
+  /// This adjusts the summary by:
+  /// - Subtracting MT remaining (cratesDue)
+  /// - Subtracting from credit amount (amountDue)
+  /// - Adding to total collection (amountDue)
+  ///
+  /// [salesmanName] - The name of the salesman
+  /// [date] - The date of the bill
+  /// [amountDue] - The amount that was due (now paid)
+  /// [cratesDue] - The crates that were due (now returned)
+  Future<bool> updateSummaryOnCreditToSale({
+    required String salesmanName,
+    required DateTime date,
+    required int amountDue,
+    required int cratesDue,
+  }) async {
+    try {
+      final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
+
+      debugPrint('Updating dashboard summary for credit-to-sale conversion...');
+      debugPrint('Date: $formattedDate');
+      debugPrint('Amount: $amountDue, Crates: $cratesDue');
+
+      final summaryRef = _firestore
+          .collection('Dashboard Summary')
+          .doc(salesmanName)
+          .collection(formattedDate)
+          .doc('summary');
+
+      // Update the summary document
+      await summaryRef.set({
+        'totalCollection': FieldValue.increment(amountDue),
+        'totalCredit': FieldValue.increment(-amountDue),
+        'totalMtRemaining': FieldValue.increment(-cratesDue),
+        'lastUpdated': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      debugPrint('Dashboard summary updated successfully');
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating dashboard summary: $e');
+      debugPrint('StackTrace: $stackTrace');
+      return false;
+    }
+  }
+
+  /// Updates dashboard summary for partial payments (cash or crates received)
+  /// This adjusts the summary by:
+  /// - Subtracting cash received from credit amount
+  /// - Adding cash received to total collection
+  /// - Subtracting crates received from MT remaining
+  ///
+  /// [salesmanName] - The name of the salesman
+  /// [date] - The date of the bill
+  /// [cashReceived] - The amount received (optional)
+  /// [cratesReceived] - The crates returned (optional)
+  Future<bool> updateSummaryOnPartialPayment({
+    required String salesmanName,
+    required DateTime date,
+    int? cashReceived,
+    int? cratesReceived,
+  }) async {
+    try {
+      // Skip if nothing to update
+      if ((cashReceived == null || cashReceived == 0) &&
+          (cratesReceived == null || cratesReceived == 0)) {
+        return true;
+      }
+
+      final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
+
+      debugPrint('Updating dashboard summary for partial payment...');
+      debugPrint('Date: $formattedDate');
+      debugPrint('Cash: $cashReceived, Crates: $cratesReceived');
+
+      final summaryRef = _firestore
+          .collection('Dashboard Summary')
+          .doc(salesmanName)
+          .collection(formattedDate)
+          .doc('summary');
+
+      final Map<String, dynamic> updates = {
+        'lastUpdated': FieldValue.serverTimestamp(),
+      };
+
+      if (cashReceived != null && cashReceived > 0) {
+        updates['totalCollection'] = FieldValue.increment(cashReceived);
+        updates['totalCredit'] = FieldValue.increment(-cashReceived);
+      }
+
+      if (cratesReceived != null && cratesReceived > 0) {
+        updates['totalMtRemaining'] = FieldValue.increment(-cratesReceived);
+      }
+
+      // Update the summary document
+      await summaryRef.set(updates, SetOptions(merge: true));
+
+      debugPrint('Dashboard summary updated successfully');
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating dashboard summary: $e');
+      debugPrint('StackTrace: $stackTrace');
+      return false;
+    }
+  }
 }
