@@ -28,3 +28,5 @@ Treat the customer name properly before storing into database     like Saad Ur R
 After printing bill reset the products list view to top. 
 
 When the bill is deleted from the credit it will move to the history section, ispaid to true, amountdue to 0 and update the dashboard cash as well.
+
+Improve letter spacing on Credit page.

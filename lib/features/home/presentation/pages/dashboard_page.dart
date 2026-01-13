@@ -1,6 +1,7 @@
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
+import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
@@ -9,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'dart:async';
 
 class DashboardPage extends StatefulWidget {
@@ -20,28 +22,51 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage>
+    with WidgetsBindingObserver {
   late final DashboardProvider _dashboardProvider;
   String _salesmanName = 'Salesman';
   bool _hasInternetConnection = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-  // final bool hasPrinters = false; // TODO: Replace with actual printer check
+
+  // Printer state
+  List<BluetoothInfo> _availablePrinters = [];
+  bool _isScanning = false;
+  String? _connectingPrinterAddress; // Track which printer is being connected
+  String? _connectedPrinterAddress;
+  String? _printerError;
+  Timer? _connectionMonitorTimer;
+  int? _printerBatteryLevel; // Store battery level of connected printer
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _dashboardProvider = DashboardProvider();
     _loadSalesmanName();
     _initConnectivity();
     _setupConnectivityListener();
     _dashboardProvider.loadDashboardData();
+    _scanForPrinters();
+    _startConnectionMonitoring();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dashboardProvider.dispose();
     _connectivitySubscription?.cancel();
+    _connectionMonitorTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Re-verify connection when app comes to foreground
+      _verifyPrinterConnection();
+    }
   }
 
   Future<void> _loadSalesmanName() async {
@@ -654,12 +679,50 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildPrintersSection() {
+    if (_isScanning) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildPrintersSectionHeader(),
+          const SizedBox(height: 12),
+          _buildScanningPrinters(),
+        ],
+      );
+    }
+
+    if (_printerError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildPrintersSectionHeader(),
+          const SizedBox(height: 12),
+          _buildPrinterError(),
+        ],
+      );
+    }
+
+    if (_availablePrinters.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildPrintersSectionHeader(),
+          const SizedBox(height: 12),
+          _buildNoPrintersFound(),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildPrintersSectionHeader(),
         const SizedBox(height: 12),
-        _buildNoPrintersFound(),
+        ..._availablePrinters.map(
+          (printer) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildPrinterItem(printer),
+          ),
+        ),
       ],
     );
   }
@@ -753,7 +816,15 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ],
         ),
-        Icon(Icons.refresh, color: AppColors.gray500, size: 18),
+        if (_availablePrinters.isNotEmpty)
+          Text(
+            '${_availablePrinters.length}',
+            style: AppTextStyles.helperText.copyWith(
+              color: AppColors.pepsiBlue,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
       ],
     );
   }
@@ -852,80 +923,422 @@ class _DashboardPageState extends State<DashboardPage> {
     widget.onNavigateToOrder?.call();
   }
 
-  void _handleRefreshPrinters() {
-    // TODO: Implement refresh printers logic
+  Future<void> _scanForPrinters() async {
+    setState(() {
+      _isScanning = true;
+      _printerError = null;
+    });
+
+    try {
+      // Check if Bluetooth is available
+      final isAvailable = await PrintBluetoothThermal.bluetoothEnabled;
+      if (!isAvailable) {
+        setState(() {
+          _printerError = 'Bluetooth is not enabled';
+          _isScanning = false;
+        });
+        return;
+      }
+
+      // Scan for devices
+      final printers = await PrintBluetoothThermal.pairedBluetooths;
+
+      if (mounted) {
+        setState(() {
+          _availablePrinters = printers;
+          _isScanning = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error scanning for printers: $e');
+      if (mounted) {
+        setState(() {
+          _printerError = 'Failed to scan for printers';
+          _isScanning = false;
+        });
+      }
+    }
   }
 
-  // Widget _buildPrinterItem(String printerName, String printerStatus) {
-  //   return Container(
-  //     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-  //     decoration: BoxDecoration(
-  //       color: AppColors.gray50,
-  //       borderRadius: BorderRadius.circular(8),
-  //       border: Border.all(color: AppColors.gray300, width: 1),
-  //     ),
-  //     child: Row(
-  //       children: [
-  //         Icon(
-  //           Icons.print,
-  //           color: printerStatus == 'Connected'
-  //               ? AppColors.pepsiBlue
-  //               : AppColors.gray400,
-  //           size: 20,
-  //         ),
-  //         const SizedBox(width: 10),
-  //         Expanded(
-  //           child: Column(
-  //             crossAxisAlignment: CrossAxisAlignment.start,
-  //             children: [
-  //               Text(
-  //                 printerName,
-  //                 style: AppTextStyles.productItemName.copyWith(
-  //                   fontSize: 13,
-  //                   fontWeight: FontWeight.w600,
-  //                 ),
-  //               ),
-  //               const SizedBox(height: 2),
-  //               Text(
-  //                 printerStatus,
-  //                 style: AppTextStyles.helperText.copyWith(
-  //                   fontSize: 11,
-  //                   color: printerStatus == 'Connected'
-  //                       ? AppColors.pepsiBlue
-  //                       : AppColors.gray500,
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //         _buildPrinterActionButton(printerStatus),
-  //       ],
-  //     ),
-  //   );
-  // }
+  Future<void> _connectToPrinter(BluetoothInfo printer) async {
+    setState(() {
+      _connectingPrinterAddress = printer.macAdress;
+      _printerError = null;
+    });
 
-  // Widget _buildPrinterActionButton(String printerStatus) {
-  //   return TextButton(
-  //     onPressed: () => _handlePrinterAction(printerStatus),
-  //     style: TextButton.styleFrom(
-  //       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-  //       minimumSize: Size.zero,
-  //       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-  //     ),
-  //     child: Text(
-  //       printerStatus == 'Connected' ? 'Disconnect' : 'Connect',
-  //       style: AppTextStyles.helperText.copyWith(
-  //         fontSize: 11,
-  //         color: printerStatus == 'Connected'
-  //             ? AppColors.pepsiRed
-  //             : AppColors.pepsiBlue,
-  //         fontWeight: FontWeight.w600,
-  //       ),
-  //     ),
-  //   );
-  // }
+    try {
+      // Add timeout to prevent indefinite waiting
+      final result =
+          await PrintBluetoothThermal.connect(
+            macPrinterAddress: printer.macAdress,
+          ).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              throw TimeoutException('Connection timeout');
+            },
+          );
 
-  // void _handlePrinterAction(String printerStatus) {
-  //   // TODO: Implement connect/disconnect printer logic
-  // }
+      if (result) {
+        if (mounted) {
+          setState(() {
+            _connectedPrinterAddress = printer.macAdress;
+            _connectingPrinterAddress = null;
+          });
+
+          // Fetch battery level
+          _fetchBatteryLevel();
+
+          // Show success message
+          CustomSnackBar.show(
+            context,
+            message: 'Connected to ${printer.name}',
+            type: SnackBarType.success,
+          );
+        }
+      } else {
+        throw Exception('Connection failed');
+      }
+    } on TimeoutException {
+      debugPrint('Connection timeout for printer: ${printer.name}');
+      if (mounted) {
+        setState(() {
+          _printerError = 'Connection timeout';
+          _connectingPrinterAddress = null;
+        });
+
+        CustomSnackBar.show(
+          context,
+          message: 'Connection timeout. Please try again.',
+          type: SnackBarType.error,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error connecting to printer: $e');
+      if (mounted) {
+        setState(() {
+          _printerError = 'Failed to connect to printer';
+          _connectingPrinterAddress = null;
+        });
+
+        CustomSnackBar.show(
+          context,
+          message: 'Failed to connect to ${printer.name}',
+          type: SnackBarType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _disconnectPrinter() async {
+    try {
+      await PrintBluetoothThermal.disconnect;
+
+      if (mounted) {
+        setState(() {
+          _connectedPrinterAddress = null;
+          _printerBatteryLevel = null;
+        });
+
+        CustomSnackBar.show(
+          context,
+          message: 'Printer disconnected',
+          type: SnackBarType.info,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error disconnecting printer: $e');
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Failed to disconnect printer',
+          type: SnackBarType.error,
+        );
+      }
+    }
+  }
+
+  void _handleRefreshPrinters() {
+    _scanForPrinters();
+  }
+
+  void _startConnectionMonitoring() {
+    // Monitor connection status every 30 seconds
+    _connectionMonitorTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _verifyPrinterConnection(),
+    );
+  }
+
+  Future<void> _verifyPrinterConnection() async {
+    if (_connectedPrinterAddress == null) return;
+
+    try {
+      final isConnected = await PrintBluetoothThermal.connectionStatus;
+
+      if (!isConnected && mounted) {
+        setState(() {
+          _connectedPrinterAddress = null;
+          _printerBatteryLevel = null;
+        });
+
+        CustomSnackBar.show(
+          context,
+          message: 'Printer connection lost',
+          type: SnackBarType.warning,
+        );
+      } else if (isConnected) {
+        // Update battery level while connected
+        _fetchBatteryLevel();
+      }
+    } catch (e) {
+      debugPrint('Error verifying printer connection: $e');
+    }
+  }
+
+  Future<void> _fetchBatteryLevel() async {
+    try {
+      final batteryLevel = await PrintBluetoothThermal.batteryLevel;
+      if (mounted) {
+        setState(() {
+          _printerBatteryLevel = batteryLevel;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching battery level: $e');
+      // Battery level not critical, don't show error to user
+    }
+  }
+
+  Widget _buildScanningPrinters() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.gray300, width: 1.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(color: AppColors.pepsiBlue, strokeWidth: 3),
+          const SizedBox(height: 14),
+          Text(
+            'Scanning for printers...',
+            style: AppTextStyles.helperText.copyWith(
+              color: AppColors.gray500,
+              fontSize: 13,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrinterError() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.pepsiRed.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.pepsiRed.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, color: AppColors.pepsiRed, size: 32),
+          const SizedBox(height: 10),
+          Text(
+            _printerError ?? 'Error',
+            style: AppTextStyles.helperText.copyWith(
+              color: AppColors.pepsiRed,
+              fontSize: 13,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          TextButton.icon(
+            onPressed: () => _handleRefreshPrinters(),
+            icon: Icon(Icons.refresh, size: 16),
+            label: Text(
+              'Retry',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.pepsiRed,
+              backgroundColor: AppColors.pepsiRed.withValues(alpha: 0.1),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrinterItem(BluetoothInfo printer) {
+    final isConnected = _connectedPrinterAddress == printer.macAdress;
+    final isCurrentlyConnecting =
+        _connectingPrinterAddress == printer.macAdress;
+    final isAnyPrinterConnecting = _connectingPrinterAddress != null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isConnected
+            ? AppColors.pepsiBlue.withValues(alpha: 0.05)
+            : AppColors.gray50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isConnected ? AppColors.pepsiBlue : AppColors.gray300,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isConnected ? Icons.print : Icons.print_outlined,
+            color: isConnected ? AppColors.pepsiBlue : AppColors.gray400,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  printer.name,
+                  style: AppTextStyles.productItemName.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isConnected ? AppColors.pepsiBlue : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isConnected ? 'Connected' : printer.macAdress,
+                  style: AppTextStyles.helperText.copyWith(
+                    fontSize: 11,
+                    color: isConnected
+                        ? AppColors.pepsiBlue
+                        : AppColors.gray500,
+                  ),
+                ),
+                if (isConnected && _printerBatteryLevel != null) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        _getBatteryIcon(_printerBatteryLevel!),
+                        size: 12,
+                        color: _getBatteryColor(_printerBatteryLevel!),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Battery: $_printerBatteryLevel%',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 10,
+                          color: _getBatteryColor(_printerBatteryLevel!),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (isCurrentlyConnecting)
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.pepsiBlue,
+              ),
+            )
+          else
+            _buildPrinterActionButton(
+              printer,
+              isConnected,
+              isAnyPrinterConnecting,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrinterActionButton(
+    BluetoothInfo printer,
+    bool isConnected,
+    bool isAnyPrinterConnecting,
+  ) {
+    // Disable button if another printer is connecting
+    final isDisabled = isAnyPrinterConnecting && !isConnected;
+
+    return TextButton(
+      onPressed: isDisabled
+          ? null
+          : () =>
+                isConnected ? _disconnectPrinter() : _connectToPrinter(printer),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        backgroundColor: isDisabled
+            ? AppColors.gray300
+            : isConnected
+            ? AppColors.pepsiRed.withValues(alpha: 0.1)
+            : AppColors.pepsiBlue.withValues(alpha: 0.1),
+        disabledBackgroundColor: AppColors.gray300,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      child: Text(
+        isConnected ? 'Disconnect' : 'Connect',
+        style: AppTextStyles.helperText.copyWith(
+          fontSize: 11,
+          color: isDisabled
+              ? AppColors.gray400
+              : isConnected
+              ? AppColors.pepsiRed
+              : AppColors.pepsiBlue,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  // Helper methods for battery display
+  IconData _getBatteryIcon(int batteryLevel) {
+    if (batteryLevel >= 90) {
+      return Icons.battery_full;
+    } else if (batteryLevel >= 60) {
+      return Icons.battery_5_bar;
+    } else if (batteryLevel >= 40) {
+      return Icons.battery_3_bar;
+    } else if (batteryLevel >= 20) {
+      return Icons.battery_2_bar;
+    } else {
+      return Icons.battery_1_bar;
+    }
+  }
+
+  Color _getBatteryColor(int batteryLevel) {
+    if (batteryLevel >= 50) {
+      return Colors.green[700]!;
+    } else if (batteryLevel >= 20) {
+      return Colors.orange[700]!;
+    } else {
+      return Colors.red[700]!;
+    }
+  }
 }

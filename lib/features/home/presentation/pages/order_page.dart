@@ -559,7 +559,7 @@ class _OrderPageState extends State<OrderPage> {
         style: AppTextStyles.productItemName.copyWith(
           fontSize: 16,
           fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
+          letterSpacing: 0.25,
           color: isUnavailable
               ? Colors.black.withValues(alpha: 0.4)
               : Colors.black,

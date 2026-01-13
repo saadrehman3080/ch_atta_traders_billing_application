@@ -380,7 +380,7 @@ class _DailySalePageState extends State<DailySalePage> {
           style: AppTextStyles.productItemName.copyWith(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            letterSpacing: -0.2,
+            letterSpacing: 0.25,
           ),
         ),
         const SizedBox(height: 6),
