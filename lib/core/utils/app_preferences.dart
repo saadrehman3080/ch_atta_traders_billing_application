@@ -40,6 +40,9 @@ class AppPreferences {
   /// Key for storing the salesman ID
   static const String _keySalesmanId = 'salesman_id';
 
+  /// Key for storing the connected printer address
+  static const String _keyPrinterAddress = 'printer_address';
+
   // ========== Initialization ==========
 
   /// Initializes the SharedPreferences instance.
@@ -184,6 +187,38 @@ class AppPreferences {
       return result;
     } catch (e) {
       debugPrint('Error storing salesman ID: $e');
+      return false;
+    }
+  }
+
+  // ========== Printer Management ==========
+
+  /// Gets the saved printer address from shared preferences.
+  ///
+  /// Returns the printer MAC address or null if not set.
+  Future<String?> get printerAddress async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getString(_keyPrinterAddress);
+    } catch (e) {
+      debugPrint('Error reading printer address: $e');
+      return null;
+    }
+  }
+
+  /// Stores the printer address.
+  ///
+  /// Returns `true` if the operation was successful, `false` otherwise.
+  Future<bool> setPrinterAddress(String address) async {
+    _ensureInitialized();
+    try {
+      final result = await _prefs!.setString(_keyPrinterAddress, address);
+      if (result) {
+        debugPrint('Printer address stored: $address');
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error storing printer address: $e');
       return false;
     }
   }

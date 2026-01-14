@@ -6,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.d
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -25,38 +26,32 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage>
     with WidgetsBindingObserver {
   late final DashboardProvider _dashboardProvider;
+  late final PrinterService _printerService;
   String _salesmanName = 'Salesman';
   bool _hasInternetConnection = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-
-  // Printer state
-  List<BluetoothInfo> _availablePrinters = [];
-  bool _isScanning = false;
-  String? _connectingPrinterAddress; // Track which printer is being connected
-  String? _connectedPrinterAddress;
-  String? _printerError;
-  Timer? _connectionMonitorTimer;
-  int? _printerBatteryLevel; // Store battery level of connected printer
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _dashboardProvider = DashboardProvider();
+    _printerService = PrinterService();
     _loadSalesmanName();
     _initConnectivity();
     _setupConnectivityListener();
     _dashboardProvider.loadDashboardData();
-    _scanForPrinters();
-    _startConnectionMonitoring();
+    _printerService.initialize();
+    // Listen to printer service changes
+    _printerService.addListener(_onPrinterStateChanged);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _printerService.removeListener(_onPrinterStateChanged);
     _dashboardProvider.dispose();
     _connectivitySubscription?.cancel();
-    _connectionMonitorTimer?.cancel();
     super.dispose();
   }
 
@@ -64,8 +59,17 @@ class _DashboardPageState extends State<DashboardPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      // Re-verify connection when app comes to foreground
-      _verifyPrinterConnection();
+      // Check connection when app comes to foreground
+      _printerService.checkExistingConnection();
+    }
+  }
+
+  /// Callback when printer state changes
+  void _onPrinterStateChanged() {
+    if (mounted) {
+      setState(() {
+        // Trigger rebuild when printer state changes
+      });
     }
   }
 
@@ -679,7 +683,9 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildPrintersSection() {
-    if (_isScanning) {
+    final printerState = _printerService.state;
+
+    if (printerState.isScanning) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -690,7 +696,7 @@ class _DashboardPageState extends State<DashboardPage>
       );
     }
 
-    if (_printerError != null) {
+    if (printerState.hasError) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -701,7 +707,7 @@ class _DashboardPageState extends State<DashboardPage>
       );
     }
 
-    if (_availablePrinters.isEmpty) {
+    if (printerState.availablePrinters.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -717,7 +723,7 @@ class _DashboardPageState extends State<DashboardPage>
       children: [
         _buildPrintersSectionHeader(),
         const SizedBox(height: 12),
-        ..._availablePrinters.map(
+        ...printerState.availablePrinters.map(
           (printer) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _buildPrinterItem(printer),
@@ -795,6 +801,7 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildPrintersSectionHeader() {
+    final printerCount = _printerService.state.availablePrinters.length;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -816,9 +823,9 @@ class _DashboardPageState extends State<DashboardPage>
             ),
           ],
         ),
-        if (_availablePrinters.isNotEmpty)
+        if (printerCount > 0)
           Text(
-            '${_availablePrinters.length}',
+            '$printerCount',
             style: AppTextStyles.helperText.copyWith(
               color: AppColors.pepsiBlue,
               fontSize: 12,
@@ -901,6 +908,12 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _handleLogout(BuildContext context) async {
     try {
+      // Disconnect printer if connected
+      if (_printerService.state.isConnected) {
+        await _printerService.disconnect();
+        debugPrint('Printer disconnected on logout');
+      }
+
       // Clear authentication state
       if (context.mounted) {
         context.read<AuthProvider>().logout();
@@ -923,190 +936,43 @@ class _DashboardPageState extends State<DashboardPage>
     widget.onNavigateToOrder?.call();
   }
 
-  Future<void> _scanForPrinters() async {
-    setState(() {
-      _isScanning = true;
-      _printerError = null;
-    });
-
-    try {
-      // Check if Bluetooth is available
-      final isAvailable = await PrintBluetoothThermal.bluetoothEnabled;
-      if (!isAvailable) {
-        setState(() {
-          _printerError = 'Bluetooth is not enabled';
-          _isScanning = false;
-        });
-        return;
-      }
-
-      // Scan for devices
-      final printers = await PrintBluetoothThermal.pairedBluetooths;
-
-      if (mounted) {
-        setState(() {
-          _availablePrinters = printers;
-          _isScanning = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error scanning for printers: $e');
-      if (mounted) {
-        setState(() {
-          _printerError = 'Failed to scan for printers';
-          _isScanning = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _connectToPrinter(BluetoothInfo printer) async {
-    setState(() {
-      _connectingPrinterAddress = printer.macAdress;
-      _printerError = null;
-    });
-
-    try {
-      // Add timeout to prevent indefinite waiting
-      final result =
-          await PrintBluetoothThermal.connect(
-            macPrinterAddress: printer.macAdress,
-          ).timeout(
-            const Duration(seconds: 15),
-            onTimeout: () {
-              throw TimeoutException('Connection timeout');
-            },
-          );
-
-      if (result) {
-        if (mounted) {
-          setState(() {
-            _connectedPrinterAddress = printer.macAdress;
-            _connectingPrinterAddress = null;
-          });
-
-          // Fetch battery level
-          _fetchBatteryLevel();
-
-          // Show success message
-          CustomSnackBar.show(
-            context,
-            message: 'Connected to ${printer.name}',
-            type: SnackBarType.success,
-          );
-        }
+  Future<void> _handleConnectToPrinter(BluetoothInfo printer) async {
+    final success = await _printerService.connectToPrinter(printer);
+    if (mounted) {
+      if (success) {
+        CustomSnackBar.show(
+          context,
+          message: 'Connected to ${printer.name}',
+          type: SnackBarType.success,
+        );
       } else {
-        throw Exception('Connection failed');
-      }
-    } on TimeoutException {
-      debugPrint('Connection timeout for printer: ${printer.name}');
-      if (mounted) {
-        setState(() {
-          _printerError = 'Connection timeout';
-          _connectingPrinterAddress = null;
-        });
-
+        final errorMsg =
+            _printerService.state.errorMessage ??
+            'Failed to connect to ${printer.name}';
         CustomSnackBar.show(
           context,
-          message: 'Connection timeout. Please try again.',
-          type: SnackBarType.error,
-        );
-      }
-    } catch (e) {
-      debugPrint('Error connecting to printer: $e');
-      if (mounted) {
-        setState(() {
-          _printerError = 'Failed to connect to printer';
-          _connectingPrinterAddress = null;
-        });
-
-        CustomSnackBar.show(
-          context,
-          message: 'Failed to connect to ${printer.name}',
+          message: errorMsg,
           type: SnackBarType.error,
         );
       }
     }
   }
 
-  Future<void> _disconnectPrinter() async {
-    try {
-      await PrintBluetoothThermal.disconnect;
-
-      if (mounted) {
-        setState(() {
-          _connectedPrinterAddress = null;
-          _printerBatteryLevel = null;
-        });
-
-        CustomSnackBar.show(
-          context,
-          message: 'Printer disconnected',
-          type: SnackBarType.info,
-        );
-      }
-    } catch (e) {
-      debugPrint('Error disconnecting printer: $e');
-      if (mounted) {
-        CustomSnackBar.show(
-          context,
-          message: 'Failed to disconnect printer',
-          type: SnackBarType.error,
-        );
-      }
+  Future<void> _handleDisconnectPrinter() async {
+    final success = await _printerService.disconnect();
+    if (mounted) {
+      CustomSnackBar.show(
+        context,
+        message: success
+            ? 'Printer disconnected'
+            : 'Failed to disconnect printer',
+        type: success ? SnackBarType.info : SnackBarType.error,
+      );
     }
   }
 
   void _handleRefreshPrinters() {
-    _scanForPrinters();
-  }
-
-  void _startConnectionMonitoring() {
-    // Monitor connection status every 30 seconds
-    _connectionMonitorTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _verifyPrinterConnection(),
-    );
-  }
-
-  Future<void> _verifyPrinterConnection() async {
-    if (_connectedPrinterAddress == null) return;
-
-    try {
-      final isConnected = await PrintBluetoothThermal.connectionStatus;
-
-      if (!isConnected && mounted) {
-        setState(() {
-          _connectedPrinterAddress = null;
-          _printerBatteryLevel = null;
-        });
-
-        CustomSnackBar.show(
-          context,
-          message: 'Printer connection lost',
-          type: SnackBarType.warning,
-        );
-      } else if (isConnected) {
-        // Update battery level while connected
-        _fetchBatteryLevel();
-      }
-    } catch (e) {
-      debugPrint('Error verifying printer connection: $e');
-    }
-  }
-
-  Future<void> _fetchBatteryLevel() async {
-    try {
-      final batteryLevel = await PrintBluetoothThermal.batteryLevel;
-      if (mounted) {
-        setState(() {
-          _printerBatteryLevel = batteryLevel;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching battery level: $e');
-      // Battery level not critical, don't show error to user
-    }
+    _printerService.scanForPrinters();
   }
 
   Widget _buildScanningPrinters() {
@@ -1154,7 +1020,7 @@ class _DashboardPageState extends State<DashboardPage>
           Icon(Icons.error_outline, color: AppColors.pepsiRed, size: 32),
           const SizedBox(height: 10),
           Text(
-            _printerError ?? 'Error',
+            _printerService.state.errorMessage ?? 'Error',
             style: AppTextStyles.helperText.copyWith(
               color: AppColors.pepsiRed,
               fontSize: 13,
@@ -1186,10 +1052,12 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildPrinterItem(BluetoothInfo printer) {
-    final isConnected = _connectedPrinterAddress == printer.macAdress;
-    final isCurrentlyConnecting =
-        _connectingPrinterAddress == printer.macAdress;
-    final isAnyPrinterConnecting = _connectingPrinterAddress != null;
+    final printerState = _printerService.state;
+    final isConnected = _printerService.isPrinterConnected(printer.macAdress);
+    final isCurrentlyConnecting = _printerService.isPrinterConnecting(
+      printer.macAdress,
+    );
+    final isAnyPrinterConnecting = printerState.isAnyPrinterConnecting;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1233,27 +1101,6 @@ class _DashboardPageState extends State<DashboardPage>
                         : AppColors.gray500,
                   ),
                 ),
-                if (isConnected && _printerBatteryLevel != null) ...[
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Icon(
-                        _getBatteryIcon(_printerBatteryLevel!),
-                        size: 12,
-                        color: _getBatteryColor(_printerBatteryLevel!),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Battery: $_printerBatteryLevel%',
-                        style: AppTextStyles.helperText.copyWith(
-                          fontSize: 10,
-                          color: _getBatteryColor(_printerBatteryLevel!),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
@@ -1288,8 +1135,9 @@ class _DashboardPageState extends State<DashboardPage>
     return TextButton(
       onPressed: isDisabled
           ? null
-          : () =>
-                isConnected ? _disconnectPrinter() : _connectToPrinter(printer),
+          : () => isConnected
+                ? _handleDisconnectPrinter()
+                : _handleConnectToPrinter(printer),
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         minimumSize: Size.zero,
@@ -1315,30 +1163,5 @@ class _DashboardPageState extends State<DashboardPage>
         ),
       ),
     );
-  }
-
-  // Helper methods for battery display
-  IconData _getBatteryIcon(int batteryLevel) {
-    if (batteryLevel >= 90) {
-      return Icons.battery_full;
-    } else if (batteryLevel >= 60) {
-      return Icons.battery_5_bar;
-    } else if (batteryLevel >= 40) {
-      return Icons.battery_3_bar;
-    } else if (batteryLevel >= 20) {
-      return Icons.battery_2_bar;
-    } else {
-      return Icons.battery_1_bar;
-    }
-  }
-
-  Color _getBatteryColor(int batteryLevel) {
-    if (batteryLevel >= 50) {
-      return Colors.green[700]!;
-    } else if (batteryLevel >= 20) {
-      return Colors.orange[700]!;
-    } else {
-      return Colors.red[700]!;
-    }
   }
 }

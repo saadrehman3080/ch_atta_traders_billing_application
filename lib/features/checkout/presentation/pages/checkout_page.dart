@@ -204,6 +204,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     required List<Product> products,
     required int discount,
     required String salesmanName,
+    required String paymentType,
+    int? mtCollected,
+    int? mtRemaining,
   }) async {
     try {
       // Check if printer is connected
@@ -245,6 +248,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       // Salesman name
       bytes.addAll('Salesman: ${toTitleCase(salesmanName)}\n'.codeUnits);
+
+      // Payment type indicator - bold if credit
+      if (paymentType == 'credit') {
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('Payment: CREDIT\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      } else {
+        bytes.addAll('Payment: Cash\n'.codeUnits);
+      }
       bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Items header - bold
@@ -281,6 +293,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       // Total items
       bytes.addAll('Total Items: $totalItems\n'.codeUnits);
+
+      // MT details if user entered any value (including 0)
+      if (mtCollected != null && mtRemaining != null) {
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('MT Collected: $mtCollected\n'.codeUnits);
+        bytes.addAll('MT Remaining: $mtRemaining\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      }
 
       // Subtotal if discount exists
       if (discount > 0) {
@@ -397,6 +417,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
           products: _selectedProducts,
           discount: _discount,
           salesmanName: salesmanName,
+          paymentType: _paymentType,
         );
 
         // Call the original onPrint callback
@@ -457,6 +478,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
           products: _selectedProducts,
           discount: _discount,
           salesmanName: salesmanName,
+          paymentType: _paymentType,
+          mtCollected: hasMt ? _mt : null,
+          mtRemaining: hasMt ? cratesDue : null,
         );
 
         // Call the original onPrint callback

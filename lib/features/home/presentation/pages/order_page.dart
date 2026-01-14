@@ -6,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackb
 import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/checkout_page.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -35,6 +36,8 @@ class _OrderPageState extends State<OrderPage> {
     // Load products from Firebase
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().loadProducts();
+      // Auto-connect to printer if saved
+      _autoConnectToPrinter();
     });
   }
 
@@ -171,6 +174,27 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   // ========== Business Logic Methods =
+
+  /// Automatically connects to saved printer using PrinterService
+  void _autoConnectToPrinter() {
+    // Run in background without blocking UI
+    PrinterService()
+        .autoConnect()
+        .then((success) {
+          if (success && mounted) {
+            CustomSnackBar.show(
+              context,
+              message: 'Printer connected automatically',
+              type: SnackBarType.success,
+            );
+          }
+        })
+        .catchError((e) {
+          debugPrint('Error during auto-connect: $e');
+          // Silent fail - don't show error to user for auto-connect
+        });
+  }
+
   void _incrementQuantity(int index) {
     context.read<ProductProvider>().incrementQuantity(index);
   }
