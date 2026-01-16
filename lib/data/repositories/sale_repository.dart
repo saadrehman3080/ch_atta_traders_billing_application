@@ -88,6 +88,49 @@ class SaleRepository {
     }
   }
 
+  /// Saves a sale converted from credit WITHOUT incrementing customersServed.
+  /// Used when moving a credit record to sale history after full payment.
+  /// The customer was already counted when the credit was created.
+  ///
+  /// [sale] - The SaleHistory object to save
+  /// [salesmanName] - The name of the salesman
+  ///
+  /// Returns true if save was successful, false otherwise.
+  Future<bool> saveSaleFromCreditConversion(
+    SaleHistory sale,
+    String salesmanName,
+  ) async {
+    try {
+      // Format date as 01-Jan-2026
+      final formattedDate = DateFormat('dd-MMM-yyyy').format(sale.date);
+
+      debugPrint('Saving sale from credit conversion to Firebase...');
+      debugPrint(
+        'Path: $_collectionName/$salesmanName/$formattedDate/${sale.billId}',
+      );
+
+      // Reference to the sale document (in Daily Sales)
+      final saleRef = _firestore
+          .collection(_collectionName)
+          .doc(salesmanName)
+          .collection(formattedDate)
+          .doc(sale.billId);
+
+      // Save only the sale document, no dashboard update
+      // Dashboard updates are handled separately by updateSummaryOnCreditToSale
+      await saleRef.set(sale.toJson());
+
+      debugPrint(
+        'Sale saved from credit conversion successfully: ${sale.billId}',
+      );
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('Error saving sale from credit conversion: $e');
+      debugPrint('StackTrace: $stackTrace');
+      return false;
+    }
+  }
+
   /// Fetches sales for a specific salesman and date.
   ///
   /// [salesmanName] - The name of the salesman

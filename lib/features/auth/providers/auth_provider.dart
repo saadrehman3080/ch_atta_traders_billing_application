@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:ch_atta_traders_billing_application/data/models/salesman.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/salesman_repository.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
@@ -38,6 +39,22 @@ class AuthProvider extends ChangeNotifier {
 
   // ========== Authentication Methods ==========
 
+  /// Checks internet connectivity
+  Future<bool> _checkConnectivity() async {
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      return connectivityResult.any(
+        (result) =>
+            result == ConnectivityResult.mobile ||
+            result == ConnectivityResult.wifi ||
+            result == ConnectivityResult.ethernet,
+      );
+    } catch (e) {
+      debugPrint('Error checking connectivity: $e');
+      return false;
+    }
+  }
+
   /// Attempts to authenticate a salesman with the provided credentials.
   ///
   /// [salesmanId] - The salesman ID entered by the user
@@ -47,6 +64,16 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> login(int salesmanId, int password) async {
     _setState(AuthState.loading);
     _errorMessage = null;
+
+    // Check internet connectivity first
+    final hasConnection = await _checkConnectivity();
+    if (!hasConnection) {
+      _errorMessage =
+          'No internet connection. Please check your network settings and try again.';
+      _setState(AuthState.failed);
+      debugPrint('Login failed: No internet connection');
+      return false;
+    }
 
     try {
       final salesman = await _repository.validateCredentials(
@@ -72,7 +99,8 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _errorMessage = 'An error occurred during login. Please try again.';
+      _errorMessage =
+          'Unable to connect to server. Please check your internet connection and try again.';
       _setState(AuthState.error);
       debugPrint('Login error: $e');
       return false;

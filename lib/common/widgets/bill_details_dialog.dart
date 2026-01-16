@@ -26,11 +26,38 @@ class BillDetailsDialog extends StatefulWidget {
 
 class _BillDetailsDialogState extends State<BillDetailsDialog> {
   bool _isPrinting = false;
+  final ScrollController _scrollController = ScrollController();
+  bool _isScrollable = false;
 
   // Check if this is a paid bill (SaleHistory is always paid, CreditHistory checks isPaid)
   bool get _isPaid => widget.bill is CreditHistory
       ? (widget.bill as CreditHistory).isPaid
       : true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_checkScrollable);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_checkScrollable);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _checkScrollable() {
+    if (_scrollController.hasClients) {
+      final isScrollable = _scrollController.position.maxScrollExtent > 0;
+      if (isScrollable != _isScrollable) {
+        setState(() {
+          _isScrollable = isScrollable;
+        });
+      }
+    }
+  }
 
   Future<void> _printBill() async {
     setState(() {
@@ -306,21 +333,27 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                     // Items List (Fixed Height with Scrolling)
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 300),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: widget.bill.products.length,
-                        itemBuilder: (context, index) {
-                          final product = widget.bill.products[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: _buildBillItem(
-                              '${product.quantity}x',
-                              product.name,
-                              '@${formatCashAmount(product.price)}',
-                              'Rs. ${formatCashAmount(product.price * product.quantity)}',
-                            ),
-                          );
-                        },
+                      child: Stack(
+                        children: [
+                          ListView.builder(
+                            controller: _scrollController,
+                            shrinkWrap: true,
+                            itemCount: widget.bill.products.length,
+                            itemBuilder: (context, index) {
+                              final product = widget.bill.products[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: _buildBillItem(
+                                  '${product.quantity}x',
+                                  product.name,
+                                  '@${formatCashAmount(product.price)}',
+                                  'Rs. ${formatCashAmount(product.price * product.quantity)}',
+                                ),
+                              );
+                            },
+                          ),
+                          if (_isScrollable) _buildScrollIndicator(),
+                        ],
                       ),
                     ),
 
@@ -588,6 +621,26 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
           ),
           Text(total, style: AppTextStyles.productItemTotal),
         ],
+      ),
+    );
+  }
+
+  Widget _buildScrollIndicator() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Icon(
+              Icons.keyboard_arrow_down,
+              color: widget.accentColor.withValues(alpha: 0.9),
+              size: 24,
+            ),
+          ),
+        ),
       ),
     );
   }

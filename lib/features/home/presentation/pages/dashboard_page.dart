@@ -465,22 +465,12 @@ class _DashboardPageState extends State<DashboardPage>
             ),
             const SizedBox(height: 8),
             Text(
-              'Please check your internet connection and try again',
+              'Waiting for connection. Will update automatically when restored.',
               style: AppTextStyles.helperText.copyWith(
                 color: Colors.white70,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _initConnectivity,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.pepsiWhite,
-                foregroundColor: AppColors.pepsiBlue,
-              ),
             ),
           ],
         ),

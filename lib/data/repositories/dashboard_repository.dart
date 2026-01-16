@@ -75,25 +75,28 @@ class DashboardRepository {
   /// Updates dashboard summary when converting a credit bill to sale
   /// This adjusts the summary by:
   /// - Subtracting MT remaining (cratesDue)
-  /// - Subtracting from credit amount (amountDue)
-  /// - Adding to total collection (amountDue)
+  /// - Only for credit bills: Subtracting from credit amount and adding to collection
   ///
   /// [salesmanName] - The name of the salesman
   /// [date] - The date of the bill
   /// [amountDue] - The amount that was due (now paid)
   /// [cratesDue] - The crates that were due (now returned)
+  /// [isPaidBill] - Whether the bill was already paid (cash with MT tracking)
   Future<bool> updateSummaryOnCreditToSale({
     required String salesmanName,
     required DateTime date,
     required int amountDue,
     required int cratesDue,
+    required bool isPaidBill,
   }) async {
     try {
       final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
 
       debugPrint('Updating dashboard summary for credit-to-sale conversion...');
       debugPrint('Date: $formattedDate');
-      debugPrint('Amount: $amountDue, Crates: $cratesDue');
+      debugPrint(
+        'Amount: $amountDue, Crates: $cratesDue, WasPaid: $isPaidBill',
+      );
 
       final summaryRef = _firestore
           .collection('Dashboard Summary')
@@ -101,13 +104,21 @@ class DashboardRepository {
           .collection(formattedDate)
           .doc('summary');
 
-      // Update the summary document
-      await summaryRef.set({
-        'totalCollection': FieldValue.increment(amountDue),
-        'totalCredit': FieldValue.increment(-amountDue),
+      // Build update map based on whether bill was paid or not
+      final Map<String, dynamic> updates = {
         'totalMtRemaining': FieldValue.increment(-cratesDue),
         'lastUpdated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
+
+      // Only update credit and collection if bill was NOT already paid
+      // (i.e., it was an actual credit bill, not just MT tracking)
+      if (!isPaidBill) {
+        updates['totalCollection'] = FieldValue.increment(amountDue);
+        updates['totalCredit'] = FieldValue.increment(-amountDue);
+      }
+
+      // Update the summary document
+      await summaryRef.set(updates, SetOptions(merge: true));
 
       debugPrint('Dashboard summary updated successfully');
       return true;
@@ -120,19 +131,20 @@ class DashboardRepository {
 
   /// Updates dashboard summary for partial payments (cash or crates received)
   /// This adjusts the summary by:
-  /// - Subtracting cash received from credit amount
-  /// - Adding cash received to total collection
+  /// - For credit bills only: Subtracting cash from credit, adding to collection
   /// - Subtracting crates received from MT remaining
   ///
   /// [salesmanName] - The name of the salesman
   /// [date] - The date of the bill
   /// [cashReceived] - The amount received (optional)
   /// [cratesReceived] - The crates returned (optional)
+  /// [isPaidBill] - Whether the bill was already paid (cash with MT tracking)
   Future<bool> updateSummaryOnPartialPayment({
     required String salesmanName,
     required DateTime date,
     int? cashReceived,
     int? cratesReceived,
+    required bool isPaidBill,
   }) async {
     try {
       // Skip if nothing to update
@@ -145,7 +157,9 @@ class DashboardRepository {
 
       debugPrint('Updating dashboard summary for partial payment...');
       debugPrint('Date: $formattedDate');
-      debugPrint('Cash: $cashReceived, Crates: $cratesReceived');
+      debugPrint(
+        'Cash: $cashReceived, Crates: $cratesReceived, WasPaid: $isPaidBill',
+      );
 
       final summaryRef = _firestore
           .collection('Dashboard Summary')
@@ -157,7 +171,9 @@ class DashboardRepository {
         'lastUpdated': FieldValue.serverTimestamp(),
       };
 
-      if (cashReceived != null && cashReceived > 0) {
+      // Only update credit and collection if bill was NOT already paid
+      // (i.e., it was an actual credit bill)
+      if (cashReceived != null && cashReceived > 0 && !isPaidBill) {
         updates['totalCollection'] = FieldValue.increment(cashReceived);
         updates['totalCredit'] = FieldValue.increment(-cashReceived);
       }

@@ -30,3 +30,9 @@ After printing bill reset the products list view to top.
 When the bill is deleted from the credit it will move to the history section, ispaid to true, amountdue to 0 and update the dashboard cash as well.
 
 Improve letter spacing on Credit page.
+When there is no Internet GT amount will not appear.
+Remove the retry Internet button from all four screens.
+Check Internet before creditional login.
+Disable the search and other input fields keyboard before saving and printing bill.
+Redesign the credit/sale no data page only retry button.
+In the detail dialog when more then 4 items are present show shroll down lcon.

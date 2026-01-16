@@ -69,6 +69,45 @@ class SaleProvider extends ChangeNotifier {
     }
   }
 
+  /// Saves a sale converted from credit WITHOUT incrementing customersServed.
+  /// Used when moving a credit record to sale history after full payment.
+  ///
+  /// [sale] - The SaleHistory object to save
+  /// [salesmanName] - The name of the salesman
+  ///
+  /// Returns true if save was successful, false otherwise.
+  Future<bool> saveSaleFromCreditConversion(
+    SaleHistory sale,
+    String salesmanName,
+  ) async {
+    _setState(SaleState.saving);
+    _errorMessage = null;
+
+    try {
+      final success = await _repository.saveSaleFromCreditConversion(
+        sale,
+        salesmanName,
+      );
+
+      if (success) {
+        _lastSavedSale = sale;
+        _setState(SaleState.saved);
+        debugPrint('Sale from credit conversion saved: ${sale.billId}');
+        return true;
+      } else {
+        _errorMessage = 'Failed to save sale. Please try again.';
+        _setState(SaleState.error);
+        debugPrint('Failed to save sale from credit conversion');
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'An error occurred while saving. Please try again.';
+      _setState(SaleState.error);
+      debugPrint('Error saving sale from credit conversion: $e');
+      return false;
+    }
+  }
+
   /// Resets the sale state to initial.
   void resetState() {
     _errorMessage = null;

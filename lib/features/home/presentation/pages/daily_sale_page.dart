@@ -206,28 +206,44 @@ class _DailySalePageState extends State<DailySalePage> {
             const SizedBox(height: 8),
             _buildEmptyStateSubtitle(),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _loadSales,
-              icon: const Icon(Icons.refresh_rounded, size: 20),
-              label: const Text(
-                'Refresh List',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3,
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.pepsiBlue, AppColors.pepsiBlueLight],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.pepsiBlue.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.pepsiBlue,
-                foregroundColor: AppColors.pepsiWhite,
-                elevation: 2,
-                shadowColor: AppColors.pepsiBlue.withValues(alpha: 0.4),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 14,
+              child: ElevatedButton.icon(
+                onPressed: _loadSales,
+                icon: const Icon(Icons.refresh_rounded, size: 22),
+                label: const Text(
+                  'Refresh List',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: AppColors.pepsiWhite,
+                  shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -315,22 +331,12 @@ class _DailySalePageState extends State<DailySalePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Please check your internet connection and try again',
+              'Waiting for connection. Will update automatically when restored.',
               style: AppTextStyles.helperText.copyWith(
                 color: AppColors.gray500,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _initConnectivity,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.pepsiBlue,
-                foregroundColor: AppColors.pepsiWhite,
-              ),
             ),
           ],
         ),

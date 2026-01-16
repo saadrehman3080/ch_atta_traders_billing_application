@@ -770,6 +770,8 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
   }
 
   Widget _buildForm() {
+    final authProvider = context.watch<AuthProvider>();
+
     return Form(
       key: _formKey,
       child: Column(
@@ -777,8 +779,10 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
           _buildIdField(),
           const SizedBox(height: 20),
           _buildPasswordField(),
-          if (_showFirebaseError) const SizedBox(height: 16),
-          if (_showFirebaseError) const CredentialsError(),
+          if (_showFirebaseError && authProvider.errorMessage != null)
+            const SizedBox(height: 16),
+          if (_showFirebaseError && authProvider.errorMessage != null)
+            CredentialsError(message: authProvider.errorMessage!),
           const SizedBox(height: 16),
           _buildLoginButton(),
         ],
@@ -968,7 +972,9 @@ class LoginButton extends StatelessWidget {
 }
 
 class CredentialsError extends StatelessWidget {
-  const CredentialsError({super.key});
+  final String message;
+
+  const CredentialsError({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -1001,10 +1007,10 @@ class CredentialsError extends StatelessWidget {
   }
 
   Widget _buildErrorMessage() {
-    return const Expanded(
+    return Expanded(
       child: Text(
-        'Please enter valid credentials provided by admin.',
-        style: TextStyle(color: AppColors.textError, fontSize: 13),
+        message,
+        style: const TextStyle(color: AppColors.textError, fontSize: 13),
       ),
     );
   }

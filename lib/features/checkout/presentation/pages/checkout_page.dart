@@ -261,7 +261,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       // Items header - bold
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('Item                Qty    Total\n'.codeUnits);
+      bytes.addAll('Item                       Total\n'.codeUnits);
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('--------------------------------\n'.codeUnits);
 
@@ -361,7 +361,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _handlePrintBill() async {
-    FocusScope.of(context).unfocus();
     // Generate bill ID using UUID
     final billId = _uuid.v4();
 
@@ -743,22 +742,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
       left: 0,
       right: 0,
       child: IgnorePointer(
-        child: Container(
-          height: 40,
-          decoration: const BoxDecoration(
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(12),
-              bottomRight: Radius.circular(12),
-            ),
-          ),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Icon(
-                Icons.keyboard_arrow_down,
-                color: AppColors.iconIndicatorColor,
-                size: 24,
-              ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Icon(
+              Icons.keyboard_arrow_down,
+              color: AppColors.pepsiBlue,
+              size: 24,
             ),
           ),
         ),
@@ -971,6 +961,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
           child: ElevatedButton.icon(
             onPressed: (_hasCustomerName && !isLoading)
                 ? () async {
+                    FocusScope.of(context).unfocus();
                     await _handlePrintBill();
                     if (mounted && isSaved) {
                       _customerNameController.clear();

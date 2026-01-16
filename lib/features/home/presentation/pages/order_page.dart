@@ -284,9 +284,9 @@ class _OrderPageState extends State<OrderPage> {
     return Text(
       _isCheckoutVisible
           ? 'CHECKOUT'
-          : (selectedCount > 0
-                ? 'GT Rs. ${formatCashAmount(_grandTotal)}'
-                : 'New Order'),
+          : (!_hasInternetConnection || selectedCount == 0
+                ? 'New Order'
+                : 'GT Rs. ${formatCashAmount(_grandTotal)}'),
       style: AppTextStyles.pageTitleBlack,
     );
   }
@@ -435,22 +435,12 @@ class _OrderPageState extends State<OrderPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Please check your internet connection and try again',
+              'Waiting for connection. Will update automatically when restored.',
               style: AppTextStyles.helperText.copyWith(
                 color: AppColors.gray500,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _initConnectivity,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.pepsiBlue,
-                foregroundColor: AppColors.pepsiWhite,
-              ),
             ),
           ],
         ),
