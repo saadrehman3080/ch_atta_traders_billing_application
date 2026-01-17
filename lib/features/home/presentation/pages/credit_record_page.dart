@@ -98,16 +98,16 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   }
 
   Future<void> _loadCredits() async {
-    final salesmanName = await AppPreferences.instance.salesmanName;
-    if (salesmanName != null && salesmanName.isNotEmpty) {
-      await _creditProvider.loadAllCreditHistory(salesmanName);
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier != null && salesmanIdentifier.isNotEmpty) {
+      await _creditProvider.loadAllCreditHistory(salesmanIdentifier);
     }
   }
 
   Future<void> _refreshCredits() async {
-    final salesmanName = await AppPreferences.instance.salesmanName;
-    if (salesmanName != null && salesmanName.isNotEmpty) {
-      await _creditProvider.refreshCreditHistory(salesmanName);
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier != null && salesmanIdentifier.isNotEmpty) {
+      await _creditProvider.refreshCreditHistory(salesmanIdentifier);
     }
   }
 
@@ -154,11 +154,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
     final deletedBill = billHistory[index];
 
-    // Get salesman name from shared preferences
-    final salesmanName = await AppPreferences.instance.salesmanName;
-    if (salesmanName == null || salesmanName.isEmpty) {
+    // Get salesman identifier from shared preferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
       setState(() => _deletingIndex = null);
-      _showErrorSnackBar('Salesman name not found. Please log in again.');
+      _showErrorSnackBar('Salesman identifier not found. Please log in again.');
       return;
     }
 
@@ -176,7 +176,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     final saleProvider = SaleProvider();
     final savedAsSale = await saleProvider.saveSaleFromCreditConversion(
       saleHistory,
-      salesmanName,
+      salesmanIdentifier,
     );
 
     if (!savedAsSale) {
@@ -196,7 +196,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     if (isTodaysBill) {
       final dashboardRepo = DashboardRepository();
       final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
-        salesmanName: salesmanName,
+        salesmanName: salesmanIdentifier,
         date: deletedBill.date,
         amountDue: deletedBill.amountDue,
         cratesDue: deletedBill.cratesDue,
@@ -214,7 +214,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     // Delete from credit history using CreditHistoryProvider
     final deletedFromCredit = await _creditProvider.deleteCreditRecord(
       billId: deletedBill.billId,
-      salesmanName: salesmanName,
+      salesmanName: salesmanIdentifier,
     );
 
     if (deletedFromCredit) {
@@ -295,9 +295,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       }
     }
 
-    // Get salesman name from shared preferences
-    final salesmanName = await AppPreferences.instance.salesmanName;
-    if (salesmanName == null || salesmanName.isEmpty) {
+    // Get salesman identifier from shared preferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
       setState(() => _editingIndex = null);
       _showErrorSnackBar('Unable to get salesman information');
       return;
@@ -323,7 +323,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       final saleProvider = SaleProvider();
       final savedAsSale = await saleProvider.saveSaleFromCreditConversion(
         saleHistory,
-        salesmanName,
+        salesmanIdentifier,
       );
 
       if (!savedAsSale) {
@@ -343,7 +343,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       if (isTodaysBill) {
         final dashboardRepo = DashboardRepository();
         final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
-          salesmanName: salesmanName,
+          salesmanName: salesmanIdentifier,
           date: bill.date,
           amountDue: bill.amountDue,
           cratesDue: bill.cratesDue,
@@ -361,7 +361,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       // Delete from credit history using CreditHistoryProvider
       final deletedFromCredit = await _creditProvider.deleteCreditRecord(
         billId: bill.billId,
-        salesmanName: salesmanName,
+        salesmanName: salesmanIdentifier,
       );
 
       if (deletedFromCredit) {
@@ -388,7 +388,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         final dashboardRepo = DashboardRepository();
         final summaryUpdated = await dashboardRepo
             .updateSummaryOnPartialPayment(
-              salesmanName: salesmanName,
+              salesmanName: salesmanIdentifier,
               date: bill.date,
               cashReceived: amountReceived,
               cratesReceived: cratesReceived,
@@ -405,7 +405,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
       // Update in Firebase using provider
       final success = await _creditProvider.updateCreditBalance(
-        salesmanName: salesmanName,
+        salesmanName: salesmanIdentifier,
         credit: bill,
         newAmountDue: newAmountDue,
         newCratesDue: newCratesDue,

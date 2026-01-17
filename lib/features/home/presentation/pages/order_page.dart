@@ -268,6 +268,45 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
+  void _showQuickQuantityDialog(Product product, int index) {
+    final quantityController = TextEditingController(
+      text: product.quantity > 0 ? product.quantity.toString() : '',
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.pepsiWhite,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildQuantityDialogTitle(),
+                const SizedBox(height: 8),
+                _buildQuantityDialogProductName(product.name),
+                const SizedBox(height: 24),
+                _buildQuantityQuickButtons(index, quantityController),
+                const SizedBox(height: 16),
+                _buildQuantityTextField(quantityController),
+                const SizedBox(height: 24),
+                _buildQuantityDialogActions(index, quantityController),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).whenComplete(() {
+      // Delay disposal to ensure TextField is done using the controller
+      Future.delayed(const Duration(milliseconds: 100), () {
+        quantityController.dispose();
+      });
+    });
+  }
+
   // ========== Main UI Building Methods ==========
 
   PreferredSizeWidget _buildAppBar(int selectedCount) {
@@ -506,24 +545,235 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
+  // ========== Quantity Dialog Building Methods ==========
+
+  Widget _buildQuantityDialogTitle() {
+    return Text(
+      'Select Quantity',
+      style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+    );
+  }
+
+  Widget _buildQuantityDialogProductName(String productName) {
+    return Text(
+      productName,
+      style: AppTextStyles.productItemName.copyWith(
+        fontSize: 14,
+        color: AppColors.gray500,
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildQuantityQuickButtons(
+    int index,
+    TextEditingController controller,
+  ) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildQuantityButton(5, index, controller)),
+            const SizedBox(width: 12),
+            Expanded(child: _buildQuantityButton(10, index, controller)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _buildQuantityButton(20, index, controller)),
+            const SizedBox(width: 12),
+            Expanded(child: _buildQuantityButton(50, index, controller)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildQuantityButton(100, index, controller),
+      ],
+    );
+  }
+
+  Widget _buildQuantityButton(
+    int quantity,
+    int index,
+    TextEditingController controller,
+  ) {
+    return ElevatedButton(
+      onPressed: () {
+        final provider = context.read<ProductProvider>();
+        final currentQuantity = provider.products[index].quantity;
+        final difference = quantity - currentQuantity;
+
+        if (difference > 0) {
+          for (int i = 0; i < difference; i++) {
+            provider.incrementQuantity(index);
+          }
+        } else if (difference < 0) {
+          for (int i = 0; i < difference.abs(); i++) {
+            provider.decrementQuantity(index);
+          }
+        }
+        Navigator.pop(context);
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.pepsiBlue.withValues(alpha: 0.1),
+        foregroundColor: AppColors.pepsiBlue,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppColors.pepsiBlue, width: 1),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: Text(
+        quantity.toString(),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _buildQuantityTextField(TextEditingController controller) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textSelectionTheme: const TextSelectionThemeData(
+          selectionHandleColor: AppColors.pepsiBlueLight,
+          selectionColor: AppColors.textSecondary,
+          cursorColor: AppColors.pepsiBlueLight,
+        ),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.start,
+        style: AppTextStyles.inputText.copyWith(
+          color: Colors.black87,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+        cursorColor: AppColors.pepsiBlue,
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.white,
+          hintText: "Enter quantity",
+          hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 15),
+          prefixIcon: const Icon(Icons.edit_outlined, size: 20),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(
+              color: AppColors.pepsiBlue,
+              width: 1.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuantityDialogActions(
+    int index,
+    TextEditingController controller,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.gray500,
+              side: const BorderSide(color: AppColors.gray300, width: 1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () {
+              final quantity = int.tryParse(controller.text) ?? 0;
+              if (quantity > 0) {
+                final provider = context.read<ProductProvider>();
+                final currentQuantity = provider.products[index].quantity;
+                final difference = quantity - currentQuantity;
+
+                if (difference > 0) {
+                  for (int i = 0; i < difference; i++) {
+                    provider.incrementQuantity(index);
+                  }
+                } else if (difference < 0) {
+                  for (int i = 0; i < difference.abs(); i++) {
+                    provider.decrementQuantity(index);
+                  }
+                }
+              } else if (quantity == 0) {
+                // Set to 0 by decrementing to 0
+                final provider = context.read<ProductProvider>();
+                final currentQuantity = provider.products[index].quantity;
+                for (int i = 0; i < currentQuantity; i++) {
+                  provider.decrementQuantity(index);
+                }
+              }
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.pepsiBlue,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            child: const Text(
+              'Set Quantity',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   // ========== Product Card Building Methods ==========
 
   Widget _buildProductItem(Product product, int index) {
-    final isUnavailable = product.price == 0;
+    final isUnavailable = !product.isAvailable;
     final isSelected = product.quantity > 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: _buildProductCardDecoration(isUnavailable, isSelected),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildProductHeader(product, index, isUnavailable),
-            const SizedBox(height: 8),
-            _buildProductFooter(product, isUnavailable, isSelected),
-          ],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isUnavailable
+              ? null
+              : () => _showQuickQuantityDialog(product, index),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildProductHeader(product, index, isUnavailable),
+                const SizedBox(height: 8),
+                _buildProductFooter(product, isUnavailable, isSelected),
+              ],
+            ),
+          ),
         ),
       ),
     );

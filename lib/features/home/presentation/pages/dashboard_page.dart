@@ -6,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.d
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
+import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -902,6 +903,11 @@ class _DashboardPageState extends State<DashboardPage>
       if (_printerService.state.isConnected) {
         await _printerService.disconnect();
         debugPrint('Printer disconnected on logout');
+      }
+
+      // Clear products to reset grand total
+      if (context.mounted) {
+        context.read<ProductProvider>().clearProducts();
       }
 
       // Clear authentication state

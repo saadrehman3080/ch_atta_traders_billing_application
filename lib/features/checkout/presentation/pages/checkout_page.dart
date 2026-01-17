@@ -44,6 +44,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   String _paymentType = 'cash';
   int _discount = 0;
   int _mt = 0;
+  bool _isSaving = false;
+  bool _isPrinting = false;
 
   @override
   void initState() {
@@ -360,20 +362,27 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
   }
 
-  Future<void> _handlePrintBill() async {
+  Future<void> _handleSaveBill() async {
+    setState(() {
+      _isSaving = true;
+    });
+
     // Generate bill ID using UUID
     final billId = _uuid.v4();
 
-    // Get salesman name from SharedPreferences
-    final salesmanName = await AppPreferences.instance.salesmanName;
-    if (salesmanName == null || salesmanName.isEmpty) {
+    // Get salesman identifier (for Firebase path) from SharedPreferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
       if (mounted) {
         CustomSnackBar.show(
           context,
-          message: 'Salesman name not found. Please login again.',
+          message: 'Salesman info not found. Please login again.',
           type: SnackBarType.error,
         );
       }
+      setState(() {
+        _isSaving = false;
+      });
       return;
     }
 
@@ -397,7 +406,135 @@ class _CheckoutPageState extends State<CheckoutPage> {
       );
 
       // Save to Firebase
-      final success = await _saleProvider.saveSale(sale, salesmanName);
+      final success = await _saleProvider.saveSale(sale, salesmanIdentifier);
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      if (success) {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Bill saved successfully',
+            type: SnackBarType.success,
+          );
+        }
+
+        // Call the original onPrint callback
+        widget.onPrint();
+      } else {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: _saleProvider.errorMessage ?? 'Failed to save bill',
+            type: SnackBarType.error,
+          );
+        }
+      }
+    } else {
+      // Save to Credit History
+      final totalRbQuantity = _getTotalRbQuantity();
+      final cratesDue = hasMt ? (totalRbQuantity - _mt) : 0;
+
+      final credit = CreditHistory(
+        billId: billId,
+        customerName: _customerNameController.text.trim(),
+        date: DateTime.now(),
+        products: _selectedProducts
+            .map(
+              (p) =>
+                  Product(name: p.name, price: p.price, quantity: p.quantity),
+            )
+            .toList(),
+        discount: _discount,
+        isPaid: _paymentType == 'cash',
+        amountDue: _grandTotal,
+        cratesDue: cratesDue,
+      );
+
+      // Save to Firebase
+      final success = await _creditProvider.saveCredit(
+        credit,
+        salesmanIdentifier,
+      );
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      if (success) {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Credit saved successfully',
+            type: SnackBarType.success,
+          );
+        }
+
+        // Call the original onPrint callback
+        widget.onPrint();
+      } else {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: _creditProvider.errorMessage ?? 'Failed to save credit',
+            type: SnackBarType.error,
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _handlePrintBill() async {
+    setState(() {
+      _isPrinting = true;
+    });
+
+    // Generate bill ID using UUID
+    final billId = _uuid.v4();
+
+    // Get salesman name (for printing) and identifier (for Firebase path)
+    final salesmanName = await AppPreferences.instance.salesmanName;
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanName == null ||
+        salesmanName.isEmpty ||
+        salesmanIdentifier == null ||
+        salesmanIdentifier.isEmpty) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Salesman info not found. Please login again.',
+          type: SnackBarType.error,
+        );
+      }
+      setState(() {
+        _isPrinting = false;
+      });
+      return;
+    }
+
+    // Determine if MT is collected
+    final bool hasMt = _mtController.text.trim().isNotEmpty;
+
+    // Save to Daily Sales only if: payment is cash AND MT is empty
+    if (_paymentType == 'cash' && !hasMt) {
+      // Create SaleHistory object
+      final sale = SaleHistory(
+        billId: billId,
+        customerName: _customerNameController.text.trim(),
+        date: DateTime.now(),
+        products: _selectedProducts
+            .map(
+              (p) =>
+                  Product(name: p.name, price: p.price, quantity: p.quantity),
+            )
+            .toList(),
+        discount: _discount,
+      );
+
+      // Save to Firebase
+      final success = await _saleProvider.saveSale(sale, salesmanIdentifier);
 
       if (success) {
         if (mounted) {
@@ -419,9 +556,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
           paymentType: _paymentType,
         );
 
+        setState(() {
+          _isPrinting = false;
+        });
+
         // Call the original onPrint callback
         widget.onPrint();
       } else {
+        setState(() {
+          _isPrinting = false;
+        });
+
         if (mounted) {
           CustomSnackBar.show(
             context,
@@ -458,7 +603,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       );
 
       // Save to Firebase
-      final success = await _creditProvider.saveCredit(credit, salesmanName);
+      final success = await _creditProvider.saveCredit(
+        credit,
+        salesmanIdentifier,
+      );
 
       if (success) {
         if (mounted) {
@@ -482,9 +630,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
           mtRemaining: hasMt ? cratesDue : null,
         );
 
+        setState(() {
+          _isPrinting = false;
+        });
+
         // Call the original onPrint callback
         widget.onPrint();
       } else {
+        setState(() {
+          _isPrinting = false;
+        });
+
         if (mounted) {
           CustomSnackBar.show(
             context,
@@ -955,43 +1111,96 @@ class _CheckoutPageState extends State<CheckoutPage> {
             saleProvider.state == SaleState.saved ||
             creditProvider.state == CreditState.saved;
 
-        return SizedBox(
-          height: 46,
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: (_hasCustomerName && !isLoading)
-                ? () async {
-                    FocusScope.of(context).unfocus();
-                    await _handlePrintBill();
-                    if (mounted && isSaved) {
-                      _customerNameController.clear();
-                      _discountController.clear();
-                      _mtController.clear();
-                    }
-                  }
-                : null,
-            icon: isLoading
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.pepsiBlueLight.withValues(alpha: 0.7),
+        return Row(
+          children: [
+            Expanded(
+              flex: 85,
+              child: SizedBox(
+                height: 46,
+                child: ElevatedButton.icon(
+                  onPressed:
+                      (_hasCustomerName &&
+                          !isLoading &&
+                          !_isSaving &&
+                          !_isPrinting)
+                      ? () async {
+                          FocusScope.of(context).unfocus();
+                          await _handlePrintBill();
+                          if (mounted && isSaved) {
+                            _customerNameController.clear();
+                            _discountController.clear();
+                            _mtController.clear();
+                          }
+                        }
+                      : null,
+                  icon: _isPrinting
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.pepsiBlueLight.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                        )
+                      : const Icon(Icons.print, size: 20),
+                  label: Text(
+                    _isPrinting ? 'Saving & Printing...' : "Print Bill",
+                    style: AppTextStyles.smallButton.copyWith(
+                      color:
+                          (_hasCustomerName &&
+                              !isLoading &&
+                              !_isSaving &&
+                              !_isPrinting)
+                          ? Colors.white
+                          : AppColors.gray500,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
-                  )
-                : const Icon(Icons.print, size: 20),
-            label: Text(
-              isLoading ? 'Saving...' : "Print Bill",
-              style: AppTextStyles.smallButton.copyWith(
-                color: (_hasCustomerName && !isLoading)
-                    ? Colors.white
-                    : AppColors.gray500,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+                  ),
+                  style: _buildPrintButtonStyle(),
+                ),
               ),
             ),
-            style: _buildPrintButtonStyle(),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 15,
+              child: SizedBox(
+                height: 46,
+                child: ElevatedButton(
+                  onPressed:
+                      (_hasCustomerName &&
+                          !isLoading &&
+                          !_isSaving &&
+                          !_isPrinting)
+                      ? () async {
+                          FocusScope.of(context).unfocus();
+                          await _handleSaveBill();
+                          if (mounted && isSaved) {
+                            _customerNameController.clear();
+                            _discountController.clear();
+                            _mtController.clear();
+                          }
+                        }
+                      : null,
+                  style: _buildSaveButtonStyle(),
+                  child: _isSaving
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.pepsiBlueLight.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                        )
+                      : const Icon(Icons.save, size: 20),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -1007,6 +1216,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
       disabledForegroundColor: AppColors.gray500,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       elevation: _hasCustomerName ? 2 : 0,
+    );
+  }
+
+  ButtonStyle _buildSaveButtonStyle() {
+    return ElevatedButton.styleFrom(
+      backgroundColor: _hasCustomerName
+          ? AppColors.pepsiBlue
+          : AppColors.gray300,
+      foregroundColor: _hasCustomerName ? Colors.white : AppColors.gray500,
+      disabledBackgroundColor: AppColors.gray300,
+      disabledForegroundColor: AppColors.gray500,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevation: _hasCustomerName ? 2 : 0,
+      padding: EdgeInsets.zero,
     );
   }
 }

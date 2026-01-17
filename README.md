@@ -36,3 +36,5 @@ Check Internet before creditional login.
 Disable the search and other input fields keyboard before saving and printing bill.
 Redesign the credit/sale no data page only retry button.
 In the detail dialog when more then 4 items are present show shroll down lcon.
+If product is not available   show it's price and make it unselectable.
+In the database name is not the unique identifier. Change it to ID_name.

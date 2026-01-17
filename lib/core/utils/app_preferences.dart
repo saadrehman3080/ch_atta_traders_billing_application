@@ -191,6 +191,45 @@ class AppPreferences {
     }
   }
 
+  /// Gets the salesman ID from shared preferences.
+  ///
+  /// Returns the salesman ID or null if not set.
+  Future<int?> get salesmanId async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getInt(_keySalesmanId);
+    } catch (e) {
+      debugPrint('Error reading salesman ID: $e');
+      return null;
+    }
+  }
+
+  /// Gets the unique salesman identifier (combination of ID and name).
+  ///
+  /// Format: "{salesmanId}_{salesmanName}" (e.g., "1_Khawar")
+  /// This ensures unique paths in Firebase even if names are duplicated.
+  ///
+  /// Returns null if either salesman ID or name is not set.
+  Future<String?> get salesmanIdentifier async {
+    _ensureInitialized();
+    try {
+      final id = _prefs!.getInt(_keySalesmanId);
+      final name = _prefs!.getString(_keySalesmanName);
+
+      if (id == null || name == null || name.isEmpty) {
+        debugPrint('Salesman identifier not available: id=$id, name=$name');
+        return null;
+      }
+
+      final identifier = '${id}_$name';
+      debugPrint('Salesman identifier: $identifier');
+      return identifier;
+    } catch (e) {
+      debugPrint('Error getting salesman identifier: $e');
+      return null;
+    }
+  }
+
   // ========== Printer Management ==========
 
   /// Gets the saved printer address from shared preferences.

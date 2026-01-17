@@ -42,16 +42,17 @@ class DashboardProvider extends ChangeNotifier {
 
       notifyListeners();
 
-      // Get salesman name from SharedPreferences
-      final salesmanName = await AppPreferences.instance.salesmanName;
+      // Get salesman identifier from SharedPreferences
+      final salesmanIdentifier =
+          await AppPreferences.instance.salesmanIdentifier;
 
-      if (salesmanName == null || salesmanName.isEmpty) {
-        throw Exception('Salesman name not found. Please login again.');
+      if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+        throw Exception('Salesman identifier not found. Please login again.');
       }
 
       // Fetch dashboard data from repository
       _dashboardData = await _repository.fetchDashboardData(
-        salesmanName: salesmanName,
+        salesmanName: salesmanIdentifier,
         date: _selectedDate,
       );
 

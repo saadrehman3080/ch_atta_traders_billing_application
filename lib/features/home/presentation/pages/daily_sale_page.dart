@@ -86,9 +86,9 @@ class _DailySalePageState extends State<DailySalePage> {
   }
 
   Future<void> _loadSales() async {
-    final salesmanName = await AppPreferences.instance.salesmanName;
-    if (salesmanName != null && salesmanName.isNotEmpty) {
-      await _salesProvider.loadDailySales(salesmanName, DateTime.now());
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier != null && salesmanIdentifier.isNotEmpty) {
+      await _salesProvider.loadDailySales(salesmanIdentifier, DateTime.now());
     }
   }
 

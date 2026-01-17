@@ -114,6 +114,15 @@ class ProductProvider extends ChangeNotifier {
     debugPrint('All product quantities reset');
   }
 
+  /// Clears all products and resets state (used on logout).
+  void clearProducts() {
+    _products = [];
+    _state = ProductState.initial;
+    _errorMessage = null;
+    notifyListeners();
+    debugPrint('Products cleared on logout');
+  }
+
   // ========== Private Methods ==========
 
   void _setState(ProductState newState) {

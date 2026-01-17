@@ -23,38 +23,47 @@ class ProductRepository {
     'Pepsi 250ml RB',
     'Pepsi NR 300ml',
     'Sting 250ml RB',
-    'Shezan 250ml RB',
+    'Sting 500ml',
     'Sting NR 300ml',
     'Slice 200ml TP',
     'Aquafina 1500ml',
+    'Revive NR 300ml',
+    'Murree Sparklet 1500ml',
+    'Murree Sparklet 500ml',
+    'Shezan 250ml RB',
+
+    // Carbonated Drinks — 1500ml
+    'Big Apple 1500ml',
+    'Coke 1500ml',
+    'Master Cola 1500ml',
+
     // Carbonated Drinks — 300ml (NR)
     'Bigapple NR 300ml',
-    'Revive NR 300ml',
     'Master Cola NR 300ml',
+
     // Juices
     'Slice 1000ml TP',
     'Tops Tangy 250ml',
     'Shezan 250ml TP',
-    'Big Apple 1500ml',
-    'Coke 1500ml',
-    'Master Cola 1500ml',
+
     // Cans
     'Pepsi Can 330ml',
     'Sting Can 330ml',
+
     // Carbonated Drinks — 2250ml
     'Pepsi 2250ml',
     'Master Cola 2250ml',
+
     // Carbonated Drinks — 1000ml
     'Pepsi 1000ml',
+
     // 500ml Bottles
     'Pepsi 500ml',
-    'Sting 500ml',
     'Gatorade 500ml',
+
     // Water
     'Aquafina 500ml',
     'Aquafina 19L',
-    'Murree Sparklet 1500ml',
-    'Murree Sparklet 500ml',
     'Nestle 1500ml',
     'Master Water',
   ];
@@ -81,6 +90,7 @@ class ProductRepository {
           name: doc.id, // Document ID is the product name
           price: (data['price'] as num?)?.toInt() ?? 0,
           quantity: 0, // Default quantity is 0 for ordering
+          isAvailable: data['isAvailable'] as bool? ?? true,
         );
       }).toList();
 
