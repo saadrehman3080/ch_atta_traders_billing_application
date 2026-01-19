@@ -12,8 +12,7 @@ import 'package:ch_atta_traders_billing_application/common/themes/text_styles.da
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
-import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
-import 'package:intl/intl.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
 
 class CheckoutPage extends StatefulWidget {
   final List<Product> products;
@@ -210,152 +209,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
     int? mtCollected,
     int? mtRemaining,
   }) async {
-    try {
-      // Check if printer is connected
-      final isConnected = await PrintBluetoothThermal.connectionStatus;
-      if (!isConnected) {
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            message: 'No printer connected. Please connect a printer first.',
-            type: SnackBarType.error,
-          );
-        }
-        return;
-      }
+    final result = await BillPrinter.printBill(
+      billId: billId,
+      customerName: customerName,
+      date: date,
+      products: products,
+      discount: discount,
+      salesmanName: salesmanName,
+      paymentType: paymentType,
+      mtCollected: mtCollected,
+      mtRemaining: mtRemaining,
+    );
 
-      List<int> bytes = [];
-
-      // Store name - centered, large text
-      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
-      bytes.addAll('CH. ATTA TRADERS\n'.codeUnits);
-      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
-      bytes.addAll('\n'.codeUnits);
-
-      // Separator
-      bytes.addAll('--------------------------------\n'.codeUnits);
-
-      // Date and Bill ID - left align
-      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
-      final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
-      bytes.addAll('Date: ${dateFormatter.format(date)}\n'.codeUnits);
-      bytes.addAll('Bill ID: ${truncateBillId(billId)}\n'.codeUnits);
-      bytes.addAll('--------------------------------\n'.codeUnits);
-
-      // Customer name - bold
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('Customer: ${toTitleCase(customerName)}\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-
-      // Salesman name
-      bytes.addAll('Salesman: ${toTitleCase(salesmanName)}\n'.codeUnits);
-
-      // Payment type indicator - bold if credit
-      if (paymentType == 'credit') {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-        bytes.addAll('Payment: CREDIT\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      } else {
-        bytes.addAll('Payment: Cash\n'.codeUnits);
-      }
-      bytes.addAll('--------------------------------\n'.codeUnits);
-
-      // Items header - bold
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('Item                       Total\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      bytes.addAll('--------------------------------\n'.codeUnits);
-
-      // Add each product
-      for (final product in products) {
-        final itemTotal = product.price * product.quantity;
-
-        // Product name (truncate if too long)
-        String productName = product.name;
-        if (productName.length > 20) {
-          productName = '${productName.substring(0, 17)}...';
-        }
-        bytes.addAll('$productName\n'.codeUnits);
-
-        // Quantity and price details
-        final qtyPrice =
-            '  ${product.quantity}x @ Rs.${formatCashAmount(product.price)}';
-        final totalStr = 'Rs.${formatCashAmount(itemTotal)}';
-        final spacing = 32 - qtyPrice.length - totalStr.length;
-        final line = qtyPrice + (' ' * (spacing > 0 ? spacing : 1)) + totalStr;
-        bytes.addAll('$line\n'.codeUnits);
-      }
-
-      bytes.addAll('--------------------------------\n'.codeUnits);
-
-      // Calculate totals
-      final totalItems = BillingCalculations.calculateTotalItems(products);
-      final grandTotal = BillingCalculations.calculateGrandTotal(products);
-
-      // Total items
-      bytes.addAll('Total Items: $totalItems\n'.codeUnits);
-
-      // MT details if user entered any value (including 0)
-      if (mtCollected != null && mtRemaining != null) {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-        bytes.addAll('MT Collected: $mtCollected\n'.codeUnits);
-        bytes.addAll('MT Remaining: $mtRemaining\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      }
-
-      // Subtotal if discount exists
-      if (discount > 0) {
-        bytes.addAll(
-          'Subtotal: Rs.${formatCashAmount(grandTotal)}\n'.codeUnits,
-        );
-        bytes.addAll(
-          'Discount: - Rs.${formatCashAmount(discount)}\n'.codeUnits,
-        );
-        bytes.addAll('--------------------------------\n'.codeUnits);
-      }
-
-      // Grand total - large and bold
-      final netAmount = grandTotal - discount;
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
-      bytes.addAll('TOTAL: Rs.${formatCashAmount(netAmount)}\n'.codeUnits);
-      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      bytes.addAll('\n'.codeUnits);
-
-      // Footer - center align, bold
-      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('Thank you for your business!\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
-      bytes.addAll('\n\n\n'.codeUnits);
-
-      // Send to printer
-      final result = await PrintBluetoothThermal.writeBytes(bytes);
-
-      if (mounted) {
-        if (result) {
-          CustomSnackBar.show(
-            context,
-            message: 'Bill printed successfully',
-            type: SnackBarType.success,
-          );
-        } else {
-          CustomSnackBar.show(
-            context,
-            message: 'Failed to print bill',
-            type: SnackBarType.error,
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('Error printing bill: $e');
-      if (mounted) {
+    if (mounted) {
+      if (result.success) {
         CustomSnackBar.show(
           context,
-          message: 'Error printing bill: ${e.toString()}',
+          message: 'Bill printed successfully',
+          type: SnackBarType.success,
+        );
+      } else {
+        CustomSnackBar.show(
+          context,
+          message: result.errorMessage ?? 'Failed to print bill',
           type: SnackBarType.error,
         );
       }

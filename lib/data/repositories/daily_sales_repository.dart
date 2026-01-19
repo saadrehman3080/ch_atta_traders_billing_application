@@ -43,4 +43,176 @@ class DailySalesRepository {
       rethrow;
     }
   }
+
+  /// Deletes a sale from sales history, updates dashboard, and moves to deleted history
+  /// Path: Daily Sales/{salesmanName}/{dd-MMM-yyyy}/{billId}
+  /// Deleted Path: Deleted History/{salesmanName}/{d-MMM-yyyy}/{billId}
+  Future<void> deleteSale({
+    required SaleHistory sale,
+    required String salesmanName,
+  }) async {
+    try {
+      final dateFormat = DateFormat('dd-MMM-yyyy');
+      final deleteDateFormat = DateFormat('d-MMM-yyyy');
+      final formattedDate = dateFormat.format(sale.date);
+      final deleteFormattedDate = deleteDateFormat.format(sale.date);
+
+      // Save to deleted history
+      final deleteHistoryPath =
+          'Deleted History/$salesmanName/$deleteFormattedDate/${sale.billId}';
+
+      final saleData = {
+        'billId': sale.billId,
+        'customerName': sale.customerName,
+        'date': Timestamp.fromDate(sale.date),
+        'products': sale.products.map((p) => p.toJson()).toList(),
+        'discount': sale.discount,
+        'deletedAt': FieldValue.serverTimestamp(),
+      };
+
+      await _firestore.doc(deleteHistoryPath).set(saleData);
+
+      // Update dashboard summary if sale is from today
+      final today = DateTime.now();
+      final saleDate = sale.date;
+      final isTodaysSale =
+          saleDate.year == today.year &&
+          saleDate.month == today.month &&
+          saleDate.day == today.day;
+
+      if (isTodaysSale) {
+        final grandTotal =
+            sale.products.fold<int>(
+              0,
+              (sum, p) => sum + (p.price * p.quantity),
+            ) -
+            sale.discount;
+        final itemsSold = sale.products.fold<int>(
+          0,
+          (sum, p) => sum + p.quantity,
+        );
+        final totalCrates = sale.products
+            .where((product) => product.name.toUpperCase().endsWith('RB'))
+            .fold<int>(0, (sum, p) => sum + p.quantity);
+
+        final dashboardSummaryRef = _firestore
+            .collection('Dashboard Summary')
+            .doc(salesmanName)
+            .collection(formattedDate)
+            .doc('summary');
+
+        await dashboardSummaryRef.set({
+          'totalSales': FieldValue.increment(-grandTotal),
+          'totalItemsSold': FieldValue.increment(-itemsSold),
+          'totalDiscount': FieldValue.increment(-sale.discount),
+          'totalCratesOut': FieldValue.increment(-totalCrates),
+          'customersServed': FieldValue.increment(-1),
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      // Delete from sales history
+      await _firestore
+          .collection('Daily Sales')
+          .doc(salesmanName)
+          .collection(formattedDate)
+          .doc(sale.billId)
+          .delete();
+
+      print('Sale deleted successfully');
+    } catch (e) {
+      print('Error deleting sale: $e');
+      rethrow;
+    }
+  }
+
+  /// Converts a sale to credit, updates dashboard, and moves record
+  /// From: Daily Sales/{salesmanName}/{dd-MMM-yyyy}/{billId}
+  /// To: Credit History/{salesmanName}/{dd-MMM-yyyy}/{billId}
+  Future<void> convertSaleToCredit({
+    required SaleHistory sale,
+    required String salesmanName,
+  }) async {
+    try {
+      final dateFormat = DateFormat('dd-MMM-yyyy');
+      final formattedDate = dateFormat.format(sale.date);
+
+      // Calculate grand total for amountDue
+      final grandTotal =
+          sale.products.fold<int>(0, (sum, p) => sum + (p.price * p.quantity)) -
+          sale.discount;
+
+      // Create credit history record with:
+      // - amountDue = grandTotal (full payment due)
+      // - cratesDue = 0 (MT fully received)
+      // - isPaid = false (since it's credit)
+      final creditData = {
+        'billId': sale.billId,
+        'customerName': sale.customerName,
+        'date': Timestamp.fromDate(sale.date),
+        'products': sale.products.map((p) => p.toJson()).toList(),
+        'discount': sale.discount,
+        'amountDue': grandTotal,
+        'cratesDue': 0, // MT fully received
+        'isPaid': false,
+      };
+
+      // Save to credit history
+      await _firestore
+          .collection('Credit History')
+          .doc(salesmanName)
+          .collection(formattedDate)
+          .doc(sale.billId)
+          .set(creditData);
+
+      // Update dashboard summary if sale is from today
+      final today = DateTime.now();
+      final saleDate = sale.date;
+      final isTodaysSale =
+          saleDate.year == today.year &&
+          saleDate.month == today.month &&
+          saleDate.day == today.day;
+
+      if (isTodaysSale) {
+        final itemsSold = sale.products.fold<int>(
+          0,
+          (sum, p) => sum + p.quantity,
+        );
+        final totalCrates = sale.products
+            .where((product) => product.name.toUpperCase().endsWith('RB'))
+            .fold<int>(0, (sum, p) => sum + p.quantity);
+
+        final dashboardSummaryRef = _firestore
+            .collection('Dashboard Summary')
+            .doc(salesmanName)
+            .collection(formattedDate)
+            .doc('summary');
+
+        await dashboardSummaryRef.set({
+          // Decrement sales
+          'totalSales': FieldValue.increment(-grandTotal),
+          'totalItemsSold': FieldValue.increment(-itemsSold),
+          'totalCratesOut': FieldValue.increment(-totalCrates),
+          // Increment credit (with 0 MT remaining since fully received)
+          'totalCredit': FieldValue.increment(grandTotal),
+          'totalMtRemaining': FieldValue.increment(0),
+          // customersServed stays the same (not incrementing or decrementing)
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      // Delete from sales history
+      await _firestore
+          .collection('Daily Sales')
+          .doc(salesmanName)
+          .collection(formattedDate)
+          .doc(sale.billId)
+          .delete();
+
+      print('Sale converted to credit successfully');
+    } catch (e) {
+      print('Error converting sale to credit: $e');
+      rethrow;
+    }
+  }
 }

@@ -180,4 +180,19 @@ class CreditHistoryProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  /// Saves a credit record to delete history
+  /// Returns true if save was successful, false otherwise
+  Future<bool> saveCreditToDeleteHistory({
+    required String path,
+    required CreditHistory credit,
+  }) async {
+    try {
+      await _repository.saveCreditToDeleteHistory(path: path, credit: credit);
+      return true;
+    } catch (e) {
+      debugPrint('Error saving credit to delete history: $e');
+      return false;
+    }
+  }
 }

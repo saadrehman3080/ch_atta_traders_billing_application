@@ -3,6 +3,7 @@ import 'package:ch_atta_traders_billing_application/common/themes/text_styles.da
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
+import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/daily_sales_provider.dart';
@@ -22,6 +23,8 @@ class _DailySalePageState extends State<DailySalePage> {
   late final DailySalesProvider _salesProvider;
   bool _hasLoadedOnce = false;
   bool _hasInternetConnection = true;
+  int? _deletingIndex;
+  int? _convertingIndex;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -347,6 +350,7 @@ class _DailySalePageState extends State<DailySalePage> {
   // ========== Card Building Methods ==========
 
   Widget _buildSalesCard(BuildContext context, SaleHistory sale) {
+    final index = _salesProvider.sales.indexOf(sale);
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -362,12 +366,30 @@ class _DailySalePageState extends State<DailySalePage> {
           ),
         ],
       ),
-      child: InkWell(
-        onTap: () => _showBillDetails(context, sale),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: _buildCardContent(sale),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () => _showBillDetails(context, sale),
+                borderRadius: BorderRadius.circular(8),
+                child: _buildCardContent(sale),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(height: 80, width: 1, color: AppColors.gray300),
+            const SizedBox(width: 12),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildConvertToCreditButton(index),
+                const SizedBox(height: 8),
+                _buildDeleteButton(index),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -415,11 +437,6 @@ class _DailySalePageState extends State<DailySalePage> {
                 _buildItemCountBadge(totalItems),
               ],
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 24,
-              color: AppColors.gray400,
-            ),
           ],
         ),
       ],
@@ -465,6 +482,370 @@ class _DailySalePageState extends State<DailySalePage> {
   }
 
   // ========== Dialog Methods ==========
+
+  Widget _buildConvertToCreditButton(int index) {
+    final isConverting = _convertingIndex == index;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isConverting ? null : () => _showConvertConfirmation(index),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: isConverting ? 0.05 : 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: isConverting
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                  ),
+                )
+              : Icon(
+                  Icons.credit_card,
+                  color: Colors.orange.withValues(
+                    alpha: isConverting ? 0.4 : 1.0,
+                  ),
+                  size: 20,
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeleteButton(int index) {
+    final isDeleting = _deletingIndex == index;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isDeleting ? null : () => _showDeleteConfirmation(index),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.pepsiRedLight.withValues(
+              alpha: isDeleting ? 0.05 : 0.1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: isDeleting
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.pepsiRedLight,
+                    ),
+                  ),
+                )
+              : Icon(
+                  Icons.delete_outline,
+                  color: AppColors.pepsiRedLight.withValues(
+                    alpha: isDeleting ? 0.4 : 1.0,
+                  ),
+                  size: 20,
+                ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(int index) {
+    final sale = _salesProvider.sales[index];
+    showDialog(
+      context: context,
+      builder: (context) => _buildDeleteConfirmationDialog(sale, index),
+    );
+  }
+
+  void _showConvertConfirmation(int index) {
+    final sale = _salesProvider.sales[index];
+    showDialog(
+      context: context,
+      builder: (context) => _buildConvertConfirmationDialog(sale, index),
+    );
+  }
+
+  Dialog _buildConvertConfirmationDialog(SaleHistory sale, int index) {
+    return Dialog(
+      backgroundColor: AppColors.pepsiWhite,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.credit_card_outlined,
+                color: Colors.orange,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Convert to Credit?',
+              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Convert ${toTitleCase(sale.customerName)}\'s sale to credit? This will move the record from sales to credit history with full payment due.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.helperText.copyWith(
+                color: AppColors.gray500,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                          color: AppColors.gray300,
+                          width: 1.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: AppTextStyles.smallButton.copyWith(
+                          color: AppColors.gray500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _convertToCredit(index);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: AppColors.pepsiWhite,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Convert',
+                        style: AppTextStyles.smallButton.copyWith(
+                          color: AppColors.pepsiWhite,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Dialog _buildDeleteConfirmationDialog(SaleHistory sale, int index) {
+    return Dialog(
+      backgroundColor: AppColors.pepsiWhite,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.pepsiRedLight.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.delete_outline,
+                color: AppColors.pepsiRedLight,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Delete Sale?',
+              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Permanently delete ${toTitleCase(sale.customerName)}\'s sale? This will remove it from sales history.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.helperText.copyWith(
+                color: AppColors.gray500,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                          color: AppColors.gray300,
+                          width: 1.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: AppTextStyles.smallButton.copyWith(
+                          color: AppColors.gray500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _deleteSalePermanently(index);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.pepsiRedLight,
+                        foregroundColor: AppColors.pepsiWhite,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Delete',
+                        style: AppTextStyles.smallButton.copyWith(
+                          color: AppColors.pepsiWhite,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteSalePermanently(int index) async {
+    setState(() => _deletingIndex = index);
+
+    final saleToDelete = _salesProvider.sales[index];
+
+    // Get salesman identifier from shared preferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+      setState(() => _deletingIndex = null);
+      _showErrorSnackBar('Salesman identifier not found. Please log in again.');
+      return;
+    }
+
+    try {
+      final success = await _salesProvider.deleteSale(
+        sale: saleToDelete,
+        salesmanName: salesmanIdentifier,
+      );
+
+      if (success) {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Sale deleted and moved to deleted history',
+            type: SnackBarType.success,
+          );
+        }
+      } else {
+        _showErrorSnackBar('Failed to delete sale.');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error deleting sale: ${e.toString()}');
+    }
+
+    setState(() => _deletingIndex = null);
+  }
+
+  Future<void> _convertToCredit(int index) async {
+    setState(() => _convertingIndex = index);
+
+    final saleToConvert = _salesProvider.sales[index];
+
+    // Get salesman identifier from shared preferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+      setState(() => _convertingIndex = null);
+      _showErrorSnackBar('Salesman identifier not found. Please log in again.');
+      return;
+    }
+
+    try {
+      final success = await _salesProvider.convertSaleToCredit(
+        sale: saleToConvert,
+        salesmanName: salesmanIdentifier,
+      );
+
+      if (success) {
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Sale converted to credit successfully',
+            type: SnackBarType.success,
+          );
+        }
+      } else {
+        _showErrorSnackBar('Failed to convert sale to credit.');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error converting sale: ${e.toString()}');
+    }
+
+    setState(() => _convertingIndex = null);
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      CustomSnackBar.show(context, message: message, type: SnackBarType.error);
+    }
+  }
 
   void _showBillDetails(BuildContext context, SaleHistory sale) {
     showDialog(

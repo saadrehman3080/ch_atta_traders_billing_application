@@ -212,6 +212,31 @@ class CreditRepository {
     }
   }
 
+  /// Saves a credit record to delete history
+  /// Path: Deleted History/{salesmanName}/{date}/{billId}
+  Future<void> saveCreditToDeleteHistory({
+    required String path,
+    required CreditHistory credit,
+  }) async {
+    try {
+      final creditData = {
+        'billId': credit.billId,
+        'customerName': credit.customerName,
+        'date': Timestamp.fromDate(credit.date),
+        'products': credit.products.map((p) => p.toJson()).toList(),
+        'discount': credit.discount,
+        'amountDue': credit.amountDue,
+        'cratesDue': credit.cratesDue,
+        'isPaid': credit.isPaid,
+        'deletedAt': FieldValue.serverTimestamp(),
+      };
+
+      await _firestore.doc(path).set(creditData);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Updates only the amountDue and cratesDue fields of a credit record
   /// Also updates isPaid status when explicitly provided
   Future<void> updateCreditBalance({

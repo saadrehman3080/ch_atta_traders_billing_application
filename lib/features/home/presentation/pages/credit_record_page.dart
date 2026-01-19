@@ -29,8 +29,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   bool _hasLoadedOnce = false;
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _cratesController = TextEditingController();
-  int? _deletingIndex;
+  int? _completingIndex;
   int? _editingIndex;
+  int? _deletingIndex;
   bool _hasInternetConnection = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
@@ -147,17 +148,20 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   // ========== Business Logic Methods ==========
 
-  Future<void> _deleteItem(int index, List<CreditHistory> billHistory) async {
+  Future<void> _markBillComplete(
+    int index,
+    List<CreditHistory> billHistory,
+  ) async {
     if (!_isValidIndex(index, billHistory)) return;
 
-    setState(() => _deletingIndex = index);
+    setState(() => _completingIndex = index);
 
     final deletedBill = billHistory[index];
 
     // Get salesman identifier from shared preferences
     final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
     if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
-      setState(() => _deletingIndex = null);
+      setState(() => _completingIndex = null);
       _showErrorSnackBar('Salesman identifier not found. Please log in again.');
       return;
     }
@@ -180,8 +184,10 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
 
     if (!savedAsSale) {
-      setState(() => _deletingIndex = null);
-      _showErrorSnackBar('Failed to save as sale history. Delete cancelled.');
+      setState(() => _completingIndex = null);
+      _showErrorSnackBar(
+        'Failed to save as sale history. Operation cancelled.',
+      );
       return;
     }
 
@@ -205,8 +211,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       );
 
       if (!summaryUpdated) {
-        setState(() => _deletingIndex = null);
-        _showErrorSnackBar('Failed to update dashboard. Delete cancelled.');
+        setState(() => _completingIndex = null);
+        _showErrorSnackBar('Failed to update dashboard. Operation cancelled.');
         return;
       }
     }
@@ -218,16 +224,114 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
 
     if (deletedFromCredit) {
-      _showDeleteSnackBar(deletedBill.customerName);
+      _showCompletionSnackBar(deletedBill.customerName);
     } else {
-      _showErrorSnackBar('Failed to delete from credit records.');
+      _showErrorSnackBar('Failed to complete operation.');
+    }
+
+    setState(() => _completingIndex = null);
+  }
+
+  bool _isValidIndex(int index, List<CreditHistory> billHistory) {
+    return index >= 0 && index < billHistory.length;
+  }
+
+  Future<void> _deleteBillPermanently(
+    int index,
+    List<CreditHistory> billHistory,
+  ) async {
+    if (!_isValidIndex(index, billHistory)) return;
+
+    setState(() => _deletingIndex = index);
+
+    final billToDelete = billHistory[index];
+
+    // Get salesman identifier from shared preferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+      setState(() => _deletingIndex = null);
+      _showErrorSnackBar('Salesman identifier not found. Please log in again.');
+      return;
+    }
+
+    try {
+      // Save to delete history
+      final dateFormat = DateFormat('d-MMM-yyyy');
+      final formattedDate = dateFormat.format(billToDelete.date);
+      final deleteHistoryPath =
+          'Deleted History/$salesmanIdentifier/$formattedDate/${billToDelete.billId}';
+
+      // Use CreditHistoryProvider's deleteCreditRecordToHistory method
+      final savedToDeleteHistory = await _creditProvider
+          .saveCreditToDeleteHistory(
+            path: deleteHistoryPath,
+            credit: billToDelete,
+          );
+
+      if (!savedToDeleteHistory) {
+        setState(() => _deletingIndex = null);
+        _showErrorSnackBar(
+          'Failed to save to delete history. Operation cancelled.',
+        );
+        return;
+      }
+
+      // Update dashboard summary if bill is from today
+      final today = DateTime.now();
+      final billDate = billToDelete.date;
+      final isTodaysBill =
+          billDate.year == today.year &&
+          billDate.month == today.month &&
+          billDate.day == today.day;
+
+      if (isTodaysBill) {
+        final dashboardRepo = DashboardRepository();
+        final summaryUpdated = await dashboardRepo.updateSummaryOnCreditDelete(
+          salesmanName: salesmanIdentifier,
+          date: billToDelete.date,
+          amountDue: billToDelete.amountDue,
+          cratesDue: billToDelete.cratesDue,
+          isPaidBill: billToDelete.isPaid,
+        );
+
+        if (!summaryUpdated) {
+          setState(() => _deletingIndex = null);
+          _showErrorSnackBar(
+            'Failed to update dashboard. Operation cancelled.',
+          );
+          return;
+        }
+      }
+
+      // Delete from credit history
+      final deletedFromCredit = await _creditProvider.deleteCreditRecord(
+        billId: billToDelete.billId,
+        salesmanName: salesmanIdentifier,
+      );
+
+      if (deletedFromCredit) {
+        CustomSnackBar.show(
+          context,
+          message: 'Bill deleted.',
+          type: SnackBarType.success,
+        );
+      } else {
+        _showErrorSnackBar('Failed to delete from credit records.');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error deleting bill: ${e.toString()}');
     }
 
     setState(() => _deletingIndex = null);
   }
 
-  bool _isValidIndex(int index, List<CreditHistory> billHistory) {
-    return index >= 0 && index < billHistory.length;
+  void _showCompleteConfirmation(int index, List<CreditHistory> billHistory) {
+    final bill = billHistory[index];
+    showDialog(
+      context: context,
+      builder: (context) =>
+          _buildCompleteConfirmationDialog(bill, index, billHistory),
+    );
   }
 
   void _showDeleteConfirmation(int index, List<CreditHistory> billHistory) {
@@ -444,10 +548,10 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     CustomSnackBar.show(context, message: message, type: SnackBarType.error);
   }
 
-  void _showDeleteSnackBar(String customerName) {
+  void _showCompletionSnackBar(String customerName) {
     CustomSnackBar.show(
       context,
-      message: 'Credit record moved to sales successfully',
+      message: 'Bill marked as paid and moved to sales',
       type: SnackBarType.success,
     );
   }
@@ -686,25 +790,19 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: InkWell(
-                onTap: () => _showBillDetails(bill),
-                child: _buildCardContent(bill),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: SizedBox(
-                height: 80,
-                child: VerticalDivider(color: AppColors.gray300, thickness: 1),
-              ),
-            ),
-            _buildActionButtons(index, billHistory),
-          ],
+      child: InkWell(
+        onTap: () => _showBillDetails(bill),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _buildCardContent(bill)),
+              const SizedBox(width: 12),
+              _buildActionButtons(index, billHistory),
+            ],
+          ),
         ),
       ),
     );
@@ -716,17 +814,23 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         _buildCustomerName(bill.customerName),
         const SizedBox(height: 6),
         _buildDateTimeInfo(formattedDate, bill.formattedTime),
         const SizedBox(height: 8),
-        _buildAmountSection(
-          bill.amountDue,
-          totalItems,
-          bill.cratesDue,
-          bill.isPaid,
+        Row(
+          children: [
+            _buildAmountText(bill.amountDue, bill.isPaid),
+            const SizedBox(width: 8),
+            _buildItemCountBadge(totalItems),
+          ],
         ),
+        if (bill.cratesDue > 0) ...[
+          const SizedBox(height: 6),
+          _buildPendingCratesText(bill.cratesDue),
+        ],
       ],
     );
   }
@@ -754,30 +858,6 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             color: AppColors.gray500,
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildAmountSection(
-    int amountDue,
-    int itemCount,
-    int cratesDue,
-    bool isPaid,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            _buildAmountText(amountDue, isPaid),
-            const SizedBox(width: 8),
-            _buildItemCountBadge(itemCount),
-          ],
-        ),
-        if (cratesDue > 0) ...[
-          const SizedBox(height: 6),
-          _buildPendingCratesText(cratesDue),
-        ],
       ],
     );
   }
@@ -859,82 +939,145 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   Widget _buildActionButtons(int index, List<CreditHistory> billHistory) {
     final isEditLoading = _editingIndex == index;
-    final isDeleteLoading = _deletingIndex == index;
-    final isAnyLoading = isEditLoading || isDeleteLoading;
+    final isCompletingLoading = _completingIndex == index;
+    final isDeletingLoading = _deletingIndex == index;
+    final isAnyLoading =
+        isEditLoading || isCompletingLoading || isDeletingLoading;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: isAnyLoading
-                ? null
-                : () => _showEditDialog(index, billHistory),
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.pepsiBlueLight.withValues(
-                  alpha: isAnyLoading ? 0.05 : 0.1,
-                ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: isAnyLoading
+                    ? null
+                    : () => _showEditDialog(index, billHistory),
                 borderRadius: BorderRadius.circular(8),
-              ),
-              child: isEditLoading
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.pepsiBlueLight,
-                        ),
-                      ),
-                    )
-                  : Icon(
-                      Icons.edit_outlined,
-                      color: AppColors.pepsiBlueLight.withValues(
-                        alpha: isAnyLoading ? 0.4 : 1.0,
-                      ),
-                      size: 22,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.pepsiBlueLight.withValues(
+                      alpha: isAnyLoading ? 0.05 : 0.1,
                     ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: isEditLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppColors.pepsiBlueLight,
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.edit_outlined,
+                          color: AppColors.pepsiBlueLight.withValues(
+                            alpha: isAnyLoading ? 0.4 : 1.0,
+                          ),
+                          size: 20,
+                        ),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: isAnyLoading
+                    ? null
+                    : () => _showDeleteConfirmation(index, billHistory),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.pepsiRedLight.withValues(
+                      alpha: isAnyLoading ? 0.05 : 0.1,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: isDeletingLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppColors.pepsiRedLight,
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.delete_outline,
+                          color: AppColors.pepsiRedLight.withValues(
+                            alpha: isAnyLoading ? 0.4 : 1.0,
+                          ),
+                          size: 20,
+                        ),
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: isAnyLoading
                 ? null
-                : () => _showDeleteConfirmation(index, billHistory),
+                : () => _showCompleteConfirmation(index, billHistory),
             borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.all(12),
+              width: 88, // Match width of two buttons + spacing
+              padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.pepsiRedLight.withValues(
+                color: Colors.green.withValues(
                   alpha: isAnyLoading ? 0.05 : 0.1,
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: isDeleteLoading
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.pepsiRedLight,
+              child: Center(
+                child: isCompletingLoading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.green,
+                          ),
                         ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green.withValues(
+                              alpha: isAnyLoading ? 0.4 : 1.0,
+                            ),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Paid',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.withValues(
+                                alpha: isAnyLoading ? 0.4 : 1.0,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    )
-                  : Icon(
-                      Icons.delete_outline,
-                      color: AppColors.pepsiRedLight.withValues(
-                        alpha: isAnyLoading ? 0.4 : 1.0,
-                      ),
-                      size: 22,
-                    ),
+              ),
             ),
           ),
         ),
@@ -943,6 +1086,119 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   }
 
   // ========== Dialog Building Methods ==========
+
+  Dialog _buildCompleteConfirmationDialog(
+    CreditHistory bill,
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
+    return Dialog(
+      backgroundColor: AppColors.pepsiWhite,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildCompleteIcon(),
+            const SizedBox(height: 20),
+            _buildCompleteTitle(),
+            const SizedBox(height: 12),
+            _buildCompleteMessage(bill.customerName),
+            const SizedBox(height: 24),
+            _buildCompleteDialogActions(index, billHistory),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompleteIcon() {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.15),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.check, color: Colors.green[600], size: 32),
+    );
+  }
+
+  Widget _buildCompleteTitle() {
+    return Text(
+      'Mark as Paid?',
+      style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+    );
+  }
+
+  Widget _buildCompleteMessage(String customerName) {
+    return Text(
+      'Mark $customerName\'s bill as fully paid? This will move the record from credit to sales history.',
+      textAlign: TextAlign.center,
+      style: AppTextStyles.helperText.copyWith(
+        color: AppColors.gray500,
+        fontSize: 14,
+      ),
+    );
+  }
+
+  Widget _buildCompleteDialogActions(
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.gray300, width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                'Cancel',
+                style: AppTextStyles.smallButton.copyWith(
+                  color: AppColors.gray500,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _markBillComplete(index, billHistory);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green[600],
+                foregroundColor: AppColors.pepsiWhite,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
+              child: Text(
+                'Paid',
+                style: AppTextStyles.smallButton.copyWith(
+                  color: AppColors.pepsiWhite,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Dialog _buildDeleteConfirmationDialog(
     CreditHistory bill,
@@ -979,7 +1235,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         color: AppColors.pepsiRedLight.withValues(alpha: 0.15),
         shape: BoxShape.circle,
       ),
-      child: const Icon(
+      child: Icon(
         Icons.delete_outline,
         color: AppColors.pepsiRedLight,
         size: 32,
@@ -989,14 +1245,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   Widget _buildDeleteTitle() {
     return Text(
-      'Delete Record?',
+      'Delete Bill?',
       style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
     );
   }
 
   Widget _buildDeleteMessage(String customerName) {
     return Text(
-      'Are you sure you want to delete $customerName\'s credit record? This action cannot be undone.',
+      'Permanently delete $customerName\'s bill? This will remove it from credit history and save it to delete history.',
       textAlign: TextAlign.center,
       style: AppTextStyles.helperText.copyWith(
         color: AppColors.gray500,
@@ -1035,7 +1291,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                _deleteItem(index, billHistory);
+                _deleteBillPermanently(index, billHistory);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.pepsiRedLight,

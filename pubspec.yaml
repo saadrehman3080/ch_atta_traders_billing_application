@@ -25,6 +25,7 @@ dependencies:
   intl: ^0.20.2
   connectivity_plus: ^7.0.0
   print_bluetooth_thermal: ^1.1.9
+  
 
 dev_dependencies:
   flutter_test:

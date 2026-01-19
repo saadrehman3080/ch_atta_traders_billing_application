@@ -193,4 +193,63 @@ class DashboardRepository {
       return false;
     }
   }
+
+  /// Updates dashboard summary when a credit bill is deleted permanently
+  /// Decrements credit, MT remaining, and customer counts
+  ///
+  /// [salesmanName] - The name of the salesman
+  /// [date] - The date of the bill
+  /// [amountDue] - The credit amount that was due
+  /// [cratesDue] - The crates that were remaining
+  /// [isPaidBill] - Whether the bill was already paid (cash with MT tracking)
+  Future<bool> updateSummaryOnCreditDelete({
+    required String salesmanName,
+    required DateTime date,
+    required int amountDue,
+    required int cratesDue,
+    required bool isPaidBill,
+  }) async {
+    try {
+      final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
+
+      debugPrint('Updating dashboard summary for credit deletion...');
+      debugPrint('Date: $formattedDate');
+      debugPrint(
+        'Amount: $amountDue, Crates: $cratesDue, WasPaid: $isPaidBill',
+      );
+
+      final summaryRef = _firestore
+          .collection('Dashboard Summary')
+          .doc(salesmanName)
+          .collection(formattedDate)
+          .doc('summary');
+
+      final Map<String, dynamic> updates = {
+        'lastUpdated': FieldValue.serverTimestamp(),
+      };
+
+      // Decrement credit if bill was not paid
+      if (amountDue > 0 && !isPaidBill) {
+        updates['totalCredit'] = FieldValue.increment(-amountDue);
+      }
+
+      // Decrement MT remaining if there were crates due
+      if (cratesDue > 0) {
+        updates['totalMtRemaining'] = FieldValue.increment(-cratesDue);
+      }
+
+      // Decrement customer count (always, as we're removing a credit customer)
+      updates['totalCustomers'] = FieldValue.increment(-1);
+
+      // Update the summary document
+      await summaryRef.set(updates, SetOptions(merge: true));
+
+      debugPrint('Dashboard summary updated successfully');
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('Error updating dashboard summary: $e');
+      debugPrint('StackTrace: $stackTrace');
+      return false;
+    }
+  }
 }

@@ -454,7 +454,8 @@ class _LoginScreenState extends State<LoginScreen> {
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
             decoration: BoxDecoration(
-              color: AppColors.loginCardBg.withValues(alpha: 0.3),
+              color: AppColors.loginCardBg,
+
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: AppColors.pepsiWhite.withValues(alpha: 0.4),

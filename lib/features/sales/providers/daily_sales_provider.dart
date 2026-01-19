@@ -46,6 +46,45 @@ class DailySalesProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteSale({
+    required SaleHistory sale,
+    required String salesmanName,
+  }) async {
+    try {
+      await _repository.deleteSale(sale: sale, salesmanName: salesmanName);
+
+      // Remove from local list
+      _sales.removeWhere((s) => s.billId == sale.billId);
+      _safeNotifyListeners();
+
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting sale: $e');
+      return false;
+    }
+  }
+
+  Future<bool> convertSaleToCredit({
+    required SaleHistory sale,
+    required String salesmanName,
+  }) async {
+    try {
+      await _repository.convertSaleToCredit(
+        sale: sale,
+        salesmanName: salesmanName,
+      );
+
+      // Remove from local list
+      _sales.removeWhere((s) => s.billId == sale.billId);
+      _safeNotifyListeners();
+
+      return true;
+    } catch (e) {
+      debugPrint('Error converting sale to credit: $e');
+      return false;
+    }
+  }
+
   void clearSales() {
     _sales = [];
     _state = DailySalesState.initial;
