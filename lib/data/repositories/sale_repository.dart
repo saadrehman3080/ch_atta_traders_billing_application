@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
 
 /// Repository for handling sale data operations with Firestore.
 ///
@@ -31,7 +31,7 @@ class SaleRepository {
   Future<bool> saveSale(SaleHistory sale, String salesmanName) async {
     try {
       // Format date as 01-Jan-2026
-      final formattedDate = DateFormat('dd-MMM-yyyy').format(sale.date);
+      final formattedDate = DateFormatters.formatForFirebase(sale.date);
 
       debugPrint('Saving sale to Firebase...');
       debugPrint(
@@ -99,7 +99,7 @@ class SaleRepository {
   ) async {
     try {
       // Format date as 01-Jan-2026
-      final formattedDate = DateFormat('dd-MMM-yyyy').format(sale.date);
+      final formattedDate = DateFormatters.formatForFirebase(sale.date);
 
       debugPrint('Saving sale from credit conversion to Firebase...');
       debugPrint(
@@ -139,7 +139,7 @@ class SaleRepository {
     DateTime date,
   ) async {
     try {
-      final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
+      final formattedDate = DateFormatters.formatForFirebase(date);
 
       debugPrint('Fetching sales from Firebase...');
       debugPrint('Path: $_collectionName/$salesmanName/$formattedDate');

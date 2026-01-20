@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
-import 'package:intl/intl.dart';
 
 class CreditRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -13,8 +13,7 @@ class CreditRepository {
   Future<void> saveCredit(CreditHistory credit, String salesmanName) async {
     try {
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
-      final dateFormat = DateFormat('dd-MMM-yyyy');
-      final formattedDate = dateFormat.format(credit.date);
+      final formattedDate = DateFormatters.formatForFirebase(credit.date);
 
       print('Saving credit to Firestore...');
       print('Salesman: $salesmanName');
@@ -298,7 +297,6 @@ class CreditRepository {
     int daysToLookBack = 14,
   }) async {
     try {
-      final dateFormat = DateFormat('dd-MMM-yyyy');
       final now = DateTime.now();
 
       // Step 1: Get metadata - check which date subcollections exist
@@ -308,7 +306,7 @@ class CreditRepository {
 
       for (int i = 0; i < daysToLookBack; i++) {
         final date = now.subtract(Duration(days: i));
-        final formattedDate = dateFormat.format(date);
+        final formattedDate = DateFormatters.formatForFirebase(date);
 
         metadataCheckFutures.add(
           _firestore

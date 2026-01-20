@@ -6,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/features/products/providers/
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 
@@ -14,6 +15,9 @@ void main() async {
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize date formatting for English locale (ensures consistent Firebase paths)
+  await initializeDateFormatting('en_US', null);
 
   // Initialize App Preferences
   await AppPreferences.init();

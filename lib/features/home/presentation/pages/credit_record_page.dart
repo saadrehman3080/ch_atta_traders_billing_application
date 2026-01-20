@@ -5,6 +5,7 @@ import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
@@ -367,8 +368,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
     try {
       // Save to delete history
-      final dateFormat = DateFormat('d-MMM-yyyy');
-      final formattedDate = dateFormat.format(billToDelete.date);
+      final formattedDate = DateFormatters.formatForDeleteHistory(
+        billToDelete.date,
+      );
       final deleteHistoryPath =
           'Deleted History/$salesmanIdentifier/$formattedDate/${billToDelete.billId}';
 

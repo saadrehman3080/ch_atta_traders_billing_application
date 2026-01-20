@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
 
 /// Repository for fetching dashboard summary data from Firestore.
 ///
@@ -32,7 +32,7 @@ class DashboardRepository {
   }) async {
     try {
       final targetDate = date ?? DateTime.now();
-      final formattedDate = DateFormat('dd-MMM-yyyy').format(targetDate);
+      final formattedDate = DateFormatters.formatForFirebase(targetDate);
 
       debugPrint('Fetching dashboard data for $formattedDate...');
 

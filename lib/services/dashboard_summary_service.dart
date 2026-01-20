@@ -1,6 +1,6 @@
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
 
 /// Centralized service for managing dashboard summary operations.
 /// Handles all increment/decrement operations for dashboard fields.
@@ -24,7 +24,7 @@ class DashboardSummaryService {
 
   /// Gets the summary document reference for a specific date
   DocumentReference _getSummaryRef(String salesmanName, DateTime date) {
-    final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
+    final formattedDate = DateFormatters.formatForFirebase(date);
     return _firestore
         .collection('Dashboard Summary')
         .doc(salesmanName)

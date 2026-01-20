@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
-import 'package:intl/intl.dart';
 
 class DailySalesRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -15,8 +15,7 @@ class DailySalesRepository {
   ) async {
     try {
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
-      final dateFormat = DateFormat('dd-MMM-yyyy');
-      final formattedDate = dateFormat.format(date);
+      final formattedDate = DateFormatters.formatForFirebase(date);
 
       print('Fetching daily sales from Firestore...');
       print('Salesman: $salesmanName');
@@ -54,10 +53,10 @@ class DailySalesRepository {
     required String salesmanName,
   }) async {
     try {
-      final dateFormat = DateFormat('dd-MMM-yyyy');
-      final deleteDateFormat = DateFormat('d-MMM-yyyy');
-      final formattedDate = dateFormat.format(sale.date);
-      final deleteFormattedDate = deleteDateFormat.format(sale.date);
+      final formattedDate = DateFormatters.formatForFirebase(sale.date);
+      final deleteFormattedDate = DateFormatters.formatForDeleteHistory(
+        sale.date,
+      );
 
       // Save to deleted history
       final deleteHistoryPath =
@@ -115,8 +114,7 @@ class DailySalesRepository {
     required String salesmanName,
   }) async {
     try {
-      final dateFormat = DateFormat('dd-MMM-yyyy');
-      final formattedDate = dateFormat.format(sale.date);
+      final formattedDate = DateFormatters.formatForFirebase(sale.date);
 
       // Calculate grand total for amountDue
       final grandTotal =

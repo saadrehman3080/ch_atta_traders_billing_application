@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/credit_repository.dart';
-import 'package:intl/intl.dart';
 
 enum CreditHistoryState { initial, loading, loaded, error }
 
@@ -110,8 +110,7 @@ class CreditHistoryProvider extends ChangeNotifier {
   }) async {
     try {
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
-      final dateFormat = DateFormat('dd-MMM-yyyy');
-      final formattedDate = dateFormat.format(credit.date);
+      final formattedDate = DateFormatters.formatForFirebase(credit.date);
 
       await _repository.updateCreditBalance(
         salesmanName: salesmanName,
@@ -160,8 +159,9 @@ class CreditHistoryProvider extends ChangeNotifier {
       );
 
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
-      final dateFormat = DateFormat('dd-MMM-yyyy');
-      final formattedDate = dateFormat.format(creditToDelete.date);
+      final formattedDate = DateFormatters.formatForFirebase(
+        creditToDelete.date,
+      );
 
       // Delete from Firebase
       await _repository.deleteCredit(
