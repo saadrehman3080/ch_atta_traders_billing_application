@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
+import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:intl/intl.dart';
 
 class CreditRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final DashboardSummaryService _dashboardService = DashboardSummaryService();
 
   /// Saves a credit transaction to Firestore and updates the dashboard summary
   /// Path: Credit History/{salesmanName}/{dd-MMM-yyyy}/{billId}
@@ -31,9 +33,6 @@ class CreditRepository {
       // - MT field filled with value: cratesDue = total - collected = remaining crates
       final mtRemaining = credit.cratesDue;
 
-      // Determine credit amount (only if not paid)
-      final creditAmount = credit.isPaid ? 0 : credit.amountDue;
-
       // Use transaction to atomically update both credit and dashboard summary
       await _firestore.runTransaction((transaction) async {
         // Reference to the credit document (in Credit History)
@@ -43,25 +42,20 @@ class CreditRepository {
             .collection(formattedDate)
             .doc(credit.billId);
 
-        // Reference to the dashboard summary document (separate collection)
-        final dashboardSummaryRef = _firestore
-            .collection('Dashboard Summary')
-            .doc(salesmanName)
-            .collection(formattedDate)
-            .doc('summary');
-
         // Save the credit document
         transaction.set(creditRef, credit.toJson());
 
-        // Update dashboard summary - CREDIT BILL: creditAmount, itemsSold, mtRemaining, discount, customersServed
-        transaction.set(dashboardSummaryRef, {
-          'totalCredit': FieldValue.increment(creditAmount),
-          'totalItemsSold': FieldValue.increment(itemsSold),
-          'totalMtRemaining': FieldValue.increment(mtRemaining),
-          'totalDiscount': FieldValue.increment(credit.discount),
-          'customersServed': FieldValue.increment(1),
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        // Update dashboard summary using centralized service
+        await _dashboardService.onCreditCreated(
+          salesmanName: salesmanName,
+          date: credit.date,
+          creditAmount: credit.amountDue,
+          itemsSold: itemsSold,
+          mtRemaining: mtRemaining,
+          discount: credit.discount,
+          isPaid: credit.isPaid,
+          transaction: transaction,
+        );
       });
 
       print('Credit and dashboard summary saved successfully!');

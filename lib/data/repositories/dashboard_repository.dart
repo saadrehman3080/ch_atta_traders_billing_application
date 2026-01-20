@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
+import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
@@ -7,11 +8,14 @@ import 'package:intl/intl.dart';
 ///
 /// This class fetches pre-aggregated summary document from the
 /// centralized Dashboard Summary collection for O(1) dashboard reads.
+/// For updates, it delegates to DashboardSummaryService.
 class DashboardRepository {
   final FirebaseFirestore _firestore;
+  final DashboardSummaryService _dashboardService;
 
   DashboardRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _dashboardService = DashboardSummaryService();
 
   /// Fetches dashboard data for a specific date.
   ///
@@ -72,16 +76,10 @@ class DashboardRepository {
     );
   }
 
+  // ========== DELEGATED METHODS TO DASHBOARD SUMMARY SERVICE ==========
+
   /// Updates dashboard summary when converting a credit bill to sale
-  /// This adjusts the summary by:
-  /// - Subtracting MT remaining (cratesDue)
-  /// - Only for credit bills: Subtracting from credit amount and adding to collection
-  ///
-  /// [salesmanName] - The name of the salesman
-  /// [date] - The date of the bill
-  /// [amountDue] - The amount that was due (now paid)
-  /// [cratesDue] - The crates that were due (now returned)
-  /// [isPaidBill] - Whether the bill was already paid (cash with MT tracking)
+  /// Delegates to DashboardSummaryService
   Future<bool> updateSummaryOnCreditToSale({
     required String salesmanName,
     required DateTime date,
@@ -89,56 +87,17 @@ class DashboardRepository {
     required int cratesDue,
     required bool isPaidBill,
   }) async {
-    try {
-      final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
-
-      debugPrint('Updating dashboard summary for credit-to-sale conversion...');
-      debugPrint('Date: $formattedDate');
-      debugPrint(
-        'Amount: $amountDue, Crates: $cratesDue, WasPaid: $isPaidBill',
-      );
-
-      final summaryRef = _firestore
-          .collection('Dashboard Summary')
-          .doc(salesmanName)
-          .collection(formattedDate)
-          .doc('summary');
-
-      // Build update map based on whether bill was paid or not
-      final Map<String, dynamic> updates = {
-        'totalMtRemaining': FieldValue.increment(-cratesDue),
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
-
-      // Only update credit and collection if bill was NOT already paid
-      // (i.e., it was an actual credit bill, not just MT tracking)
-      if (!isPaidBill) {
-        updates['totalCollection'] = FieldValue.increment(amountDue);
-        updates['totalCredit'] = FieldValue.increment(-amountDue);
-      }
-
-      // Update the summary document
-      await summaryRef.set(updates, SetOptions(merge: true));
-
-      debugPrint('Dashboard summary updated successfully');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error updating dashboard summary: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+    return _dashboardService.onCreditConvertedToSale(
+      salesmanName: salesmanName,
+      date: date,
+      amountDue: amountDue,
+      cratesDue: cratesDue,
+      isPaidBill: isPaidBill,
+    );
   }
 
   /// Updates dashboard summary for partial payments (cash or crates received)
-  /// This adjusts the summary by:
-  /// - For credit bills only: Subtracting cash from credit, adding to collection
-  /// - Subtracting crates received from MT remaining
-  ///
-  /// [salesmanName] - The name of the salesman
-  /// [date] - The date of the bill
-  /// [cashReceived] - The amount received (optional)
-  /// [cratesReceived] - The crates returned (optional)
-  /// [isPaidBill] - Whether the bill was already paid (cash with MT tracking)
+  /// Delegates to DashboardSummaryService
   Future<bool> updateSummaryOnPartialPayment({
     required String salesmanName,
     required DateTime date,
@@ -146,110 +105,34 @@ class DashboardRepository {
     int? cratesReceived,
     required bool isPaidBill,
   }) async {
-    try {
-      // Skip if nothing to update
-      if ((cashReceived == null || cashReceived == 0) &&
-          (cratesReceived == null || cratesReceived == 0)) {
-        return true;
-      }
-
-      final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
-
-      debugPrint('Updating dashboard summary for partial payment...');
-      debugPrint('Date: $formattedDate');
-      debugPrint(
-        'Cash: $cashReceived, Crates: $cratesReceived, WasPaid: $isPaidBill',
-      );
-
-      final summaryRef = _firestore
-          .collection('Dashboard Summary')
-          .doc(salesmanName)
-          .collection(formattedDate)
-          .doc('summary');
-
-      final Map<String, dynamic> updates = {
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
-
-      // Only update credit and collection if bill was NOT already paid
-      // (i.e., it was an actual credit bill)
-      if (cashReceived != null && cashReceived > 0 && !isPaidBill) {
-        updates['totalCollection'] = FieldValue.increment(cashReceived);
-        updates['totalCredit'] = FieldValue.increment(-cashReceived);
-      }
-
-      if (cratesReceived != null && cratesReceived > 0) {
-        updates['totalMtRemaining'] = FieldValue.increment(-cratesReceived);
-      }
-
-      // Update the summary document
-      await summaryRef.set(updates, SetOptions(merge: true));
-
-      debugPrint('Dashboard summary updated successfully');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error updating dashboard summary: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+    return _dashboardService.onPartialPaymentReceived(
+      salesmanName: salesmanName,
+      date: date,
+      cashReceived: cashReceived,
+      cratesReceived: cratesReceived,
+      isPaidBill: isPaidBill,
+    );
   }
 
   /// Updates dashboard summary when a credit bill is deleted permanently
-  /// Decrements credit, MT remaining, and customer counts
-  ///
-  /// [salesmanName] - The name of the salesman
-  /// [date] - The date of the bill
-  /// [amountDue] - The credit amount that was due
-  /// [cratesDue] - The crates that were remaining
-  /// [isPaidBill] - Whether the bill was already paid (cash with MT tracking)
+  /// Delegates to DashboardSummaryService
   Future<bool> updateSummaryOnCreditDelete({
     required String salesmanName,
     required DateTime date,
     required int amountDue,
     required int cratesDue,
+    required int itemsSold,
+    required int discount,
     required bool isPaidBill,
   }) async {
-    try {
-      final formattedDate = DateFormat('dd-MMM-yyyy').format(date);
-
-      debugPrint('Updating dashboard summary for credit deletion...');
-      debugPrint('Date: $formattedDate');
-      debugPrint(
-        'Amount: $amountDue, Crates: $cratesDue, WasPaid: $isPaidBill',
-      );
-
-      final summaryRef = _firestore
-          .collection('Dashboard Summary')
-          .doc(salesmanName)
-          .collection(formattedDate)
-          .doc('summary');
-
-      final Map<String, dynamic> updates = {
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
-
-      // Decrement credit if bill was not paid
-      if (amountDue > 0 && !isPaidBill) {
-        updates['totalCredit'] = FieldValue.increment(-amountDue);
-      }
-
-      // Decrement MT remaining if there were crates due
-      if (cratesDue > 0) {
-        updates['totalMtRemaining'] = FieldValue.increment(-cratesDue);
-      }
-
-      // Decrement customer count (always, as we're removing a credit customer)
-      updates['totalCustomers'] = FieldValue.increment(-1);
-
-      // Update the summary document
-      await summaryRef.set(updates, SetOptions(merge: true));
-
-      debugPrint('Dashboard summary updated successfully');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error updating dashboard summary: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+    return _dashboardService.onCreditDeleted(
+      salesmanName: salesmanName,
+      date: date,
+      amountDue: amountDue,
+      cratesDue: cratesDue,
+      itemsSold: itemsSold,
+      discount: discount,
+      isPaidBill: isPaidBill,
+    );
   }
 }

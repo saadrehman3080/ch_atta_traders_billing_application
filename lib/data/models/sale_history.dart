@@ -1,5 +1,6 @@
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SaleHistory implements BillBase {
   @override
@@ -23,10 +24,21 @@ class SaleHistory implements BillBase {
 
   // Factory constructor to create SaleHistory from JSON (Firebase)
   factory SaleHistory.fromJson(Map<String, dynamic> json) {
+    // Handle both Firestore Timestamp and ISO8601 String
+    DateTime parseDate(dynamic value) {
+      if (value is Timestamp) {
+        return value.toDate();
+      } else if (value is String) {
+        return DateTime.parse(value);
+      } else {
+        return DateTime.now();
+      }
+    }
+
     return SaleHistory(
       billId: json['billId'] as String,
       customerName: json['customerName'] as String,
-      date: DateTime.parse(json['date'] as String),
+      date: parseDate(json['date']),
       products: (json['products'] as List<dynamic>)
           .map((item) => Product.fromJson(item as Map<String, dynamic>))
           .toList(),

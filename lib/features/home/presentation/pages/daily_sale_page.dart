@@ -24,7 +24,6 @@ class _DailySalePageState extends State<DailySalePage> {
   bool _hasLoadedOnce = false;
   bool _hasInternetConnection = true;
   int? _deletingIndex;
-  int? _convertingIndex;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -219,7 +218,7 @@ class _DailySalePageState extends State<DailySalePage> {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.pepsiBlue.withValues(alpha: 0.3),
+                    color: AppColors.pepsiBlue.withValues(alpha: 0.15),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -381,14 +380,7 @@ class _DailySalePageState extends State<DailySalePage> {
             const SizedBox(width: 12),
             Container(height: 80, width: 1, color: AppColors.gray300),
             const SizedBox(width: 12),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildConvertToCreditButton(index),
-                const SizedBox(height: 8),
-                _buildDeleteButton(index),
-              ],
-            ),
+            _buildDeleteButton(index),
           ],
         ),
       ),
@@ -483,41 +475,6 @@ class _DailySalePageState extends State<DailySalePage> {
 
   // ========== Dialog Methods ==========
 
-  Widget _buildConvertToCreditButton(int index) {
-    final isConverting = _convertingIndex == index;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: isConverting ? null : () => _showConvertConfirmation(index),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: isConverting ? 0.05 : 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: isConverting
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-                  ),
-                )
-              : Icon(
-                  Icons.credit_card,
-                  color: Colors.orange.withValues(
-                    alpha: isConverting ? 0.4 : 1.0,
-                  ),
-                  size: 20,
-                ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDeleteButton(int index) {
     final isDeleting = _deletingIndex == index;
 
@@ -527,7 +484,7 @@ class _DailySalePageState extends State<DailySalePage> {
         onTap: isDeleting ? null : () => _showDeleteConfirmation(index),
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
           decoration: BoxDecoration(
             color: AppColors.pepsiRedLight.withValues(
               alpha: isDeleting ? 0.05 : 0.1,
@@ -550,7 +507,7 @@ class _DailySalePageState extends State<DailySalePage> {
                   color: AppColors.pepsiRedLight.withValues(
                     alpha: isDeleting ? 0.4 : 1.0,
                   ),
-                  size: 20,
+                  size: 24,
                 ),
         ),
       ),
@@ -562,111 +519,6 @@ class _DailySalePageState extends State<DailySalePage> {
     showDialog(
       context: context,
       builder: (context) => _buildDeleteConfirmationDialog(sale, index),
-    );
-  }
-
-  void _showConvertConfirmation(int index) {
-    final sale = _salesProvider.sales[index];
-    showDialog(
-      context: context,
-      builder: (context) => _buildConvertConfirmationDialog(sale, index),
-    );
-  }
-
-  Dialog _buildConvertConfirmationDialog(SaleHistory sale, int index) {
-    return Dialog(
-      backgroundColor: AppColors.pepsiWhite,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.credit_card_outlined,
-                color: Colors.orange,
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Convert to Credit?',
-              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Convert ${toTitleCase(sale.customerName)}\'s sale to credit? This will move the record from sales to credit history with full payment due.',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.helperText.copyWith(
-                color: AppColors.gray500,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 48,
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: AppColors.gray300,
-                          width: 1.5,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        'Cancel',
-                        style: AppTextStyles.smallButton.copyWith(
-                          color: AppColors.gray500,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _convertToCredit(index);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: AppColors.pepsiWhite,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        'Convert',
-                        style: AppTextStyles.smallButton.copyWith(
-                          color: AppColors.pepsiWhite,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -790,7 +642,7 @@ class _DailySalePageState extends State<DailySalePage> {
         if (mounted) {
           CustomSnackBar.show(
             context,
-            message: 'Sale deleted and moved to deleted history',
+            message: 'Sale deleted.',
             type: SnackBarType.success,
           );
         }
@@ -802,43 +654,6 @@ class _DailySalePageState extends State<DailySalePage> {
     }
 
     setState(() => _deletingIndex = null);
-  }
-
-  Future<void> _convertToCredit(int index) async {
-    setState(() => _convertingIndex = index);
-
-    final saleToConvert = _salesProvider.sales[index];
-
-    // Get salesman identifier from shared preferences
-    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
-    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
-      setState(() => _convertingIndex = null);
-      _showErrorSnackBar('Salesman identifier not found. Please log in again.');
-      return;
-    }
-
-    try {
-      final success = await _salesProvider.convertSaleToCredit(
-        sale: saleToConvert,
-        salesmanName: salesmanIdentifier,
-      );
-
-      if (success) {
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            message: 'Sale converted to credit successfully',
-            type: SnackBarType.success,
-          );
-        }
-      } else {
-        _showErrorSnackBar('Failed to convert sale to credit.');
-      }
-    } catch (e) {
-      _showErrorSnackBar('Error converting sale: ${e.toString()}');
-    }
-
-    setState(() => _convertingIndex = null);
   }
 
   void _showErrorSnackBar(String message) {

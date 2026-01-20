@@ -10,6 +10,7 @@ import 'package:ch_atta_traders_billing_application/data/models/sale_history.dar
 import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -32,6 +33,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   int? _completingIndex;
   int? _editingIndex;
   int? _deletingIndex;
+  int? _printingIndex;
   bool _hasInternetConnection = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
@@ -232,6 +234,115 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     setState(() => _completingIndex = null);
   }
 
+  /// Marks a credit bill as complete and prints a payment receipt
+  Future<void> _markBillCompleteAndPrint(
+    int index,
+    List<CreditHistory> billHistory,
+  ) async {
+    if (!_isValidIndex(index, billHistory)) return;
+
+    setState(() => _printingIndex = index);
+
+    final deletedBill = billHistory[index];
+
+    // Get salesman identifier from shared preferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+      setState(() => _printingIndex = null);
+      _showErrorSnackBar('Salesman identifier not found. Please log in again.');
+      return;
+    }
+
+    // Calculate amount received (grand total - discount)
+    final grandTotal = BillingCalculations.calculateGrandTotal(
+      deletedBill.products,
+    );
+    final amountReceived = grandTotal - deletedBill.discount;
+
+    // Convert CreditHistory to SaleHistory
+    final saleHistory = SaleHistory(
+      billId: deletedBill.billId,
+      customerName: deletedBill.customerName,
+      date: deletedBill.date,
+      products: deletedBill.products,
+      discount: deletedBill.discount,
+    );
+
+    // Save to sale history using SaleProvider
+    final saleProvider = SaleProvider();
+    final savedAsSale = await saleProvider.saveSaleFromCreditConversion(
+      saleHistory,
+      salesmanIdentifier,
+    );
+
+    if (!savedAsSale) {
+      setState(() => _printingIndex = null);
+      _showErrorSnackBar(
+        'Failed to save as sale history. Operation cancelled.',
+      );
+      return;
+    }
+
+    // Update dashboard summary if bill is from today
+    final today = DateTime.now();
+    final billDate = deletedBill.date;
+    final isTodaysBill =
+        billDate.year == today.year &&
+        billDate.month == today.month &&
+        billDate.day == today.day;
+
+    if (isTodaysBill) {
+      final dashboardRepo = DashboardRepository();
+      final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
+        salesmanName: salesmanIdentifier,
+        date: deletedBill.date,
+        amountDue: deletedBill.amountDue,
+        cratesDue: deletedBill.cratesDue,
+        isPaidBill: deletedBill.isPaid,
+      );
+
+      if (!summaryUpdated) {
+        setState(() => _printingIndex = null);
+        _showErrorSnackBar('Failed to update dashboard. Operation cancelled.');
+        return;
+      }
+    }
+
+    // Delete from credit history
+    final deletedFromCredit = await _creditProvider.deleteCreditRecord(
+      billId: deletedBill.billId,
+      salesmanName: salesmanIdentifier,
+    );
+
+    if (!deletedFromCredit) {
+      setState(() => _printingIndex = null);
+      _showErrorSnackBar('Failed to complete operation.');
+      return;
+    }
+
+    // Print the payment receipt
+    final printResult = await BillPrinter.printPaymentReceipt(
+      billId: deletedBill.billId,
+      customerName: deletedBill.customerName,
+      originalBillDate: deletedBill.date,
+      amountReceived: amountReceived,
+      salesmanName: salesmanIdentifier,
+    );
+
+    if (printResult.success) {
+      _showCompletionSnackBar(deletedBill.customerName);
+    } else {
+      // Bill was marked complete but print failed
+      CustomSnackBar.show(
+        context,
+        message: 'Bill completed but print failed: ${printResult.errorMessage}',
+        type: SnackBarType.warning,
+      );
+    }
+
+    setState(() => _printingIndex = null);
+  }
+
   bool _isValidIndex(int index, List<CreditHistory> billHistory) {
     return index >= 0 && index < billHistory.length;
   }
@@ -285,12 +396,20 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           billDate.day == today.day;
 
       if (isTodaysBill) {
+        // Calculate items sold for dashboard update
+        final itemsSold = billToDelete.products.fold<int>(
+          0,
+          (sum, p) => sum + p.quantity,
+        );
+
         final dashboardRepo = DashboardRepository();
         final summaryUpdated = await dashboardRepo.updateSummaryOnCreditDelete(
           salesmanName: salesmanIdentifier,
           date: billToDelete.date,
           amountDue: billToDelete.amountDue,
           cratesDue: billToDelete.cratesDue,
+          itemsSold: itemsSold,
+          discount: billToDelete.discount,
           isPaidBill: billToDelete.isPaid,
         );
 
@@ -520,6 +639,217 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         _showUpdateSnackBar(amountReceived, cratesReceived);
       } else {
         _showErrorSnackBar('Failed to update record');
+      }
+
+      setState(() => _editingIndex = null);
+    }
+  }
+
+  /// Updates a bill record and prints a partial payment receipt
+  Future<void> _updateBillRecordAndPrint(
+    int index,
+    int? amountReceived,
+    int? cratesReceived,
+    List<CreditHistory> billHistory,
+  ) async {
+    if (!_isValidIndex(index, billHistory)) return;
+
+    setState(() => _editingIndex = index);
+
+    final bill = billHistory[index];
+    final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
+    final totalCrates = BillingCalculations.calculateTotalCrates(bill.products);
+
+    // Calculate new amount due
+    int? newAmountDue;
+    bool? isPaid;
+    bool isFullyPaid = false;
+    if (amountReceived != null && amountReceived > 0) {
+      if (amountReceived >= bill.amountDue) {
+        newAmountDue = 0;
+        isPaid = true;
+        isFullyPaid = true;
+      } else {
+        newAmountDue = bill.amountDue - amountReceived;
+        isPaid = false;
+      }
+    }
+
+    // Calculate new crates due
+    int? newCratesDue;
+    bool isAllCratesReturned = false;
+    if (cratesReceived != null && cratesReceived > 0) {
+      if (cratesReceived >= bill.cratesDue) {
+        newCratesDue = 0;
+        isAllCratesReturned = true;
+      } else {
+        newCratesDue = bill.cratesDue - cratesReceived;
+      }
+    }
+
+    // Get salesman identifier from shared preferences
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+      setState(() => _editingIndex = null);
+      _showErrorSnackBar('Salesman identifier not found. Please log in again.');
+      return;
+    }
+
+    // Check if both amount and crates are fully cleared
+    final wasAmountFullyPaid =
+        isFullyPaid || (bill.isPaid && bill.amountDue == grandTotal);
+    final wereCratesFullyReturned = isAllCratesReturned || bill.cratesDue == 0;
+
+    if (wasAmountFullyPaid && wereCratesFullyReturned) {
+      // Convert to SaleHistory
+      final saleHistory = SaleHistory(
+        billId: bill.billId,
+        customerName: bill.customerName,
+        date: bill.date,
+        products: bill.products,
+        discount: bill.discount,
+      );
+
+      // Save to sale history
+      final saleProvider = SaleProvider();
+      final savedAsSale = await saleProvider.saveSaleFromCreditConversion(
+        saleHistory,
+        salesmanIdentifier,
+      );
+
+      if (!savedAsSale) {
+        setState(() => _editingIndex = null);
+        _showErrorSnackBar(
+          'Failed to save as sale history. Operation cancelled.',
+        );
+        return;
+      }
+
+      // Update dashboard
+      final today = DateTime.now();
+      final billDate = bill.date;
+      final isTodaysBill =
+          billDate.year == today.year &&
+          billDate.month == today.month &&
+          billDate.day == today.day;
+
+      if (isTodaysBill) {
+        final dashboardRepo = DashboardRepository();
+        await dashboardRepo.updateSummaryOnPartialPayment(
+          salesmanName: salesmanIdentifier,
+          date: bill.date,
+          cashReceived: amountReceived,
+          cratesReceived: cratesReceived,
+          isPaidBill: bill.isPaid,
+        );
+
+        await dashboardRepo.updateSummaryOnCreditToSale(
+          salesmanName: salesmanIdentifier,
+          date: bill.date,
+          amountDue: newAmountDue ?? 0,
+          cratesDue: newCratesDue ?? 0,
+          isPaidBill: bill.isPaid,
+        );
+      }
+
+      // Delete from credit history
+      final deletedFromCredit = await _creditProvider.deleteCreditRecord(
+        billId: bill.billId,
+        salesmanName: salesmanIdentifier,
+      );
+
+      if (!deletedFromCredit) {
+        setState(() => _editingIndex = null);
+        _showErrorSnackBar('Failed to complete operation.');
+        return;
+      }
+
+      // Print receipt
+      if (amountReceived != null && amountReceived > 0 ||
+          cratesReceived != null && cratesReceived > 0) {
+        final printResult = await BillPrinter.printPartialPaymentReceipt(
+          billId: bill.billId,
+          customerName: bill.customerName,
+          originalBillDate: bill.date,
+          billTotal: grandTotal,
+          amountDue: bill.amountDue,
+          amountReceived: amountReceived ?? 0,
+          totalCrates: totalCrates,
+          cratesDue: bill.cratesDue,
+          cratesReceived: cratesReceived ?? 0,
+        );
+
+        if (printResult.success) {
+          _showCompletionSnackBar(bill.customerName);
+        } else {
+          CustomSnackBar.show(
+            context,
+            message:
+                'Bill completed but print failed: ${printResult.errorMessage}',
+            type: SnackBarType.warning,
+          );
+        }
+      } else {
+        _showCompletionSnackBar(bill.customerName);
+      }
+
+      setState(() => _editingIndex = null);
+    } else {
+      // Update credit balance
+      final updated = await _creditProvider.updateCreditBalance(
+        salesmanName: salesmanIdentifier,
+        credit: bill,
+        newAmountDue: newAmountDue,
+        newCratesDue: newCratesDue,
+        isPaid: isPaid,
+      );
+
+      if (!updated) {
+        setState(() => _editingIndex = null);
+        _showErrorSnackBar('Failed to update credit record.');
+        return;
+      }
+
+      // Update dashboard
+      final today = DateTime.now();
+      final billDate = bill.date;
+      final isTodaysBill =
+          billDate.year == today.year &&
+          billDate.month == today.month &&
+          billDate.day == today.day;
+
+      if (isTodaysBill) {
+        final dashboardRepo = DashboardRepository();
+        await dashboardRepo.updateSummaryOnPartialPayment(
+          salesmanName: salesmanIdentifier,
+          date: bill.date,
+          cashReceived: amountReceived,
+          cratesReceived: cratesReceived,
+          isPaidBill: bill.isPaid,
+        );
+      }
+
+      // Print receipt
+      final printResult = await BillPrinter.printPartialPaymentReceipt(
+        billId: bill.billId,
+        customerName: bill.customerName,
+        originalBillDate: bill.date,
+        billTotal: grandTotal,
+        amountDue: bill.amountDue,
+        amountReceived: amountReceived ?? 0,
+        totalCrates: totalCrates,
+        cratesDue: bill.cratesDue,
+        cratesReceived: cratesReceived ?? 0,
+      );
+
+      if (printResult.success) {
+        _showUpdateSnackBar(amountReceived, cratesReceived);
+      } else {
+        CustomSnackBar.show(
+          context,
+          message: 'Updated but print failed: ${printResult.errorMessage}',
+          type: SnackBarType.warning,
+        );
       }
 
       setState(() => _editingIndex = null);
@@ -941,8 +1271,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     final isEditLoading = _editingIndex == index;
     final isCompletingLoading = _completingIndex == index;
     final isDeletingLoading = _deletingIndex == index;
+    final isPrintingLoading = _printingIndex == index;
     final isAnyLoading =
-        isEditLoading || isCompletingLoading || isDeletingLoading;
+        isEditLoading ||
+        isCompletingLoading ||
+        isDeletingLoading ||
+        isPrintingLoading;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1026,60 +1360,85 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           ],
         ),
         const SizedBox(height: 8),
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: isAnyLoading
-                ? null
-                : () => _showCompleteConfirmation(index, billHistory),
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: 88, // Match width of two buttons + spacing
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(
-                  alpha: isAnyLoading ? 0.05 : 0.1,
-                ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Complete button (checkmark only, no "Paid" text)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: isAnyLoading
+                    ? null
+                    : () => _showCompleteConfirmation(index, billHistory),
                 borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: isCompletingLoading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.green,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(
+                      alpha: isAnyLoading ? 0.05 : 0.1,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: isCompletingLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.green,
+                            ),
                           ),
+                        )
+                      : Icon(
+                          Icons.check_circle,
+                          color: Colors.green.withValues(
+                            alpha: isAnyLoading ? 0.4 : 1.0,
+                          ),
+                          size: 20,
                         ),
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.green.withValues(
-                              alpha: isAnyLoading ? 0.4 : 1.0,
-                            ),
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Paid',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.green.withValues(
-                                alpha: isAnyLoading ? 0.4 : 1.0,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            // Print Receipt button
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: isAnyLoading
+                    ? null
+                    : () => _markBillCompleteAndPrint(index, billHistory),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(
+                      alpha: isAnyLoading ? 0.05 : 0.1,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: isPrintingLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.orange,
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.receipt_long,
+                          color: Colors.orange.withValues(
+                            alpha: isAnyLoading ? 0.4 : 1.0,
+                          ),
+                          size: 20,
+                        ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1810,67 +2169,114 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     bool hasEditableFields,
     List<CreditHistory> billHistory,
   ) {
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: SizedBox(
-            height: 48,
-            child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.gray300, width: 1.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: Text(
-                'Cancel',
-                style: AppTextStyles.smallButton.copyWith(
-                  color: AppColors.gray500,
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: AppColors.gray300,
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: AppTextStyles.smallButton.copyWith(
+                      color: AppColors.gray500,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              onPressed: hasEditableFields
-                  ? () {
-                      final amountReceived = int.tryParse(
-                        _amountController.text,
-                      );
-                      final cratesReceived = int.tryParse(
-                        _cratesController.text,
-                      );
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: hasEditableFields
+                      ? () {
+                          final amountReceived = int.tryParse(
+                            _amountController.text,
+                          );
+                          final cratesReceived = int.tryParse(
+                            _cratesController.text,
+                          );
 
-                      if ((amountReceived != null && amountReceived > 0) ||
-                          (cratesReceived != null && cratesReceived > 0)) {
-                        Navigator.pop(context);
-                        _updateBillRecord(
-                          index,
-                          amountReceived,
-                          cratesReceived,
-                          billHistory,
-                        );
-                      }
-                    }
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.pepsiBlueLight,
-                foregroundColor: AppColors.pepsiWhite,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                          if ((amountReceived != null && amountReceived > 0) ||
+                              (cratesReceived != null && cratesReceived > 0)) {
+                            Navigator.pop(context);
+                            _updateBillRecord(
+                              index,
+                              amountReceived,
+                              cratesReceived,
+                              billHistory,
+                            );
+                          }
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.pepsiBlueLight,
+                    foregroundColor: AppColors.pepsiWhite,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Update',
+                    style: AppTextStyles.smallButton.copyWith(
+                      color: AppColors.pepsiWhite,
+                    ),
+                  ),
                 ),
-                elevation: 0,
               ),
-              child: Text(
-                'Update',
-                style: AppTextStyles.smallButton.copyWith(
-                  color: AppColors.pepsiWhite,
-                ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            onPressed: hasEditableFields
+                ? () {
+                    final amountReceived = int.tryParse(_amountController.text);
+                    final cratesReceived = int.tryParse(_cratesController.text);
+
+                    if ((amountReceived != null && amountReceived > 0) ||
+                        (cratesReceived != null && cratesReceived > 0)) {
+                      Navigator.pop(context);
+                      _updateBillRecordAndPrint(
+                        index,
+                        amountReceived,
+                        cratesReceived,
+                        billHistory,
+                      );
+                    }
+                  }
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.pepsiBlueLight,
+              foregroundColor: AppColors.pepsiWhite,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.receipt_long, size: 20),
+            label: Text(
+              'Update & Print Receipt',
+              style: AppTextStyles.smallButton.copyWith(
+                color: AppColors.pepsiWhite,
               ),
             ),
           ),

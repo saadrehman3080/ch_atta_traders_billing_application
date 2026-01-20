@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
+import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
@@ -9,9 +10,11 @@ import 'package:intl/intl.dart';
 /// and provide a clean API for the ViewModel layer.
 class SaleRepository {
   final FirebaseFirestore _firestore;
+  final DashboardSummaryService _dashboardService;
 
   SaleRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _dashboardService = DashboardSummaryService();
 
   /// Collection reference for daily sales
   static const String _collectionName = 'Daily Sales';
@@ -57,24 +60,18 @@ class SaleRepository {
             .collection(formattedDate)
             .doc(sale.billId);
 
-        // Reference to the dashboard summary document (separate collection)
-        final dashboardSummaryRef = _firestore
-            .collection('Dashboard Summary')
-            .doc(salesmanName)
-            .collection(formattedDate)
-            .doc('summary');
-
         // Save the sale document
         transaction.set(saleRef, sale.toJson());
 
-        // Update dashboard summary - CASH BILL: totalCollection, itemsSold, discount, customersServed
-        transaction.set(dashboardSummaryRef, {
-          'totalCollection': FieldValue.increment(totalAmount),
-          'totalItemsSold': FieldValue.increment(itemsSold),
-          'totalDiscount': FieldValue.increment(sale.discount),
-          'customersServed': FieldValue.increment(1),
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        // Update dashboard summary using centralized service
+        await _dashboardService.onSaleCreated(
+          salesmanName: salesmanName,
+          date: sale.date,
+          totalAmount: totalAmount,
+          itemsSold: itemsSold,
+          discount: sale.discount,
+          transaction: transaction,
+        );
       });
 
       debugPrint(

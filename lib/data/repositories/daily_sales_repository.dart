@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
+import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:intl/intl.dart';
 
 class DailySalesRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final DashboardSummaryService _dashboardService = DashboardSummaryService();
 
   /// Fetches all sales for a specific salesman and date
   /// Path: Daily Sales/{salesmanName}/{dd-MMM-yyyy}
@@ -72,44 +74,23 @@ class DailySalesRepository {
 
       await _firestore.doc(deleteHistoryPath).set(saleData);
 
-      // Update dashboard summary if sale is from today
-      final today = DateTime.now();
-      final saleDate = sale.date;
-      final isTodaysSale =
-          saleDate.year == today.year &&
-          saleDate.month == today.month &&
-          saleDate.day == today.day;
+      // Calculate totals for dashboard update
+      final grandTotal =
+          sale.products.fold<int>(0, (sum, p) => sum + (p.price * p.quantity)) -
+          sale.discount;
+      final itemsSold = sale.products.fold<int>(
+        0,
+        (sum, p) => sum + p.quantity,
+      );
 
-      if (isTodaysSale) {
-        final grandTotal =
-            sale.products.fold<int>(
-              0,
-              (sum, p) => sum + (p.price * p.quantity),
-            ) -
-            sale.discount;
-        final itemsSold = sale.products.fold<int>(
-          0,
-          (sum, p) => sum + p.quantity,
-        );
-        final totalCrates = sale.products
-            .where((product) => product.name.toUpperCase().endsWith('RB'))
-            .fold<int>(0, (sum, p) => sum + p.quantity);
-
-        final dashboardSummaryRef = _firestore
-            .collection('Dashboard Summary')
-            .doc(salesmanName)
-            .collection(formattedDate)
-            .doc('summary');
-
-        await dashboardSummaryRef.set({
-          'totalSales': FieldValue.increment(-grandTotal),
-          'totalItemsSold': FieldValue.increment(-itemsSold),
-          'totalDiscount': FieldValue.increment(-sale.discount),
-          'totalCratesOut': FieldValue.increment(-totalCrates),
-          'customersServed': FieldValue.increment(-1),
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+      // Update dashboard summary using centralized service
+      await _dashboardService.onSaleDeleted(
+        salesmanName: salesmanName,
+        date: sale.date,
+        totalAmount: grandTotal,
+        itemsSold: itemsSold,
+        discount: sale.discount,
+      );
 
       // Delete from sales history
       await _firestore
@@ -142,6 +123,11 @@ class DailySalesRepository {
           sale.products.fold<int>(0, (sum, p) => sum + (p.price * p.quantity)) -
           sale.discount;
 
+      final itemsSold = sale.products.fold<int>(
+        0,
+        (sum, p) => sum + p.quantity,
+      );
+
       // Create credit history record with:
       // - amountDue = grandTotal (full payment due)
       // - cratesDue = 0 (MT fully received)
@@ -165,41 +151,13 @@ class DailySalesRepository {
           .doc(sale.billId)
           .set(creditData);
 
-      // Update dashboard summary if sale is from today
-      final today = DateTime.now();
-      final saleDate = sale.date;
-      final isTodaysSale =
-          saleDate.year == today.year &&
-          saleDate.month == today.month &&
-          saleDate.day == today.day;
-
-      if (isTodaysSale) {
-        final itemsSold = sale.products.fold<int>(
-          0,
-          (sum, p) => sum + p.quantity,
-        );
-        final totalCrates = sale.products
-            .where((product) => product.name.toUpperCase().endsWith('RB'))
-            .fold<int>(0, (sum, p) => sum + p.quantity);
-
-        final dashboardSummaryRef = _firestore
-            .collection('Dashboard Summary')
-            .doc(salesmanName)
-            .collection(formattedDate)
-            .doc('summary');
-
-        await dashboardSummaryRef.set({
-          // Decrement sales
-          'totalSales': FieldValue.increment(-grandTotal),
-          'totalItemsSold': FieldValue.increment(-itemsSold),
-          'totalCratesOut': FieldValue.increment(-totalCrates),
-          // Increment credit (with 0 MT remaining since fully received)
-          'totalCredit': FieldValue.increment(grandTotal),
-          'totalMtRemaining': FieldValue.increment(0),
-          // customersServed stays the same (not incrementing or decrementing)
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+      // Update dashboard summary using centralized service
+      await _dashboardService.onSaleConvertedToCredit(
+        salesmanName: salesmanName,
+        date: sale.date,
+        totalAmount: grandTotal,
+        itemsSold: itemsSold,
+      );
 
       // Delete from sales history
       await _firestore

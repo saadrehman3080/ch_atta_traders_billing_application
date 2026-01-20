@@ -12,7 +12,7 @@
 
 *   Make Empty list icon consistant for sale and credit section.
 
-
+add the check to discount field the amount should not be entered grater then GT
 ************* DONE **************
 Remove the Keyborad first and then start the login Process.
 Block the landscape view.
