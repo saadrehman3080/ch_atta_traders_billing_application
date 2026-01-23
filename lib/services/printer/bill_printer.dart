@@ -236,23 +236,28 @@ class BillPrinter {
       }
 
       // Crates/Empty section
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('EMPTY/CRATES:\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      // Only show EMPTY/CRATES section if there are any crates to show
+      if ((totalCrates > 0) ||
+          (cratesReceived != null && cratesReceived > 0) ||
+          (previouslyReturnedCrates != null && previouslyReturnedCrates > 0)) {
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('EMPTY/CRATES:\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
-      // Show previously returned crates if any
-      if (previouslyReturnedCrates != null && previouslyReturnedCrates > 0) {
-        bytes.addAll(
-          'Previously Returned: $previouslyReturnedCrates\n'.codeUnits,
-        );
-        bytes.addAll('Crates Due:      ${cratesReceived ?? 0}\n'.codeUnits);
+        // Show previously returned crates if any
+        if (previouslyReturnedCrates != null && previouslyReturnedCrates > 0) {
+          bytes.addAll(
+            'Previously Returned: $previouslyReturnedCrates\n'.codeUnits,
+          );
+          bytes.addAll('Crates Due:      ${cratesReceived ?? 0}\n'.codeUnits);
+        }
+
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('Returned Now:    ${cratesReceived ?? 0}\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll('Remaining:       0\n'.codeUnits);
+        bytes.addAll('\n'.codeUnits);
       }
-
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('Returned Now:    ${cratesReceived ?? 0}\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      bytes.addAll('Remaining:       0\n'.codeUnits);
-      bytes.addAll('\n'.codeUnits);
 
       // Full payment confirmation - centered, bold
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align

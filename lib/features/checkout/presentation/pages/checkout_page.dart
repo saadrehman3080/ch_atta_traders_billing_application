@@ -979,7 +979,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return InputDecoration(
       filled: true,
       fillColor: Colors.white,
-      hintText: "Customer Name *",
+      hintText: "Customer Name",
       hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
       prefixIcon: const Icon(Icons.person_outline, size: 20),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

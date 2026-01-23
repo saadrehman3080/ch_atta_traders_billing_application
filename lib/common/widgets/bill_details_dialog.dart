@@ -59,6 +59,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
   }
 
   Future<void> _printBill() async {
+    Navigator.of(context).pop();
     setState(() {
       _isPrinting = true;
     });
@@ -124,6 +125,9 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
       widget.bill.products,
     );
     final grandTotal = BillingCalculations.calculateGrandTotal(
+      widget.bill.products,
+    );
+    final totalCrates = BillingCalculations.calculateTotalCrates(
       widget.bill.products,
     );
 
@@ -263,6 +267,26 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                         ),
                       ],
                     ),
+                    if (totalCrates > 0) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total Crates',
+                            style: AppTextStyles.inputText.copyWith(
+                              color: AppColors.gray500,
+                            ),
+                          ),
+                          Text(
+                            '$totalCrates',
+                            style: AppTextStyles.productItemTotal.copyWith(
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 12),
 
                     // Grand Total (or Subtotal if discount exists)
