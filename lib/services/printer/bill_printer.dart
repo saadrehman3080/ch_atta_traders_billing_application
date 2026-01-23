@@ -106,6 +106,10 @@ class BillPrinter {
     required String salesmanName,
     required List<Product> products,
     required int discount,
+    int? previouslyPaid, // Amount already paid before this payment
+    int? cratesReceived, // Crates returned with this payment
+    int?
+    previouslyReturnedCrates, // Crates already returned before this payment
   }) async {
     try {
       // Check if printer is connected
@@ -137,7 +141,7 @@ class BillPrinter {
       // Header - centered
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('PAYMENT RECEIPT\n'.codeUnits);
+      bytes.addAll('PAYMENT RECEIVED\n'.codeUnits);
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\n'.codeUnits);
 
@@ -194,26 +198,66 @@ class BillPrinter {
           'Discount:        - Rs.${formatCashAmount(discount)}\n'.codeUnits,
         );
       }
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll(
-        'Net Amount:      Rs.${formatCashAmount(netAmount)}\n'.codeUnits,
-      );
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      if (grandTotal != netAmount) {
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll(
+          'Net Amount:      Rs.${formatCashAmount(netAmount)}\n'.codeUnits,
+        );
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      }
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Payment section
+      // Only show payment section if the bill is not already fully paid (i.e., amountReceived > 0 or previouslyPaid < netAmount)
+      if ((amountReceived > 0) ||
+          (previouslyPaid != null && previouslyPaid < netAmount)) {
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('PAYMENT DETAILS:\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+
+        // Show previously paid if there was a prior payment
+        if (previouslyPaid != null && previouslyPaid > 0) {
+          bytes.addAll(
+            'Previously Paid: Rs.${formatCashAmount(previouslyPaid)}\n'
+                .codeUnits,
+          );
+          bytes.addAll(
+            'Amount Due:      Rs.${formatCashAmount(amountReceived)}\n'
+                .codeUnits,
+          );
+        }
+
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll(
+          'Received Now:    Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
+        );
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll('Remaining:       Rs.0\n'.codeUnits);
+        bytes.addAll('--------------------------------\n'.codeUnits);
+      }
+
+      // Crates/Empty section
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('PAYMENT RECEIVED:\n'.codeUnits);
+      bytes.addAll('EMPTY/CRATES:\n'.codeUnits);
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      bytes.addAll(
-        'Amount:          Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
-      );
+
+      // Show previously returned crates if any
+      if (previouslyReturnedCrates != null && previouslyReturnedCrates > 0) {
+        bytes.addAll(
+          'Previously Returned: $previouslyReturnedCrates\n'.codeUnits,
+        );
+        bytes.addAll('Crates Due:      ${cratesReceived ?? 0}\n'.codeUnits);
+      }
+
+      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+      bytes.addAll('Returned Now:    ${cratesReceived ?? 0}\n'.codeUnits);
+      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      bytes.addAll('Remaining:       0\n'.codeUnits);
       bytes.addAll('\n'.codeUnits);
 
       // Full payment confirmation - centered, bold
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('ALL DUES CLEARED\n'.codeUnits);
+      bytes.addAll('** BILL CLEARED **\n'.codeUnits);
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
       bytes.addAll('\n'.codeUnits);

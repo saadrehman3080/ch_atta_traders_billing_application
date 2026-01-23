@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
+import 'package:flutter/foundation.dart';
 
 class CreditRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -15,15 +16,15 @@ class CreditRepository {
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
       final formattedDate = DateFormatters.formatForFirebase(credit.date);
 
-      print('Saving credit to Firestore...');
-      print('Salesman: $salesmanName');
-      print('Date: $formattedDate');
-      print('Bill ID: ${credit.billId}');
+      debugPrint('Saving credit to Firestore...');
+      debugPrint('Salesman: $salesmanName');
+      debugPrint('Date: $formattedDate');
+      debugPrint('Bill ID: ${credit.billId}');
 
       // Calculate totals for dashboard
       final itemsSold = credit.products.fold<int>(
         0,
-        (sum, product) => sum + product.quantity,
+        (total, product) => total + product.quantity,
       );
 
       // Use cratesDue directly from credit:
@@ -57,9 +58,9 @@ class CreditRepository {
         );
       });
 
-      print('Credit and dashboard summary saved successfully!');
+      debugPrint('Credit and dashboard summary saved successfully!');
     } catch (e) {
-      print('Error saving credit: $e');
+      debugPrint('Error saving credit: $e');
       rethrow;
     }
   }
@@ -72,10 +73,10 @@ class CreditRepository {
     required String billId,
   }) async {
     try {
-      print('Fetching credit from Firestore...');
-      print('Salesman: $salesmanName');
-      print('Date: $date');
-      print('Bill ID: $billId');
+      debugPrint('Fetching credit from Firestore...');
+      debugPrint('Salesman: $salesmanName');
+      debugPrint('Date: $date');
+      debugPrint('Bill ID: $billId');
 
       final docSnapshot = await _firestore
           .collection('Credit History')
@@ -85,14 +86,14 @@ class CreditRepository {
           .get();
 
       if (!docSnapshot.exists) {
-        print('Credit record not found');
+        debugPrint('Credit record not found');
         return null;
       }
 
-      print('Credit fetched successfully!');
+      debugPrint('Credit fetched successfully!');
       return CreditHistory.fromJson(docSnapshot.data()!);
     } catch (e) {
-      print('Error fetching credit: $e');
+      debugPrint('Error fetching credit: $e');
       rethrow;
     }
   }
@@ -104,9 +105,9 @@ class CreditRepository {
     required String date,
   }) async {
     try {
-      print('Fetching credits from Firestore...');
-      print('Salesman: $salesmanName');
-      print('Date: $date');
+      debugPrint('Fetching credits from Firestore...');
+      debugPrint('Salesman: $salesmanName');
+      debugPrint('Date: $date');
 
       final querySnapshot = await _firestore
           .collection('Credit History')
@@ -115,16 +116,16 @@ class CreditRepository {
           .get();
 
       if (querySnapshot.docs.isEmpty) {
-        print('No credit records found');
+        debugPrint('No credit records found');
         return [];
       }
 
-      print('Fetched ${querySnapshot.docs.length} credit records');
+      debugPrint('Fetched ${querySnapshot.docs.length} credit records');
       return querySnapshot.docs
           .map((doc) => CreditHistory.fromJson(doc.data()))
           .toList();
     } catch (e) {
-      print('Error fetching credits: $e');
+      debugPrint('Error fetching credits: $e');
       rethrow;
     }
   }
@@ -137,8 +138,8 @@ class CreditRepository {
     required List<String> dates,
   }) async {
     try {
-      print('Fetching all credits for salesman: $salesmanName');
-      print('Dates to query: $dates');
+      debugPrint('Fetching all credits for salesman: $salesmanName');
+      debugPrint('Dates to query: $dates');
 
       List<CreditHistory> allCredits = [];
 
@@ -156,10 +157,10 @@ class CreditRepository {
         allCredits.addAll(credits);
       }
 
-      print('Fetched ${allCredits.length} total credit records');
+      debugPrint('Fetched ${allCredits.length} total credit records');
       return allCredits;
     } catch (e) {
-      print('Error fetching all credits: $e');
+      debugPrint('Error fetching all credits: $e');
       rethrow;
     }
   }
@@ -171,7 +172,7 @@ class CreditRepository {
     required CreditHistory credit,
   }) async {
     try {
-      print('Updating credit in Firestore...');
+      debugPrint('Updating credit in Firestore...');
 
       await _firestore
           .collection('Credit History')
@@ -180,9 +181,9 @@ class CreditRepository {
           .doc(credit.billId)
           .update(credit.toJson());
 
-      print('Credit updated successfully!');
+      debugPrint('Credit updated successfully!');
     } catch (e) {
-      print('Error updating credit: $e');
+      debugPrint('Error updating credit: $e');
       rethrow;
     }
   }
@@ -241,30 +242,30 @@ class CreditRepository {
     bool? isPaid,
   }) async {
     try {
-      print('Updating credit balance in Firestore...');
-      print('Salesman: $salesmanName');
-      print('Date: $date');
-      print('Bill ID: $billId');
+      debugPrint('Updating credit balance in Firestore...');
+      debugPrint('Salesman: $salesmanName');
+      debugPrint('Date: $date');
+      debugPrint('Bill ID: $billId');
 
       final Map<String, dynamic> updates = {};
 
       if (newAmountDue != null) {
         updates['amountDue'] = newAmountDue;
-        print('New amountDue: $newAmountDue');
+        debugPrint('New amountDue: $newAmountDue');
       }
 
       if (newCratesDue != null) {
         updates['cratesDue'] = newCratesDue;
-        print('New cratesDue: $newCratesDue');
+        debugPrint('New cratesDue: $newCratesDue');
       }
 
       if (isPaid != null) {
         updates['isPaid'] = isPaid;
-        print('New isPaid: $isPaid');
+        debugPrint('New isPaid: $isPaid');
       }
 
       if (updates.isEmpty) {
-        print('No updates to apply');
+        debugPrint('No updates to apply');
         return;
       }
 
@@ -275,9 +276,9 @@ class CreditRepository {
           .doc(billId)
           .update(updates);
 
-      print('Credit balance updated successfully!');
+      debugPrint('Credit balance updated successfully!');
     } catch (e) {
-      print('Error updating credit balance: $e');
+      debugPrint('Error updating credit balance: $e');
       rethrow;
     }
   }

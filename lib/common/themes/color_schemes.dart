@@ -67,13 +67,4 @@ class AppColors {
   static const Color iconIndicatorColor = Color(
     0x99000000,
   ); // Black with 60% opacity
-
-  // Legacy (kept for compatibility)
-  static const Color blueDark = Color(0xFF0F2FAB);
-  static const Color blueLight = Color(0xFF2D51DF);
-  static const Color loginCard = Color.fromARGB(255, 92, 124, 165);
-  static const Color cardBg = Color(0x331E3A8A);
-  static const Color inputBg2 = Color(0x221E40AF);
-  static const Color inputBorder2 = Color(0x553B82F6);
-  static const Color errorText = Color(0xFFF87171);
 }

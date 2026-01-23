@@ -2,6 +2,8 @@ import 'package:ch_atta_traders_billing_application/features/auth/presentation/l
 import 'package:ch_atta_traders_billing_application/features/home/presentation/home_screen.dart';
 import 'package:go_router/go_router.dart';
 
+/// Application router configuration using GoRouter.
+/// Defines all navigation routes for the CH Atta Traders Billing Application.
 final appRouter = GoRouter(
   routes: [
     GoRoute(
@@ -16,18 +18,3 @@ final appRouter = GoRouter(
     ),
   ],
 );
-
-// final appRouter = GoRouter(
-//   routes: [
-//     GoRoute(
-//       path: '/',
-//       name: 'Home',
-//       builder: (context, state) => const HomeScreen(),
-//     ),
-//     GoRoute(
-//       path: '/loginScreen',
-//       name: 'loginScreen',
-//       builder: (context, state) => const LoginScreen(),
-//     ),
-//   ],
-// );

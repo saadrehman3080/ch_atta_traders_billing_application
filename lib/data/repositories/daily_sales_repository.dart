@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
+import 'package:flutter/foundation.dart';
 
 class DailySalesRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -17,9 +18,9 @@ class DailySalesRepository {
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
       final formattedDate = DateFormatters.formatForFirebase(date);
 
-      print('Fetching daily sales from Firestore...');
-      print('Salesman: $salesmanName');
-      print('Date: $formattedDate');
+      debugPrint('Fetching daily sales from Firestore...');
+      debugPrint('Salesman: $salesmanName');
+      debugPrint('Date: $formattedDate');
 
       // Get all documents in the date subcollection
       final snapshot = await _firestore
@@ -28,7 +29,7 @@ class DailySalesRepository {
           .collection(formattedDate)
           .get();
 
-      print('Found ${snapshot.docs.length} sales');
+      debugPrint('Found ${snapshot.docs.length} sales');
 
       // Convert documents to SaleHistory objects
       final sales = snapshot.docs
@@ -40,7 +41,7 @@ class DailySalesRepository {
 
       return sales;
     } catch (e) {
-      print('Error fetching daily sales: $e');
+      debugPrint('Error fetching daily sales: $e');
       rethrow;
     }
   }
@@ -75,11 +76,14 @@ class DailySalesRepository {
 
       // Calculate totals for dashboard update
       final grandTotal =
-          sale.products.fold<int>(0, (sum, p) => sum + (p.price * p.quantity)) -
+          sale.products.fold<int>(
+            0,
+            (total, p) => total + (p.price * p.quantity),
+          ) -
           sale.discount;
       final itemsSold = sale.products.fold<int>(
         0,
-        (sum, p) => sum + p.quantity,
+        (total, p) => total + p.quantity,
       );
 
       // Update dashboard summary using centralized service
@@ -99,9 +103,9 @@ class DailySalesRepository {
           .doc(sale.billId)
           .delete();
 
-      print('Sale deleted successfully');
+      debugPrint('Sale deleted successfully');
     } catch (e) {
-      print('Error deleting sale: $e');
+      debugPrint('Error deleting sale: $e');
       rethrow;
     }
   }
@@ -118,12 +122,15 @@ class DailySalesRepository {
 
       // Calculate grand total for amountDue
       final grandTotal =
-          sale.products.fold<int>(0, (sum, p) => sum + (p.price * p.quantity)) -
+          sale.products.fold<int>(
+            0,
+            (total, p) => total + (p.price * p.quantity),
+          ) -
           sale.discount;
 
       final itemsSold = sale.products.fold<int>(
         0,
-        (sum, p) => sum + p.quantity,
+        (total, p) => total + p.quantity,
       );
 
       // Create credit history record with:
@@ -165,9 +172,9 @@ class DailySalesRepository {
           .doc(sale.billId)
           .delete();
 
-      print('Sale converted to credit successfully');
+      debugPrint('Sale converted to credit successfully');
     } catch (e) {
-      print('Error converting sale to credit: $e');
+      debugPrint('Error converting sale to credit: $e');
       rethrow;
     }
   }

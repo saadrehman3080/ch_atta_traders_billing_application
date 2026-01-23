@@ -355,10 +355,10 @@ class _DailySalePageState extends State<DailySalePage> {
     final bool isCreditBill = sale.billType == BillType.credit;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppColors.pepsiWhite,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
 
         border: Border.all(color: AppColors.gray300, width: 1.5),
         boxShadow: [

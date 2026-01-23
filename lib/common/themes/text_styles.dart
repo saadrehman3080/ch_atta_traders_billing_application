@@ -112,14 +112,4 @@ class AppTextStyles {
     fontWeight: FontWeight.w600,
     color: Colors.black,
   );
-
-  // Legacy aliases for backward compatibility
-  static final title = pageTitle;
-  static final subtitle = pageSubtitle;
-  static final credentialsHeading = fieldLabel;
-  static final label = fieldLabel;
-  static final input = inputText;
-  static final button = smallButton;
-  static final footer = footerText;
-  static final loginButtonText = buttonLabel;
 }

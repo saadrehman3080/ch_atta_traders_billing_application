@@ -42,13 +42,13 @@ class SaleRepository {
       final totalAmount =
           sale.products.fold<int>(
             0,
-            (sum, product) => sum + (product.price * product.quantity),
+            (total, product) => total + (product.price * product.quantity),
           ) -
           sale.discount;
 
       final itemsSold = sale.products.fold<int>(
         0,
-        (sum, product) => sum + product.quantity,
+        (total, product) => total + product.quantity,
       );
 
       // Use transaction to atomically update both bill and dashboard summary

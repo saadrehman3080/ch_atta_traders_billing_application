@@ -15,6 +15,7 @@ import 'package:ch_atta_traders_billing_application/features/credit/providers/cr
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -39,17 +40,21 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   int? _deletingIndex;
   int? _printingIndex;
   bool _hasInternetConnection = true;
-  bool _isPrinterConnected = true; // Default to true, will be updated on check
+  late bool _isPrinterConnected;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  final PrinterService _printerService = PrinterService();
 
   @override
   void initState() {
     super.initState();
     _creditProvider = CreditHistoryProvider();
+    // Immediately use PrinterService state (synchronous - singleton already initialized)
+    _isPrinterConnected = _printerService.state.isConnected;
     _initConnectivity();
     _setupConnectivityListener();
-    _checkPrinterConnection();
-    // Listen to printer connection changes
+    // Listen to printer service changes (more reliable than PrinterConnectionService)
+    _printerService.addListener(_onPrinterStateChanged);
+    // Also listen to PrinterConnectionService as backup
     PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
   }
 
@@ -58,6 +63,15 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     if (mounted) {
       setState(() {
         _isPrinterConnected = PrinterConnectionService.instance.isConnected;
+      });
+    }
+  }
+
+  /// Called when printer service state changes
+  void _onPrinterStateChanged() {
+    if (mounted) {
+      setState(() {
+        _isPrinterConnected = _printerService.state.isConnected;
       });
     }
   }
@@ -124,6 +138,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     _cratesController.dispose();
     _creditProvider.dispose();
     _connectivitySubscription?.cancel();
+    _printerService.removeListener(_onPrinterStateChanged);
     PrinterConnectionService.instance.removeListener(
       _onPrinterConnectionChanged,
     );
@@ -297,6 +312,20 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     // This correctly handles cases where partial payments were already made
     final amountReceived = deletedBill.amountDue;
 
+    // Calculate previously paid amount (net amount - amount due)
+    final grandTotal = BillingCalculations.calculateGrandTotal(
+      deletedBill.products,
+    );
+    final netAmount = grandTotal - deletedBill.discount;
+    final previouslyPaid = netAmount - deletedBill.amountDue;
+
+    // Calculate crates information
+    final totalCrates = BillingCalculations.calculateTotalCrates(
+      deletedBill.products,
+    );
+    final cratesReceived = deletedBill.cratesDue; // Crates being returned now
+    final previouslyReturnedCrates = totalCrates - deletedBill.cratesDue;
+
     // Convert CreditHistory to SaleHistory
     final saleHistory = SaleHistory(
       billId: deletedBill.billId,
@@ -376,7 +405,16 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       salesmanName: salesmanIdentifier,
       products: deletedBill.products,
       discount: deletedBill.discount,
+      previouslyPaid: previouslyPaid > 0 ? previouslyPaid : null,
+      cratesReceived: cratesReceived,
+      previouslyReturnedCrates: previouslyReturnedCrates > 0
+          ? previouslyReturnedCrates
+          : null,
     );
+
+    if (!mounted) {
+      return;
+    }
 
     if (printResult.success) {
       _showCompletionSnackBar(deletedBill.customerName);
@@ -478,6 +516,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         salesmanName: salesmanIdentifier,
       );
 
+      if (!mounted) return;
+
       if (deletedFromCredit) {
         CustomSnackBar.show(
           context,
@@ -488,10 +528,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         _showErrorSnackBar('Failed to delete from credit records.');
       }
     } catch (e) {
-      _showErrorSnackBar('Error deleting bill: ${e.toString()}');
+      if (mounted) {
+        _showErrorSnackBar('Error deleting bill: ${e.toString()}');
+      }
     }
 
-    setState(() => _deletingIndex = null);
+    if (mounted) {
+      setState(() => _deletingIndex = null);
+    }
   }
 
   void _showCompleteConfirmation(int index, List<CreditHistory> billHistory) {
@@ -675,6 +719,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         billId: bill.billId,
         salesmanName: salesmanIdentifier,
       );
+
+      if (!mounted) return;
 
       if (deletedFromCredit) {
         CustomSnackBar.show(
@@ -884,6 +930,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           products: bill.products,
         );
 
+        if (!mounted) return;
+
         if (printResult.success) {
           _showCompletionSnackBar(bill.customerName);
         } else {
@@ -956,6 +1004,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         cratesReceived: cratesReceived ?? 0,
         products: bill.products,
       );
+
+      if (!mounted) return;
 
       if (printResult.success) {
         _showUpdateSnackBar(amountReceived, cratesReceived);
@@ -1239,19 +1289,21 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           ),
         ],
       ),
-      child: InkWell(
-        onTap: () => _showBillDetails(bill),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: _buildCardContent(bill)),
-              const SizedBox(width: 12),
-              _buildActionButtons(index, billHistory),
-            ],
-          ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () => _showBillDetails(bill),
+                borderRadius: BorderRadius.circular(8),
+                child: _buildCardContent(bill),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _buildActionButtons(index, billHistory),
+          ],
         ),
       ),
     );
@@ -1531,7 +1583,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(
+                    color: Colors.green.withValues(
                       alpha: (isAnyLoading || !_isPrinterConnected)
                           ? 0.05
                           : 0.1,
@@ -1545,13 +1597,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.orange,
+                              Colors.green,
                             ),
                           ),
                         )
                       : Icon(
                           Icons.receipt_long,
-                          color: Colors.orange.withValues(
+                          color: Colors.green.withValues(
                             alpha: (isAnyLoading || !_isPrinterConnected)
                                 ? 0.4
                                 : 1.0,

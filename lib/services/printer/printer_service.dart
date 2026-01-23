@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_state.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
 
 /// Service class to manage Bluetooth thermal printer operations
 ///
@@ -264,6 +265,10 @@ class PrinterService extends ChangeNotifier {
   /// Update state and notify listeners
   void _updateState(PrinterState newState) {
     _state = newState;
+    // Sync connection status with PrinterConnectionService
+    PrinterConnectionService.instance.updateConnectionStatus(
+      newState.isConnected,
+    );
     notifyListeners();
     debugPrint('[PrinterService] State updated: $_state');
   }

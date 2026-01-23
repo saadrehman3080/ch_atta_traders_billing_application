@@ -27,7 +27,7 @@ class AppTheme {
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: Colors.white, width: 1.5),
       ),
-      errorStyle: GoogleFonts.poppins(fontSize: 12, color: AppColors.errorText),
+      errorStyle: GoogleFonts.poppins(fontSize: 12, color: AppColors.pepsiRed),
     ),
 
     // Button theme

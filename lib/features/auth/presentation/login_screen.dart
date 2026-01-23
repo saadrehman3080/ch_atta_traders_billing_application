@@ -715,6 +715,8 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
         // Mark first login as completed
         await AppPreferences.instance.markLoginCompleted();
 
+        if (!mounted) return;
+
         // Show success message
         CustomSnackBar.show(
           context,
@@ -726,7 +728,9 @@ class _CredentialInputContainerState extends State<CredentialInputContainer> {
         context.go('/home');
       } else {
         // Show error from Firebase - invalid credentials (only show error widget, no snackbar)
-        setState(() => _showFirebaseError = true);
+        if (mounted) {
+          setState(() => _showFirebaseError = true);
+        }
       }
     } catch (e) {
       debugPrint('Login error: $e');
