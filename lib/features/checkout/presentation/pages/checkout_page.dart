@@ -7,6 +7,7 @@ import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
 import 'package:flutter/material.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:provider/provider.dart';
@@ -35,6 +36,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   late final CreditProvider _creditProvider;
   final _uuid = const Uuid();
   bool _hasCustomerName = false;
+  bool _isPrinterConnected = true; // Default to true, will be updated on check
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _discountController = TextEditingController();
@@ -45,6 +47,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   int _mt = 0;
   bool _isSaving = false;
   bool _isPrinting = false;
+  bool _isAnonymousCustomer = false; // When true, skip customer name on bill
 
   @override
   void initState() {
@@ -56,6 +59,27 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _mtController.addListener(_updateMt);
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
+    _checkPrinterConnection();
+    // Listen to printer connection changes
+    PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
+  }
+
+  /// Called when printer connection status changes
+  void _onPrinterConnectionChanged() {
+    if (mounted) {
+      setState(() {
+        _isPrinterConnected = PrinterConnectionService.instance.isConnected;
+      });
+    }
+  }
+
+  /// Check printer connection status using centralized service
+  Future<void> _checkPrinterConnection() async {
+    final isConnected = await PrinterConnectionService.instance
+        .checkConnection();
+    if (mounted) {
+      setState(() => _isPrinterConnected = isConnected);
+    }
   }
 
   @override
@@ -70,6 +94,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _mtController.dispose();
     _saleProvider.dispose();
     _creditProvider.dispose();
+    PrinterConnectionService.instance.removeListener(
+      _onPrinterConnectionChanged,
+    );
     super.dispose();
   }
 
@@ -115,8 +142,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
 
     final value = int.tryParse(text) ?? 0;
+    final grandTotalBeforeDiscount = BillingCalculations.calculateGrandTotal(
+      widget.products,
+    );
 
-    if (value < 0) {
+    if (value < 0 || value > grandTotalBeforeDiscount) {
       _discountController.text = '0';
       _discountController.selection = TextSelection.fromPosition(
         TextPosition(offset: _discountController.text.length),
@@ -265,12 +295,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
     // Determine if MT is collected
     final bool hasMt = _mtController.text.trim().isNotEmpty;
 
+    // Determine customer name: use entered name, or bill ID if anonymous with no name
+    final enteredName = _customerNameController.text.trim();
+    final customerNameForDb = enteredName.isNotEmpty ? enteredName : billId;
+
     // Save to Daily Sales only if: payment is cash AND MT is empty
     if (_paymentType == 'cash' && !hasMt) {
       // Create SaleHistory object
       final sale = SaleHistory(
         billId: billId,
-        customerName: _customerNameController.text.trim(),
+        customerName: customerNameForDb,
         date: DateTime.now(),
         products: _selectedProducts
             .map(
@@ -315,7 +349,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       final credit = CreditHistory(
         billId: billId,
-        customerName: _customerNameController.text.trim(),
+        customerName: customerNameForDb,
         date: DateTime.now(),
         products: _selectedProducts
             .map(
@@ -393,12 +427,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
     // Determine if MT is collected
     final bool hasMt = _mtController.text.trim().isNotEmpty;
 
+    // Determine customer name: use entered name, or bill ID if anonymous with no name
+    final enteredName = _customerNameController.text.trim();
+    final customerNameForDb = enteredName.isNotEmpty ? enteredName : billId;
+    // For printing: show name if entered, otherwise skip (empty) when anonymous
+    final customerNameForPrint = enteredName.isNotEmpty
+        ? enteredName
+        : (_isAnonymousCustomer ? '' : billId);
+
     // Save to Daily Sales only if: payment is cash AND MT is empty
     if (_paymentType == 'cash' && !hasMt) {
       // Create SaleHistory object
       final sale = SaleHistory(
         billId: billId,
-        customerName: _customerNameController.text.trim(),
+        customerName: customerNameForDb,
         date: DateTime.now(),
         products: _selectedProducts
             .map(
@@ -424,7 +466,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         // Print the bill
         await _printBill(
           billId: billId,
-          customerName: _customerNameController.text.trim(),
+          customerName: customerNameForPrint,
           date: DateTime.now(),
           products: _selectedProducts,
           discount: _discount,
@@ -463,7 +505,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       final credit = CreditHistory(
         billId: billId,
-        customerName: _customerNameController.text.trim(),
+        customerName: customerNameForDb,
         date: DateTime.now(),
         products: _selectedProducts
             .map(
@@ -496,7 +538,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         // Print the bill
         await _printBill(
           billId: billId,
-          customerName: _customerNameController.text.trim(),
+          customerName: customerNameForPrint,
           date: DateTime.now(),
           products: _selectedProducts,
           discount: _discount,
@@ -799,6 +841,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
         onSelectionChanged: (Set<String> newSelection) {
           setState(() {
             _paymentType = newSelection.first;
+            // Reset anonymous customer if switching to credit
+            if (_paymentType == 'credit') {
+              _isAnonymousCustomer = false;
+            }
           });
         },
         style: _buildSegmentedButtonStyle(),
@@ -846,26 +892,80 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildCustomerNameField() {
-    return Theme(
-      data: Theme.of(context).copyWith(
-        textSelectionTheme: const TextSelectionThemeData(
-          selectionHandleColor: AppColors.pepsiBlueLight,
-          selectionColor: AppColors.textSecondary,
-          cursorColor: AppColors.pepsiBlueLight,
+    return Row(
+      children: [
+        Expanded(
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              textSelectionTheme: const TextSelectionThemeData(
+                selectionHandleColor: AppColors.pepsiBlueLight,
+                selectionColor: AppColors.textSecondary,
+                cursorColor: AppColors.pepsiBlueLight,
+              ),
+            ),
+            child: TextField(
+              controller: _customerNameController,
+              style: AppTextStyles.inputText.copyWith(
+                color: Colors.black87,
+                fontSize: 14,
+              ),
+              cursorColor: AppColors.pepsiBlue,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (value) {
+                FocusScope.of(context).unfocus();
+              },
+              decoration: _buildCustomerFieldDecoration(),
+            ),
+          ),
         ),
-      ),
-      child: TextField(
-        controller: _customerNameController,
-        style: AppTextStyles.inputText.copyWith(
-          color: Colors.black87,
-          fontSize: 14,
+        const SizedBox(width: 8),
+        _buildAnonymousToggle(),
+      ],
+    );
+  }
+
+  Widget _buildAnonymousToggle() {
+    // Disable anonymous customer for credit payments (need customer name for tracking)
+    final isDisabled = _paymentType == 'credit';
+
+    return Tooltip(
+      message: isDisabled
+          ? 'Customer name required for credit'
+          : 'Skip Customer Name',
+      child: InkWell(
+        onTap: isDisabled
+            ? null
+            : () {
+                setState(() {
+                  _isAnonymousCustomer = !_isAnonymousCustomer;
+                });
+              },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: isDisabled
+                ? AppColors.gray100
+                : (_isAnonymousCustomer ? AppColors.pepsiBlue : Colors.white),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isDisabled
+                  ? AppColors.gray300
+                  : (_isAnonymousCustomer
+                        ? AppColors.pepsiBlue
+                        : AppColors.gray300),
+              width: 1,
+            ),
+          ),
+          child: Icon(
+            _isAnonymousCustomer ? Icons.person_off : Icons.person_off_outlined,
+            size: 22,
+            color: isDisabled
+                ? AppColors.gray400
+                : (_isAnonymousCustomer ? Colors.white : AppColors.gray500),
+          ),
         ),
-        cursorColor: AppColors.pepsiBlue,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (value) {
-          FocusScope.of(context).unfocus();
-        },
-        decoration: _buildCustomerFieldDecoration(),
       ),
     );
   }
@@ -986,6 +1086,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
         final isSaved =
             saleProvider.state == SaleState.saved ||
             creditProvider.state == CreditState.saved;
+        final hasValidCustomer = _hasCustomerName || _isAnonymousCustomer;
+        final canPrint =
+            hasValidCustomer &&
+            !isLoading &&
+            !_isSaving &&
+            !_isPrinting &&
+            _isPrinterConnected;
+        final canSave =
+            hasValidCustomer && !isLoading && !_isSaving && !_isPrinting;
 
         return Row(
           children: [
@@ -994,11 +1103,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               child: SizedBox(
                 height: 46,
                 child: ElevatedButton.icon(
-                  onPressed:
-                      (_hasCustomerName &&
-                          !isLoading &&
-                          !_isSaving &&
-                          !_isPrinting)
+                  onPressed: canPrint
                       ? () async {
                           FocusScope.of(context).unfocus();
                           await _handlePrintBill();
@@ -1020,17 +1125,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             ),
                           ),
                         )
-                      : const Icon(Icons.print, size: 20),
+                      : Icon(
+                          _isPrinterConnected
+                              ? Icons.print
+                              : Icons.print_disabled,
+                          size: 20,
+                        ),
                   label: Text(
-                    _isPrinting ? 'Saving & Printing...' : "Print Bill",
+                    _isPrinting
+                        ? 'Saving & Printing...'
+                        : (!_isPrinterConnected
+                              ? "Printer Not Connected"
+                              : "Print Bill"),
                     style: AppTextStyles.smallButton.copyWith(
-                      color:
-                          (_hasCustomerName &&
-                              !isLoading &&
-                              !_isSaving &&
-                              !_isPrinting)
-                          ? Colors.white
-                          : AppColors.gray500,
+                      color: canPrint ? Colors.white : AppColors.gray500,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1045,11 +1153,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               child: SizedBox(
                 height: 46,
                 child: ElevatedButton(
-                  onPressed:
-                      (_hasCustomerName &&
-                          !isLoading &&
-                          !_isSaving &&
-                          !_isPrinting)
+                  onPressed: canSave
                       ? () async {
                           FocusScope.of(context).unfocus();
                           await _handleSaveBill();
@@ -1083,28 +1187,28 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   ButtonStyle _buildPrintButtonStyle() {
+    final hasValidCustomer = _hasCustomerName || _isAnonymousCustomer;
+    final canEnable = hasValidCustomer && _isPrinterConnected;
     return ElevatedButton.styleFrom(
-      backgroundColor: _hasCustomerName
-          ? AppColors.pepsiBlue
-          : AppColors.gray300,
-      foregroundColor: _hasCustomerName ? Colors.white : AppColors.gray500,
+      backgroundColor: canEnable ? AppColors.pepsiBlue : AppColors.gray300,
+      foregroundColor: canEnable ? Colors.white : AppColors.gray500,
       disabledBackgroundColor: AppColors.gray300,
       disabledForegroundColor: AppColors.gray500,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      elevation: _hasCustomerName ? 2 : 0,
+      elevation: canEnable ? 2 : 0,
     );
   }
 
   ButtonStyle _buildSaveButtonStyle() {
+    final hasValidCustomer = _hasCustomerName || _isAnonymousCustomer;
+    final canEnable = hasValidCustomer;
     return ElevatedButton.styleFrom(
-      backgroundColor: _hasCustomerName
-          ? AppColors.pepsiBlue
-          : AppColors.gray300,
-      foregroundColor: _hasCustomerName ? Colors.white : AppColors.gray500,
+      backgroundColor: canEnable ? AppColors.pepsiBlue : AppColors.gray300,
+      foregroundColor: canEnable ? Colors.white : AppColors.gray500,
       disabledBackgroundColor: AppColors.gray300,
       disabledForegroundColor: AppColors.gray500,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      elevation: _hasCustomerName ? 2 : 0,
+      elevation: canEnable ? 2 : 0,
       padding: EdgeInsets.zero,
     );
   }

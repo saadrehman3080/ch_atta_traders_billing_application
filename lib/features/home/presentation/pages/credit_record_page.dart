@@ -12,6 +12,7 @@ import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -36,6 +37,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   int? _deletingIndex;
   int? _printingIndex;
   bool _hasInternetConnection = true;
+  bool _isPrinterConnected = true; // Default to true, will be updated on check
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -44,6 +46,27 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     _creditProvider = CreditHistoryProvider();
     _initConnectivity();
     _setupConnectivityListener();
+    _checkPrinterConnection();
+    // Listen to printer connection changes
+    PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
+  }
+
+  /// Called when printer connection status changes
+  void _onPrinterConnectionChanged() {
+    if (mounted) {
+      setState(() {
+        _isPrinterConnected = PrinterConnectionService.instance.isConnected;
+      });
+    }
+  }
+
+  /// Check printer connection status using centralized service
+  Future<void> _checkPrinterConnection() async {
+    final isConnected = await PrinterConnectionService.instance
+        .checkConnection();
+    if (mounted) {
+      setState(() => _isPrinterConnected = isConnected);
+    }
   }
 
   @override
@@ -53,6 +76,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     if (!_hasLoadedOnce || ModalRoute.of(context)?.isCurrent == true) {
       _hasLoadedOnce = true;
       _loadCredits();
+      _checkPrinterConnection(); // Recheck printer connection when page is active
     }
   }
 
@@ -98,6 +122,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     _cratesController.dispose();
     _creditProvider.dispose();
     _connectivitySubscription?.cancel();
+    PrinterConnectionService.instance.removeListener(
+      _onPrinterConnectionChanged,
+    );
     super.dispose();
   }
 
@@ -255,10 +282,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     }
 
     // Calculate amount received (grand total - discount)
-    final grandTotal = BillingCalculations.calculateGrandTotal(
-      deletedBill.products,
-    );
-    final amountReceived = grandTotal - deletedBill.discount;
+    // Amount received is the amount due (what was still owed), not the full bill amount
+    // This correctly handles cases where partial payments were already made
+    final amountReceived = deletedBill.amountDue;
 
     // Convert CreditHistory to SaleHistory
     final saleHistory = SaleHistory(
@@ -328,6 +354,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       originalBillDate: deletedBill.date,
       amountReceived: amountReceived,
       salesmanName: salesmanIdentifier,
+      products: deletedBill.products,
+      discount: deletedBill.discount,
     );
 
     if (printResult.success) {
@@ -455,6 +483,18 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
+  void _showFullPaymentConfirmation(
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
+    final bill = billHistory[index];
+    showDialog(
+      context: context,
+      builder: (context) =>
+          _buildFullPaymentConfirmationDialog(bill, index, billHistory),
+    );
+  }
+
   void _showDeleteConfirmation(int index, List<CreditHistory> billHistory) {
     final bill = billHistory[index];
     showDialog(
@@ -486,23 +526,24 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
     final bill = billHistory[index];
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
+    // Net total accounts for discount - this is what the customer actually owes
+    final netTotal = grandTotal - bill.discount;
 
     // Calculate new amount due
     int? newAmountDue;
     bool? isPaid;
     bool isFullyPaid = false;
     if (amountReceived != null && amountReceived > 0) {
-      final calculatedAmount = (bill.amountDue - amountReceived).clamp(
-        0,
-        bill.amountDue,
-      );
-      if (calculatedAmount == 0) {
-        // When fully paid, set amountDue to grandTotal and mark as paid
-        newAmountDue = grandTotal;
+      // Check if payment covers the remaining amount due
+      if (amountReceived >= bill.amountDue) {
+        // Fully paid - set amountDue to 0
+        newAmountDue = 0;
         isPaid = true;
         isFullyPaid = true;
       } else {
-        newAmountDue = calculatedAmount;
+        // Partial payment - subtract from current amountDue
+        newAmountDue = bill.amountDue - amountReceived;
+        isPaid = false;
       }
     }
 
@@ -529,8 +570,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     }
 
     // Check if both amount and crates are fully cleared
+    // Use netTotal (with discount) for comparison since amountDue was stored with discount applied
     final wasAmountFullyPaid =
-        isFullyPaid || (bill.isPaid && bill.amountDue == grandTotal);
+        isFullyPaid || (bill.isPaid && bill.amountDue == netTotal);
     final wereCratesFullyReturned = isAllCratesReturned || bill.cratesDue == 0;
 
     if (wasAmountFullyPaid && wereCratesFullyReturned) {
@@ -660,6 +702,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
     final bill = billHistory[index];
     final grandTotal = BillingCalculations.calculateGrandTotal(bill.products);
+    // Net total accounts for discount - this is what the customer actually owes
+    final netTotal = grandTotal - bill.discount;
     final totalCrates = BillingCalculations.calculateTotalCrates(bill.products);
 
     // Calculate new amount due
@@ -698,8 +742,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     }
 
     // Check if both amount and crates are fully cleared
+    // Use netTotal (with discount) for comparison since amountDue was stored with discount applied
     final wasAmountFullyPaid =
-        isFullyPaid || (bill.isPaid && bill.amountDue == grandTotal);
+        isFullyPaid || (bill.isPaid && bill.amountDue == netTotal);
     final wereCratesFullyReturned = isAllCratesReturned || bill.cratesDue == 0;
 
     if (wasAmountFullyPaid && wereCratesFullyReturned) {
@@ -737,19 +782,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
       if (isTodaysBill) {
         final dashboardRepo = DashboardRepository();
-        await dashboardRepo.updateSummaryOnPartialPayment(
-          salesmanName: salesmanIdentifier,
-          date: bill.date,
-          cashReceived: amountReceived,
-          cratesReceived: cratesReceived,
-          isPaidBill: bill.isPaid,
-        );
-
+        // Only call credit-to-sale conversion (which handles the full amount)
+        // Do NOT call partial payment update here to avoid double counting
         await dashboardRepo.updateSummaryOnCreditToSale(
           salesmanName: salesmanIdentifier,
           date: bill.date,
-          amountDue: newAmountDue ?? 0,
-          cratesDue: newCratesDue ?? 0,
+          amountDue: bill.amountDue, // Use ORIGINAL amountDue, not newAmountDue
+          cratesDue: bill.cratesDue, // Use ORIGINAL cratesDue, not newCratesDue
           isPaidBill: bill.isPaid,
         );
       }
@@ -773,12 +812,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           billId: bill.billId,
           customerName: bill.customerName,
           originalBillDate: bill.date,
-          billTotal: grandTotal,
+          billTotal: netTotal, // Use netTotal (with discount) for consistency
           amountDue: bill.amountDue,
           amountReceived: amountReceived ?? 0,
           totalCrates: totalCrates,
           cratesDue: bill.cratesDue,
           cratesReceived: cratesReceived ?? 0,
+          products: bill.products,
         );
 
         if (printResult.success) {
@@ -836,12 +876,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         billId: bill.billId,
         customerName: bill.customerName,
         originalBillDate: bill.date,
-        billTotal: grandTotal,
+        billTotal: netTotal, // Use netTotal (with discount) for consistency
         amountDue: bill.amountDue,
         amountReceived: amountReceived ?? 0,
         totalCrates: totalCrates,
         cratesDue: bill.cratesDue,
         cratesReceived: cratesReceived ?? 0,
+        products: bill.products,
       );
 
       if (printResult.success) {
@@ -1407,15 +1448,17 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: isAnyLoading
+                onTap: isAnyLoading || !_isPrinterConnected
                     ? null
-                    : () => _markBillCompleteAndPrint(index, billHistory),
+                    : () => _showFullPaymentConfirmation(index, billHistory),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: Colors.orange.withValues(
-                      alpha: isAnyLoading ? 0.05 : 0.1,
+                      alpha: (isAnyLoading || !_isPrinterConnected)
+                          ? 0.05
+                          : 0.1,
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -1433,7 +1476,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                       : Icon(
                           Icons.receipt_long,
                           color: Colors.orange.withValues(
-                            alpha: isAnyLoading ? 0.4 : 1.0,
+                            alpha: (isAnyLoading || !_isPrinterConnected)
+                                ? 0.4
+                                : 1.0,
                           ),
                           size: 20,
                         ),
@@ -1495,8 +1540,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   }
 
   Widget _buildCompleteMessage(String customerName) {
+    final formattedName = toTitleCase(customerName);
     return Text(
-      'Mark $customerName\'s bill as fully paid? This will move the record from credit to sales history.',
+      'Mark $formattedName\'s bill as fully paid? This will move the record from credit to sales history.',
       textAlign: TextAlign.center,
       style: AppTextStyles.helperText.copyWith(
         color: AppColors.gray500,
@@ -1561,6 +1607,107 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
+  Dialog _buildFullPaymentConfirmationDialog(
+    CreditHistory bill,
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
+    return Dialog(
+      backgroundColor: AppColors.pepsiWhite,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.receipt_long,
+                color: Colors.orange[700],
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Paid in Full?',
+              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Mark ${toTitleCase(bill.customerName)}\'s bill as fully paid and print receipt? This will move the record from credit to sales history.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.helperText.copyWith(
+                color: AppColors.gray500,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                          color: AppColors.gray300,
+                          width: 1.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: AppTextStyles.smallButton.copyWith(
+                          color: AppColors.gray500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _markBillCompleteAndPrint(index, billHistory);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange[600],
+                        foregroundColor: AppColors.pepsiWhite,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Print',
+                        style: AppTextStyles.smallButton.copyWith(
+                          color: AppColors.pepsiWhite,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Dialog _buildDeleteConfirmationDialog(
     CreditHistory bill,
     int index,
@@ -1612,8 +1759,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   }
 
   Widget _buildDeleteMessage(String customerName) {
+    final formattedName = toTitleCase(customerName);
     return Text(
-      'Permanently delete $customerName\'s bill? This will remove it from credit history and save it to delete history.',
+      'Permanently delete $formattedName\'s bill? This will remove it from credit history and save it to delete history.',
       textAlign: TextAlign.center,
       style: AppTextStyles.helperText.copyWith(
         color: AppColors.gray500,
@@ -2249,7 +2397,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           width: double.infinity,
           height: 48,
           child: ElevatedButton.icon(
-            onPressed: hasEditableFields
+            onPressed: (hasEditableFields && _isPrinterConnected)
                 ? () {
                     final amountReceived = int.tryParse(_amountController.text);
                     final cratesReceived = int.tryParse(_cratesController.text);
@@ -2267,18 +2415,34 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                   }
                 : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.pepsiBlueLight,
-              foregroundColor: AppColors.pepsiWhite,
+              backgroundColor: (hasEditableFields && _isPrinterConnected)
+                  ? AppColors.pepsiBlueLight
+                  : AppColors.gray300,
+              foregroundColor: (hasEditableFields && _isPrinterConnected)
+                  ? AppColors.pepsiWhite
+                  : AppColors.gray500,
+              disabledBackgroundColor: AppColors.gray300,
+              disabledForegroundColor: AppColors.gray500,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
               elevation: 0,
             ),
-            icon: const Icon(Icons.receipt_long, size: 20),
+            icon: Icon(
+              Icons.receipt_long,
+              size: 20,
+              color: (hasEditableFields && _isPrinterConnected)
+                  ? AppColors.pepsiWhite
+                  : AppColors.gray500,
+            ),
             label: Text(
-              'Update & Print Receipt',
+              _isPrinterConnected
+                  ? 'Update & Print Receipt'
+                  : 'Printer Not Connected',
               style: AppTextStyles.smallButton.copyWith(
-                color: AppColors.pepsiWhite,
+                color: (hasEditableFields && _isPrinterConnected)
+                    ? AppColors.pepsiWhite
+                    : AppColors.gray500,
               ),
             ),
           ),

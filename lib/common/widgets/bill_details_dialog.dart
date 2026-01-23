@@ -175,7 +175,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                toTitleCase(widget.bill.customerName),
+                                formatCustomerName(widget.bill.customerName),
                                 style: AppTextStyles.pageTitleBlack.copyWith(
                                   fontSize: 20,
                                 ),
@@ -426,7 +426,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
             ),
             const SizedBox(height: 4),
             Text(
-              truncateBillId(widget.bill.billId),
+              formatCustomerName(widget.bill.billId),
               style: AppTextStyles.helperText.copyWith(
                 color: AppColors.gray500,
               ),

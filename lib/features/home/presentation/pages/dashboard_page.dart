@@ -1101,12 +1101,15 @@ class _DashboardPageState extends State<DashboardPage>
             ),
           ),
           if (isCurrentlyConnecting)
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.pepsiBlue,
+            Padding(
+              padding: const EdgeInsets.only(right: 24.0),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.pepsiBlue,
+                ),
               ),
             )
           else

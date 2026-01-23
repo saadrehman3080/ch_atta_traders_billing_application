@@ -31,6 +31,22 @@ String toTitleCase(String text) {
       .join(' ');
 }
 
+/// Formats customer name - if it's a UUID (bill ID), shows first 8 characters with ellipsis,
+/// otherwise applies toTitleCase
+/// Example: "08bd292c-1d7c-4db3-be5e-9bdb7f8553d6" → "08bd292c......"
+/// Example: "saad ur rehman" → "Saad Ur Rehman"
+String formatCustomerName(String name, {int maxLength = 8}) {
+  // Check if name looks like a UUID (contains hyphens and is long)
+  final isUuid = name.contains('-') && name.length > 30;
+  if (isUuid) {
+    if (name.length <= maxLength) {
+      return name;
+    }
+    return 'Bill # ${name.substring(0, maxLength)}......';
+  }
+  return toTitleCase(name);
+}
+
 /// Formats a cash amount by adding commas as thousand separators.
 ///
 /// This method is used across the application to display

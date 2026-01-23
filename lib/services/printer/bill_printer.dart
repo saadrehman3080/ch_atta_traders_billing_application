@@ -22,6 +22,15 @@ class PrintResult {
 class BillPrinter {
   BillPrinter._();
 
+  /// List of Master products
+  static const List<String> _masterProducts = [
+    'Master Cola 1500ml',
+    'Master Cola 2250ml',
+    'Master Cola NR 300ml',
+    'Master Water 1500ml',
+    'Master Water 500ml',
+  ];
+
   /// List of Pepsi products
   static const List<String> _pepsiProducts = [
     'Pepsi 1500ml',
@@ -56,6 +65,35 @@ class BillPrinter {
     return true;
   }
 
+  /// Checks if all products are Master products
+  static bool _allProductsAreMaster(List<Product> products) {
+    for (final product in products) {
+      if (!_masterProducts.contains(product.name)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Returns the store name to display based on products
+  /// - "CH. ATTA TRADERS" if all products are Pepsi
+  /// - "CH. SAAD TRADERS" if all products are Master
+  /// - null if products are mixed or from other brands
+  static String? _getStoreName(List<Product> products) {
+    if (products.isEmpty) return null;
+    if (_allProductsArePepsi(products)) return 'CH. ATTA TRADERS';
+    if (_allProductsAreMaster(products)) return 'CH. SAAD TRADERS';
+    return null;
+  }
+
+  /// Returns the phone number for the store based on products
+  static String? _getStorePhone(List<Product> products) {
+    if (products.isEmpty) return null;
+    if (_allProductsArePepsi(products)) return '0309 2000948';
+    if (_allProductsAreMaster(products)) return '0331 5348202';
+    return null;
+  }
+
   /// Prints a payment receipt (without product details)
   ///
   /// This is used when marking a credit bill as complete to give customer
@@ -66,6 +104,8 @@ class BillPrinter {
     required DateTime originalBillDate,
     required int amountReceived,
     required String salesmanName,
+    required List<Product> products,
+    required int discount,
   }) async {
     try {
       // Check if printer is connected
@@ -78,11 +118,27 @@ class BillPrinter {
 
       List<int> bytes = [];
 
-      // Header - centered, large text
+      // Get store name and phone based on products
+      final storeName = _getStoreName(products);
+      final storePhone = _getStorePhone(products);
+
+      // Store name - centered, large text (only if all products are from same brand)
+      if (storeName != null) {
+        bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+        bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
+        bytes.addAll('$storeName\n'.codeUnits);
+        bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+        if (storePhone != null) {
+          bytes.addAll('$storePhone\n'.codeUnits);
+        }
+        bytes.addAll('\n'.codeUnits);
+      }
+
+      // Header - centered
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
+      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('PAYMENT RECEIPT\n'.codeUnits);
-      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\n'.codeUnits);
 
       // Separator
@@ -94,38 +150,72 @@ class BillPrinter {
       bytes.addAll('Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits);
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Bill Reference - centered heading
-      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('BILL REFERENCE\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      // Bill Reference - left aligned
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
-
       bytes.addAll('Bill ID: ${truncateBillId(billId)}\n'.codeUnits);
       final originalDateFormatter = DateFormat('dd MMM yyyy');
       bytes.addAll(
         'Bill Date: ${originalDateFormatter.format(originalBillDate)}\n'
             .codeUnits,
       );
-      bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Get salesman name from shared preferences
       final savedSalesmanName = await AppPreferences.instance.salesmanName;
       String displayName = savedSalesmanName ?? salesmanName;
 
       // Customer name
-      bytes.addAll('Customer: ${toTitleCase(customerName)}\n'.codeUnits);
+      final customerDisplay = customerName.isEmpty
+          ? 'Walk-In'
+          : toTitleCase(customerName);
+      bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 
       // Salesman name
       bytes.addAll('Received By: ${toTitleCase(displayName)}\n'.codeUnits);
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Amount received - bold (normal size)
+      // Calculate totals
+      final totalItems = BillingCalculations.calculateTotalItems(products);
+      final totalCrates = BillingCalculations.calculateTotalCrates(products);
+      final grandTotal = BillingCalculations.calculateGrandTotal(products);
+      final netAmount = grandTotal - discount;
+
+      // Bill summary section
+      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+      bytes.addAll('BILL SUMMARY:\n'.codeUnits);
+      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+
+      bytes.addAll('Total Items:     $totalItems\n'.codeUnits);
+      bytes.addAll('Total Crates:    $totalCrates\n'.codeUnits);
+      bytes.addAll(
+        'Bill Total:      Rs.${formatCashAmount(grandTotal)}\n'.codeUnits,
+      );
+      if (discount > 0) {
+        bytes.addAll(
+          'Discount:        - Rs.${formatCashAmount(discount)}\n'.codeUnits,
+        );
+      }
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll(
-        'RECEIVED: Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
+        'Net Amount:      Rs.${formatCashAmount(netAmount)}\n'.codeUnits,
       );
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Payment section
+      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+      bytes.addAll('PAYMENT RECEIVED:\n'.codeUnits);
+      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      bytes.addAll(
+        'Amount:          Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
+      );
+      bytes.addAll('\n'.codeUnits);
+
+      // Full payment confirmation - centered, bold
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+      bytes.addAll('ALL DUES CLEARED\n'.codeUnits);
+      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
       bytes.addAll('\n'.codeUnits);
 
       // Footer - center align
@@ -166,6 +256,7 @@ class BillPrinter {
     required int totalCrates,
     required int cratesDue,
     required int cratesReceived,
+    required List<Product> products,
   }) async {
     try {
       // Check if printer is connected
@@ -178,11 +269,36 @@ class BillPrinter {
 
       List<int> bytes = [];
 
-      // Header - centered, large text
+      // Get store name and phone based on products
+      final storeName = _getStoreName(products);
+      final storePhone = _getStorePhone(products);
+
+      // Store name - centered, large text (only if all products are from same brand)
+      if (storeName != null) {
+        bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+        bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
+        bytes.addAll('$storeName\n'.codeUnits);
+        bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+        if (storePhone != null) {
+          bytes.addAll('$storePhone\n'.codeUnits);
+        }
+        bytes.addAll('\n'.codeUnits);
+      }
+
+      // Header - centered (dynamic based on what's being received)
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
-      bytes.addAll('PARTIAL PAYMENT\n'.codeUnits);
-      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+
+      // Determine header based on what's being received
+      if (amountReceived > 0 && cratesReceived > 0) {
+        bytes.addAll('PARTIAL PAYMENT\n'.codeUnits);
+      } else if (amountReceived > 0) {
+        bytes.addAll('PARTIAL PAYMENT\n'.codeUnits);
+      } else if (cratesReceived > 0) {
+        bytes.addAll('CRATE RETURN RECEIPT\n'.codeUnits);
+      }
+
+      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\n'.codeUnits);
 
       // Separator
@@ -194,27 +310,24 @@ class BillPrinter {
       bytes.addAll('Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits);
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Bill Reference - centered heading
-      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('BILL REFERENCE\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      // Bill Reference - left aligned
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
-
       bytes.addAll('Bill ID: ${truncateBillId(billId)}\n'.codeUnits);
       final originalDateFormatter = DateFormat('dd MMM yyyy');
       bytes.addAll(
         'Bill Date: ${originalDateFormatter.format(originalBillDate)}\n'
             .codeUnits,
       );
-      bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Get salesman name from shared preferences
       final savedSalesmanName = await AppPreferences.instance.salesmanName;
       String displayName = savedSalesmanName ?? '';
 
       // Customer name
-      bytes.addAll('Customer: ${toTitleCase(customerName)}\n'.codeUnits);
+      final customerDisplay = customerName.isEmpty
+          ? 'Walk-In'
+          : toTitleCase(customerName);
+      bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 
       // Salesman name
       if (displayName.isNotEmpty) {
@@ -231,9 +344,12 @@ class BillPrinter {
         bytes.addAll(
           'Bill Total:      Rs.${formatCashAmount(billTotal)}\n'.codeUnits,
         );
-        bytes.addAll(
-          'Amount Due:      Rs.${formatCashAmount(amountDue)}\n'.codeUnits,
-        );
+        // Only show Amount Due if it differs from Bill Total (partial payments made)
+        if (amountDue != billTotal) {
+          bytes.addAll(
+            'Amount Due:      Rs.${formatCashAmount(amountDue)}\n'.codeUnits,
+          );
+        }
         bytes.addAll(
           'Received:        Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
         );
@@ -254,7 +370,10 @@ class BillPrinter {
         bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
         bytes.addAll('Total Crates:    $totalCrates\n'.codeUnits);
-        bytes.addAll('Crates Due:      $cratesDue\n'.codeUnits);
+        // Only show Crates Due if it differs from Total Crates (partial returns made)
+        if (cratesDue != totalCrates) {
+          bytes.addAll('Crates Due:      $cratesDue\n'.codeUnits);
+        }
         bytes.addAll('Received:        $cratesReceived\n'.codeUnits);
 
         final cratesBalance = cratesDue - cratesReceived;
@@ -314,17 +433,21 @@ class BillPrinter {
 
       List<int> bytes = [];
 
-      // Check if all products are Pepsi products
-      final showStoreName = _allProductsArePepsi(products);
+      // Get store name and phone based on products
+      final storeName = _getStoreName(products);
+      final storePhone = _getStorePhone(products);
 
-      // Store name - centered, large text (only if all products are Pepsi)
-      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
-      if (showStoreName) {
-        bytes.addAll('CH. ATTA TRADERS\n'.codeUnits);
+      // Store name - centered, large text (only if all products are from same brand)
+      if (storeName != null) {
+        bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+        bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
+        bytes.addAll('$storeName\n'.codeUnits);
+        bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+        if (storePhone != null) {
+          bytes.addAll('$storePhone\n'.codeUnits);
+        }
+        bytes.addAll('\n'.codeUnits);
       }
-      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
-      bytes.addAll('\n'.codeUnits);
 
       // Separator
       bytes.addAll('--------------------------------\n'.codeUnits);
@@ -337,7 +460,10 @@ class BillPrinter {
       bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Customer name
-      bytes.addAll('Customer: ${toTitleCase(customerName)}\n'.codeUnits);
+      final customerDisplay = customerName.isEmpty
+          ? 'Walk-In'
+          : toTitleCase(customerName);
+      bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 
       // Salesman name
       bytes.addAll('Salesman: ${toTitleCase(salesmanName)}\n'.codeUnits);
