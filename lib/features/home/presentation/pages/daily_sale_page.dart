@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
@@ -5,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/daily_sales_provider.dart';
 import 'package:flutter/material.dart';
@@ -264,7 +266,7 @@ class _DailySalePageState extends State<DailySalePage> {
         itemCount: saleHistory.length,
         itemBuilder: (context, index) {
           final sale = saleHistory[index];
-          return _buildSalesCard(context, sale);
+          return _buildSalesCard(context, sale, index);
         },
       ),
     );
@@ -348,25 +350,27 @@ class _DailySalePageState extends State<DailySalePage> {
 
   // ========== Card Building Methods ==========
 
-  Widget _buildSalesCard(BuildContext context, SaleHistory sale) {
-    final index = _salesProvider.sales.indexOf(sale);
+  Widget _buildSalesCard(BuildContext context, SaleHistory sale, int index) {
+    // Hide delete button and divider for credit type bills (converted from credit)
+    final bool isCreditBill = sale.billType == BillType.credit;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: AppColors.pepsiWhite,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
 
         border: Border.all(color: AppColors.gray300, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: AppColors.pepsiBlue.withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -377,10 +381,13 @@ class _DailySalePageState extends State<DailySalePage> {
                 child: _buildCardContent(sale),
               ),
             ),
-            const SizedBox(width: 12),
-            Container(height: 80, width: 1, color: AppColors.gray300),
-            const SizedBox(width: 12),
-            _buildDeleteButton(index),
+            // Only show divider and delete button for cash bills (not converted from credit)
+            if (!isCreditBill) ...[
+              const SizedBox(width: 16),
+              Container(height: 90, width: 1.5, color: AppColors.gray300),
+              const SizedBox(width: 16),
+              _buildDeleteButton(index),
+            ],
           ],
         ),
       ),
@@ -398,37 +405,32 @@ class _DailySalePageState extends State<DailySalePage> {
         Text(
           formatCustomerName(sale.customerName),
           style: AppTextStyles.productItemName.copyWith(
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.25,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Row(
           children: [
-            Icon(Icons.access_time_rounded, size: 16, color: AppColors.gray500),
-            const SizedBox(width: 4),
+            Icon(Icons.access_time_rounded, size: 17, color: AppColors.gray500),
+            const SizedBox(width: 6),
             Text(
               sale.formattedTime,
               style: AppTextStyles.helperText.copyWith(
-                fontSize: 16,
+                fontSize: 15,
                 color: AppColors.gray500,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 10),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                _buildAmountBadge(grandTotal),
-                const SizedBox(width: 8),
-                _buildItemCountBadge(totalItems),
-              ],
-            ),
+            _buildAmountBadge(grandTotal),
+            const SizedBox(width: 8),
+            _buildItemCountBadge(totalItems),
           ],
         ),
       ],
@@ -437,15 +439,15 @@ class _DailySalePageState extends State<DailySalePage> {
 
   Widget _buildAmountBadge(int amount) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.pepsiBlueLight.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         'Rs. ${formatCashAmount(amount)}',
         style: AppTextStyles.productItemTotal.copyWith(
-          fontSize: 16,
+          fontSize: 17,
           fontWeight: FontWeight.w700,
           color: AppColors.pepsiBlueLight,
           letterSpacing: -0.3,
@@ -456,16 +458,16 @@ class _DailySalePageState extends State<DailySalePage> {
 
   Widget _buildItemCountBadge(int count) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.gray100,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.gray300, width: 0.5),
       ),
       child: Text(
         '$count items',
         style: AppTextStyles.helperText.copyWith(
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: FontWeight.w600,
           color: AppColors.gray500,
         ),
@@ -516,8 +518,12 @@ class _DailySalePageState extends State<DailySalePage> {
 
   void _showDeleteConfirmation(int index) {
     final sale = _salesProvider.sales[index];
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) => _buildDeleteConfirmationDialog(sale, index),
     );
   }
@@ -663,8 +669,12 @@ class _DailySalePageState extends State<DailySalePage> {
   }
 
   void _showBillDetails(BuildContext context, SaleHistory sale) {
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) =>
           BillDetailsDialog(bill: sale, accentColor: AppColors.pepsiBlueLight),
     );

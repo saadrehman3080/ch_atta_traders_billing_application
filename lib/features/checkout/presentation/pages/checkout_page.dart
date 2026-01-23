@@ -2,6 +2,7 @@ import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
@@ -313,6 +314,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             )
             .toList(),
         discount: _discount,
+        billType: BillType.cash,
       );
 
       // Save to Firebase
@@ -361,6 +363,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         isPaid: _paymentType == 'cash',
         amountDue: _grandTotal,
         cratesDue: cratesDue,
+        billType: BillType.credit,
       );
 
       // Save to Firebase
@@ -449,6 +452,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             )
             .toList(),
         discount: _discount,
+        billType: BillType.cash,
       );
 
       // Save to Firebase
@@ -518,6 +522,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         amountDue:
             _grandTotal, // grandTotal already includes discount calculation
         cratesDue: cratesDue, // Remaining MT - Collected MT
+        billType: BillType.credit,
       );
 
       // Save to Firebase

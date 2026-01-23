@@ -135,4 +135,19 @@ class DashboardRepository {
       isPaidBill: isPaidBill,
     );
   }
+
+  /// Updates today's dashboard with previous day collection data.
+  /// Called when a credit bill from a previous day is paid/updated.
+  /// Delegates to DashboardSummaryService
+  Future<bool> updateSummaryForPreviousDayCollection({
+    required String salesmanName,
+    int? cashReceived,
+    int? cratesReceived,
+  }) async {
+    return _dashboardService.onPreviousDayCollectionReceived(
+      salesmanName: salesmanName,
+      cashReceived: cashReceived,
+      cratesReceived: cratesReceived,
+    );
+  }
 }

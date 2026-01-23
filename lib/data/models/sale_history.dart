@@ -13,6 +13,8 @@ class SaleHistory implements BillBase {
   final List<Product> products;
   @override
   final int discount;
+  @override
+  final BillType billType;
 
   SaleHistory({
     required this.billId,
@@ -20,6 +22,7 @@ class SaleHistory implements BillBase {
     required this.date,
     required this.products,
     this.discount = 0,
+    this.billType = BillType.cash,
   });
 
   // Factory constructor to create SaleHistory from JSON (Firebase)
@@ -43,6 +46,7 @@ class SaleHistory implements BillBase {
           .map((item) => Product.fromJson(item as Map<String, dynamic>))
           .toList(),
       discount: json['discount'] as int? ?? 0,
+      billType: BillType.fromJson(json['billType'] as String?),
     );
   }
 
@@ -55,6 +59,7 @@ class SaleHistory implements BillBase {
       'date': date.toIso8601String(),
       'products': products.map((product) => product.toJson()).toList(),
       'discount': discount,
+      'billType': billType.toJson(),
     };
   }
 
@@ -65,6 +70,7 @@ class SaleHistory implements BillBase {
     DateTime? date,
     List<Product>? products,
     int? discount,
+    BillType? billType,
   }) {
     return SaleHistory(
       billId: billId ?? this.billId,
@@ -72,6 +78,7 @@ class SaleHistory implements BillBase {
       date: date ?? this.date,
       products: products ?? this.products,
       discount: discount ?? this.discount,
+      billType: billType ?? this.billType,
     );
   }
 

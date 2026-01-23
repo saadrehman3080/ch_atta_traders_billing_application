@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
@@ -172,8 +173,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Shows dialog when biometric authentication is unavailable.
   void _showBiometricUnavailableDialog() {
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) => Dialog(
         backgroundColor: AppColors.pepsiWhite,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -315,8 +320,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Shows dialog when account is locked out due to too many attempts.
   void _showLockedOutDialog() {
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) => Dialog(
         backgroundColor: AppColors.pepsiWhite,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),

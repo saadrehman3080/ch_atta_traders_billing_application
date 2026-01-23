@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
@@ -6,6 +7,7 @@ import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
+import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
@@ -203,6 +205,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       date: deletedBill.date,
       products: deletedBill.products,
       discount: deletedBill.discount,
+      billType: BillType.credit,
     );
 
     // Save to sale history using SaleProvider
@@ -229,8 +232,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         billDate.month == today.month &&
         billDate.day == today.day;
 
+    final dashboardRepo = DashboardRepository();
+
     if (isTodaysBill) {
-      final dashboardRepo = DashboardRepository();
       final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
         salesmanName: salesmanIdentifier,
         date: deletedBill.date,
@@ -245,6 +249,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         _showErrorSnackBar('Failed to update dashboard. Operation cancelled.');
         return;
       }
+    } else {
+      // Previous day bill - update today's previous day collection
+      await dashboardRepo.updateSummaryForPreviousDayCollection(
+        salesmanName: salesmanIdentifier,
+        cashReceived: deletedBill.isPaid ? null : deletedBill.amountDue,
+        cratesReceived: deletedBill.cratesDue,
+      );
     }
 
     // Delete from credit history using CreditHistoryProvider
@@ -293,6 +304,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       date: deletedBill.date,
       products: deletedBill.products,
       discount: deletedBill.discount,
+      billType: BillType.credit,
     );
 
     // Save to sale history using SaleProvider
@@ -318,8 +330,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         billDate.month == today.month &&
         billDate.day == today.day;
 
+    final dashboardRepo = DashboardRepository();
+
     if (isTodaysBill) {
-      final dashboardRepo = DashboardRepository();
       final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
         salesmanName: salesmanIdentifier,
         date: deletedBill.date,
@@ -333,6 +346,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         _showErrorSnackBar('Failed to update dashboard. Operation cancelled.');
         return;
       }
+    } else {
+      // Previous day bill - update today's previous day collection
+      await dashboardRepo.updateSummaryForPreviousDayCollection(
+        salesmanName: salesmanIdentifier,
+        cashReceived: deletedBill.isPaid ? null : deletedBill.amountDue,
+        cratesReceived: deletedBill.cratesDue,
+      );
     }
 
     // Delete from credit history
@@ -476,8 +496,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   void _showCompleteConfirmation(int index, List<CreditHistory> billHistory) {
     final bill = billHistory[index];
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) =>
           _buildCompleteConfirmationDialog(bill, index, billHistory),
     );
@@ -488,8 +512,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     List<CreditHistory> billHistory,
   ) {
     final bill = billHistory[index];
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) =>
           _buildFullPaymentConfirmationDialog(bill, index, billHistory),
     );
@@ -497,8 +525,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
   void _showDeleteConfirmation(int index, List<CreditHistory> billHistory) {
     final bill = billHistory[index];
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) =>
           _buildDeleteConfirmationDialog(bill, index, billHistory),
     );
@@ -508,8 +540,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     final bill = billHistory[index];
     _amountController.clear();
     _cratesController.clear();
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) => _buildEditDialog(bill, index, billHistory),
     );
   }
@@ -583,6 +619,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         date: bill.date,
         products: bill.products,
         discount: bill.discount,
+        billType: BillType.credit,
       );
 
       // Save to sale history using SaleProvider
@@ -607,8 +644,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           billDate.month == today.month &&
           billDate.day == today.day;
 
+      final dashboardRepo = DashboardRepository();
+
       if (isTodaysBill) {
-        final dashboardRepo = DashboardRepository();
         final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
           salesmanName: salesmanIdentifier,
           date: bill.date,
@@ -623,6 +661,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           _showErrorSnackBar('Failed to update dashboard. Update cancelled.');
           return;
         }
+      } else {
+        // Previous day bill - update today's previous day collection
+        await dashboardRepo.updateSummaryForPreviousDayCollection(
+          salesmanName: salesmanIdentifier,
+          cashReceived: bill.isPaid ? null : bill.amountDue,
+          cratesReceived: bill.cratesDue,
+        );
       }
 
       // Delete from credit history using CreditHistoryProvider
@@ -643,7 +688,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
 
       setState(() => _editingIndex = null);
     } else {
-      // Partial payment - update dashboard summary if bill is from today
+      // Partial payment - check if bill is from today
       final today = DateTime.now();
       final billDate = bill.date;
       final isTodaysBill =
@@ -651,8 +696,10 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           billDate.month == today.month &&
           billDate.day == today.day;
 
+      // Update dashboard summary
+      final dashboardRepo = DashboardRepository();
+
       if (isTodaysBill) {
-        final dashboardRepo = DashboardRepository();
         final summaryUpdated = await dashboardRepo
             .updateSummaryOnPartialPayment(
               salesmanName: salesmanIdentifier,
@@ -668,6 +715,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           _showErrorSnackBar('Failed to update dashboard. Update cancelled.');
           return;
         }
+      } else {
+        // Previous day bill - update today's previous day collection
+        await dashboardRepo.updateSummaryForPreviousDayCollection(
+          salesmanName: salesmanIdentifier,
+          cashReceived: bill.isPaid ? null : amountReceived,
+          cratesReceived: cratesReceived,
+        );
       }
 
       // Update in Firebase using provider
@@ -755,6 +809,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         date: bill.date,
         products: bill.products,
         discount: bill.discount,
+        billType: BillType.credit,
       );
 
       // Save to sale history
@@ -780,8 +835,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           billDate.month == today.month &&
           billDate.day == today.day;
 
+      final dashboardRepo = DashboardRepository();
+
       if (isTodaysBill) {
-        final dashboardRepo = DashboardRepository();
         // Only call credit-to-sale conversion (which handles the full amount)
         // Do NOT call partial payment update here to avoid double counting
         await dashboardRepo.updateSummaryOnCreditToSale(
@@ -790,6 +846,13 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           amountDue: bill.amountDue, // Use ORIGINAL amountDue, not newAmountDue
           cratesDue: bill.cratesDue, // Use ORIGINAL cratesDue, not newCratesDue
           isPaidBill: bill.isPaid,
+        );
+      } else {
+        // Previous day bill - update today's previous day collection
+        await dashboardRepo.updateSummaryForPreviousDayCollection(
+          salesmanName: salesmanIdentifier,
+          cashReceived: bill.isPaid ? null : bill.amountDue,
+          cratesReceived: bill.cratesDue,
         );
       }
 
@@ -852,22 +915,31 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         return;
       }
 
-      // Update dashboard
+      // Check if bill is from today for dashboard update
       final today = DateTime.now();
       final billDate = bill.date;
-      final isTodaysBill =
+      final isTodaysBillForPartial =
           billDate.year == today.year &&
           billDate.month == today.month &&
           billDate.day == today.day;
 
-      if (isTodaysBill) {
-        final dashboardRepo = DashboardRepository();
+      // Update dashboard
+      final dashboardRepo = DashboardRepository();
+
+      if (isTodaysBillForPartial) {
         await dashboardRepo.updateSummaryOnPartialPayment(
           salesmanName: salesmanIdentifier,
           date: bill.date,
           cashReceived: amountReceived,
           cratesReceived: cratesReceived,
           isPaidBill: bill.isPaid,
+        );
+      } else {
+        // Previous day bill - update today's previous day collection
+        await dashboardRepo.updateSummaryForPreviousDayCollection(
+          salesmanName: salesmanIdentifier,
+          cashReceived: bill.isPaid ? null : amountReceived,
+          cratesReceived: cratesReceived,
         );
       }
 
@@ -930,8 +1002,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   }
 
   void _showBillDetails(CreditHistory bill) {
-    showDialog(
+    showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
       builder: (context) =>
           BillDetailsDialog(bill: bill, accentColor: AppColors.pepsiRedLight),
     );

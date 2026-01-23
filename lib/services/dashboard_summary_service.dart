@@ -362,4 +362,54 @@ class DashboardSummaryService {
       return false;
     }
   }
+
+  // ========== PREVIOUS DAY COLLECTION OPERATIONS ==========
+
+  /// Updates today's dashboard with previous day collection data.
+  /// This is called when a credit bill from a previous day is paid/updated.
+  /// Increments: previousDayCash (cash received), previousDayMt (crates received)
+  /// Updates are always made to TODAY's summary document.
+  Future<bool> onPreviousDayCollectionReceived({
+    required String salesmanName,
+    int? cashReceived,
+    int? cratesReceived,
+  }) async {
+    // Skip if nothing to update
+    if ((cashReceived == null || cashReceived == 0) &&
+        (cratesReceived == null || cratesReceived == 0)) {
+      return true;
+    }
+
+    try {
+      debugPrint('DashboardSummaryService: onPreviousDayCollectionReceived');
+      debugPrint('Cash: $cashReceived, Crates: $cratesReceived');
+
+      // Always update TODAY's summary document
+      final today = DateTime.now();
+      final summaryRef = _getSummaryRef(salesmanName, today);
+
+      final Map<String, dynamic> updates = {
+        'lastUpdated': FieldValue.serverTimestamp(),
+      };
+
+      // Increment previous day cash
+      if (cashReceived != null && cashReceived > 0) {
+        updates['previousDayCash'] = FieldValue.increment(cashReceived);
+      }
+
+      // Increment previous day MT (crates)
+      if (cratesReceived != null && cratesReceived > 0) {
+        updates['previousDayMt'] = FieldValue.increment(cratesReceived);
+      }
+
+      await summaryRef.set(updates, SetOptions(merge: true));
+
+      debugPrint('Dashboard summary updated for previous day collection');
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('Error in onPreviousDayCollectionReceived: $e');
+      debugPrint('StackTrace: $stackTrace');
+      return false;
+    }
+  }
 }
