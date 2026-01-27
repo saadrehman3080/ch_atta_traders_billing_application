@@ -236,26 +236,33 @@ class BillPrinter {
       }
 
       // Crates/Empty section
-      // Only show EMPTY/CRATES section if there are any crates to show
-      if ((totalCrates > 0) ||
-          (cratesReceived != null && cratesReceived > 0) ||
-          (previouslyReturnedCrates != null && previouslyReturnedCrates > 0)) {
+      // Only show EMPTY/CRATES section if there are any returned/received crates
+      // Do not show when total crates exist but nothing was returned/received.
+      final int cratesNow = cratesReceived ?? 0;
+      final int cratesPrev = previouslyReturnedCrates ?? 0;
+      final bool hasCratesToShow = (cratesNow + cratesPrev) > 0;
+
+      if (hasCratesToShow) {
         bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll('EMPTY/CRATES:\n'.codeUnits);
         bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
         // Show previously returned crates if any
-        if (previouslyReturnedCrates != null && previouslyReturnedCrates > 0) {
-          bytes.addAll(
-            'Previously Returned: $previouslyReturnedCrates\n'.codeUnits,
-          );
-          bytes.addAll('Crates Due:      ${cratesReceived ?? 0}\n'.codeUnits);
+        if (cratesPrev > 0) {
+          bytes.addAll('Previously Returned: $cratesPrev\n'.codeUnits);
         }
 
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-        bytes.addAll('Returned Now:    ${cratesReceived ?? 0}\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-        bytes.addAll('Remaining:       0\n'.codeUnits);
+        // Show crates returned now if any
+        if (cratesNow > 0) {
+          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+          bytes.addAll('Returned Now:    $cratesNow\n'.codeUnits);
+          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        }
+
+        // If both previous and now are present, show remaining as 0 for clarity
+        if (cratesPrev > 0 && cratesNow >= 0) {
+          bytes.addAll('Remaining:       0\n'.codeUnits);
+        }
         bytes.addAll('\n'.codeUnits);
       }
 

@@ -37,7 +37,9 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
   void initState() {
     super.initState();
     _scrollController.addListener(_checkScrollable);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkScrollable();
+    });
   }
 
   @override
@@ -48,6 +50,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
   }
 
   void _checkScrollable() {
+    if (!mounted) return;
     if (_scrollController.hasClients) {
       final isScrollable = _scrollController.position.maxScrollExtent > 0;
       if (isScrollable != _isScrollable) {
@@ -59,7 +62,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
   }
 
   Future<void> _printBill() async {
-    Navigator.of(context).pop();
+    if (!mounted) return;
     setState(() {
       _isPrinting = true;
     });
@@ -69,15 +72,15 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
       final salesmanName = await AppPreferences.instance.salesmanName;
       if (salesmanName == null || salesmanName.isEmpty) {
         if (mounted) {
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop();
+          }
           CustomSnackBar.show(
             context,
             message: 'Salesman name not found. Please login again.',
             type: SnackBarType.error,
           );
         }
-        setState(() {
-          _isPrinting = false;
-        });
         return;
       }
 
@@ -96,13 +99,18 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
 
       if (mounted) {
         if (result.success) {
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop();
+          }
           CustomSnackBar.show(
             context,
             message: 'Bill printed successfully',
             type: SnackBarType.success,
           );
-          Navigator.pop(context);
         } else {
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop();
+          }
           CustomSnackBar.show(
             context,
             message: result.errorMessage ?? 'Failed to print bill',
@@ -110,11 +118,17 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
           );
         }
       }
-    } finally {
+    } catch (e, st) {
+      debugPrint('Error in _printBill: $e\n$st');
       if (mounted) {
-        setState(() {
-          _isPrinting = false;
-        });
+        if (Navigator.canPop(context)) {
+          Navigator.of(context).pop();
+        }
+        CustomSnackBar.show(
+          context,
+          message: 'Unexpected error while printing. Please try again.',
+          type: SnackBarType.error,
+        );
       }
     }
   }
@@ -466,7 +480,11 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
             border: Border.all(color: widget.accentColor, width: 1.5),
           ),
           child: IconButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              if (mounted && !_isPrinting && Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+            },
             icon: Icon(Icons.close, color: widget.accentColor, size: 24),
             padding: const EdgeInsets.all(0),
             constraints: const BoxConstraints(),

@@ -1291,19 +1291,118 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Column(
           children: [
-            Expanded(
-              child: InkWell(
-                onTap: () => _showBillDetails(bill),
-                borderRadius: BorderRadius.circular(8),
-                child: _buildCardContent(bill),
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _showBillDetails(bill),
+                    borderRadius: BorderRadius.circular(8),
+                    child: _buildCardContent(bill),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _buildActionButtons(index, billHistory),
+              ],
             ),
-            const SizedBox(width: 12),
-            _buildActionButtons(index, billHistory),
+            // Print Receipt (only show spacing + button when printer connected)
+            if (_isPrinterConnected) ...[
+              const SizedBox(height: 12),
+              _buildPrintReceiptButton(index, billHistory),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrintReceiptButton(int index, List<CreditHistory> billHistory) {
+    final isEditLoading = _editingIndex == index;
+    final isCompletingLoading = _completingIndex == index;
+    final isDeletingLoading = _deletingIndex == index;
+    final isPrintingLoading = _printingIndex == index;
+    final isAnyLoading =
+        isEditLoading ||
+        isCompletingLoading ||
+        isDeletingLoading ||
+        isPrintingLoading;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isAnyLoading || !_isPrinterConnected
+            ? null
+            : () => _showFullPaymentConfirmation(index, billHistory),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: isPrintingLoading ? 48 : 39,
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(
+              alpha: (isAnyLoading || !_isPrinterConnected) ? 0.05 : 0.1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: isPrintingLoading
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.green,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Printing...',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 14,
+                          color: Colors.green.withValues(
+                            alpha: (isAnyLoading || !_isPrinterConnected)
+                                ? 0.4
+                                : 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.receipt_long,
+                        color: Colors.green.withValues(
+                          alpha: (isAnyLoading || !_isPrinterConnected)
+                              ? 0.4
+                              : 1.0,
+                        ),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Print Receipt',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 14,
+                          color: Colors.green.withValues(
+                            alpha: (isAnyLoading || !_isPrinterConnected)
+                                ? 0.4
+                                : 1.0,
+                          ),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -1531,25 +1630,25 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Complete button (checkmark only, no "Paid" text)
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: isAnyLoading
-                    ? null
-                    : () => _showCompleteConfirmation(index, billHistory),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(
-                      alpha: isAnyLoading ? 0.05 : 0.1,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
+        SizedBox(
+          width: 88,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: isAnyLoading
+                  ? null
+                  : () => _showCompleteConfirmation(index, billHistory),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(
+                    alpha: isAnyLoading ? 0.5 : 0.1,
                   ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
                   child: isCompletingLoading
                       ? SizedBox(
                           width: 20,
@@ -1566,54 +1665,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                           color: Colors.green.withValues(
                             alpha: isAnyLoading ? 0.4 : 1.0,
                           ),
-                          size: 20,
+                          size: 22,
                         ),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            // Print Receipt button
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: isAnyLoading || !_isPrinterConnected
-                    ? null
-                    : () => _showFullPaymentConfirmation(index, billHistory),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(
-                      alpha: (isAnyLoading || !_isPrinterConnected)
-                          ? 0.05
-                          : 0.1,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: isPrintingLoading
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.green,
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          Icons.receipt_long,
-                          color: Colors.green.withValues(
-                            alpha: (isAnyLoading || !_isPrinterConnected)
-                                ? 0.4
-                                : 1.0,
-                          ),
-                          size: 20,
-                        ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );

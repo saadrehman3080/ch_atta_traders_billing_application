@@ -14,6 +14,12 @@
 
 add the check to discount field the amount should not be entered grater then GT
 ************* DONE **************
+Bluetooth connectivity is only visible on the developer phone Resolved.
+Rearrange credit bill options.
+Display checkout page over the system navigation.
+Remove isAvailabe variable from saved bills as the product is available thats why its showing.
+App crashing after reprinting bill resolved.
+
 Remove the Keyborad first and then start the login Process.
 Block the landscape view.
 max 200 discount for discount field.

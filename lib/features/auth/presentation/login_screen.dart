@@ -20,7 +20,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _showFingerprint = false;
+  bool _isFirstLogin = true; // explicitly track first-login state
   bool _loading = true;
   bool _isBiometricAuthenticating = false;
   bool _isBiometricAvailable = false;
@@ -37,14 +37,14 @@ class _LoginScreenState extends State<LoginScreen> {
       // Check if this is first login
       final isFirst = await AppPreferences.instance.isFirstLogin;
 
-      // Check biometric availability if not first login
+      // Check biometric availability only when not first-login
       bool biometricAvailable = false;
       if (!isFirst) {
         biometricAvailable = await _checkBiometricAvailability();
       }
 
       setState(() {
-        _showFingerprint = !isFirst && biometricAvailable;
+        _isFirstLogin = isFirst;
         _isBiometricAvailable = biometricAvailable;
         _loading = false;
       });
@@ -52,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('Error checking first login: $e');
       // If preferences not initialized, show password login only
       setState(() {
-        _showFingerprint = false;
+        _isFirstLogin = true;
         _isBiometricAvailable = false;
         _loading = false;
       });
@@ -441,10 +441,19 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 30),
             const CredentialInputContainer(),
             const SizedBox(height: 20),
-            if (!_loading && _showFingerprint)
-              _buildFingerprintButton()
-            else if (!_loading && !_showFingerprint)
+
+            // Three mutually-exclusive states:
+            // 1) First login -> show verification hint
+            // 2) Not first login + biometrics available -> show fingerprint button
+            // 3) Not first login + biometrics NOT available -> show actionable guidance
+            if (!_loading && _isFirstLogin) ...[
               _buildFirstLoginMessage(),
+            ] else if (!_loading && _isBiometricAvailable) ...[
+              _buildFingerprintButton(),
+            ] else if (!_loading && !_isBiometricAvailable) ...[
+              _buildBiometricUnavailableMessage(),
+            ],
+
             const SizedBox(height: 30),
             _buildFooter(),
           ],
@@ -557,6 +566,34 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Shown when the device/account does not have biometrics enrolled or
+  /// biometric hardware is unavailable. Simply shows a short explanatory
+  /// line (no buttons or extra actions) as requested by product.
+  Widget _buildBiometricUnavailableMessage() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.loginCardBg.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.pepsiWhite.withValues(alpha: 0.18),
+          width: 1,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          'To use fingerprint login: enroll a fingerprint in device Settings.',
+          style: AppTextStyles.helperText.copyWith(
+            color: AppColors.pepsiWhite.withValues(alpha: 0.75),
+            fontSize: 13,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }

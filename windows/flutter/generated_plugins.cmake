@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   firebase_core
   local_auth_windows
+  permission_handler_windows
   print_bluetooth_thermal
 )
 

@@ -224,24 +224,27 @@ class _OrderPageState extends State<OrderPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true, // This handles safe area internally
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          left: 8,
-          right: 8,
-          bottom: 8 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: CheckoutPage(
-          products: products,
-          onPrint: () {
-            _handlePrintBill();
-            Navigator.pop(context);
-          },
-          onDismiss: () {
-            Navigator.pop(context);
-          },
-        ),
-      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 8,
+            right: 8,
+            bottom: 8 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: CheckoutPage(
+            products: products,
+            onPrint: () {
+              _handlePrintBill();
+              Navigator.pop(context);
+            },
+            onDismiss: () {
+              Navigator.pop(context);
+            },
+          ),
+        );
+      },
     ).whenComplete(() {
       setState(() {
         _isCheckoutVisible = false;

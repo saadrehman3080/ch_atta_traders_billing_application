@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_state.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
@@ -32,40 +35,150 @@ class PrinterService extends ChangeNotifier {
     _startConnectionMonitoring();
   }
 
+  /// Request all necessary Bluetooth permissions based on Android version
+  Future<bool> requestBluetoothPermissions() async {
+    if (!Platform.isAndroid) return true;
+
+    try {
+      debugPrint('[PrinterService] Requesting Bluetooth permissions...');
+
+      // Get Android SDK version
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      final sdkInt = androidInfo.version.sdkInt;
+
+      debugPrint('[PrinterService] Android SDK: $sdkInt');
+
+      Map<Permission, PermissionStatus> statuses;
+
+      if (sdkInt >= 31) {
+        // Android 12+ (API 31+) - Need BLUETOOTH_SCAN and BLUETOOTH_CONNECT
+        debugPrint('[PrinterService] Requesting Android 12+ permissions');
+        statuses = await [
+          Permission.bluetoothScan,
+          Permission.bluetoothConnect,
+        ].request();
+      } else if (sdkInt >= 29) {
+        // Android 10-11 (API 29-30) - Need Location permission
+        debugPrint('[PrinterService] Requesting Android 10-11 permissions');
+
+        // First request location permission
+        statuses = await [Permission.location].request();
+
+        // Check if location services are enabled
+        if (statuses[Permission.location]?.isGranted == true) {
+          final serviceStatus = await Permission.location.serviceStatus;
+          if (serviceStatus != ServiceStatus.enabled) {
+            _updateState(
+              _state.copyWith(
+                errorMessage:
+                    'Location services are disabled. Please enable Location in device settings to scan for Bluetooth devices.',
+              ),
+            );
+            return false;
+          }
+        }
+      } else {
+        // Android 9 and below - Legacy Bluetooth permissions (usually auto-granted)
+        debugPrint('[PrinterService] Android 9 or below - checking Bluetooth');
+        return true; // Legacy permissions are granted at install time
+      }
+
+      // Check if all permissions are granted
+      bool allGranted = statuses.values.every((status) => status.isGranted);
+
+      if (!allGranted) {
+        // Check for permanently denied permissions
+        bool anyPermanentlyDenied = statuses.values.any(
+          (status) => status.isPermanentlyDenied,
+        );
+
+        if (anyPermanentlyDenied) {
+          _updateState(
+            _state.copyWith(
+              errorMessage:
+                  'Bluetooth permissions denied. Please enable them in Settings → Apps → Permissions.',
+            ),
+          );
+        } else {
+          _updateState(
+            _state.copyWith(
+              errorMessage:
+                  'Bluetooth permissions are required to scan for printers. Please grant the permissions.',
+            ),
+          );
+        }
+
+        debugPrint('[PrinterService] Permissions denied: $statuses');
+        return false;
+      }
+
+      debugPrint('[PrinterService] All permissions granted');
+      return true;
+    } catch (e, st) {
+      debugPrint('[PrinterService] Error requesting permissions: $e\n$st');
+      _updateState(
+        _state.copyWith(
+          errorMessage: 'Failed to request permissions: ${e.toString()}',
+        ),
+      );
+      return false;
+    }
+  }
+
   /// Scan for available Bluetooth printers
   Future<void> scanForPrinters() async {
     debugPrint('[PrinterService] Scanning for printers...');
     _updateState(_state.copyWith(isScanning: true, clearError: true));
 
     try {
-      // Check if Bluetooth is available
+      // --- 1) REQUEST PERMISSIONS FIRST ---
+      final hasPermissions = await requestBluetoothPermissions();
+      if (!hasPermissions) {
+        _updateState(_state.copyWith(isScanning: false));
+        return;
+      }
+
+      // --- 2) BLUETOOTH ENABLED CHECK ---
       final isAvailable = await PrintBluetoothThermal.bluetoothEnabled;
       if (!isAvailable) {
         _updateState(
           _state.copyWith(
             isScanning: false,
-            errorMessage: 'Bluetooth is not enabled',
+            errorMessage: 'Bluetooth is turned off. Please enable Bluetooth.',
           ),
         );
         return;
       }
 
-      // Scan for paired devices
+      // --- 3) SCAN FOR PAIRED PRINTERS ---
       final printers = await PrintBluetoothThermal.pairedBluetooths;
-      debugPrint('[PrinterService] Found ${printers.length} printer(s)');
+      debugPrint('[PrinterService] Found ${printers.length} paired printer(s)');
 
+      if (printers.isEmpty) {
+        _updateState(
+          _state.copyWith(
+            availablePrinters: const <BluetoothInfo>[],
+            isScanning: false,
+            errorMessage:
+                'No paired printers found. Please pair your printer in Bluetooth settings first.',
+          ),
+        );
+        return;
+      }
+
+      // Update UI with paired devices
       _updateState(
         _state.copyWith(availablePrinters: printers, isScanning: false),
       );
 
       // After scanning, check for existing connection
       await checkExistingConnection();
-    } catch (e) {
-      debugPrint('[PrinterService] Error scanning: $e');
+    } catch (e, st) {
+      debugPrint('[PrinterService] Error scanning: $e\n$st');
       _updateState(
         _state.copyWith(
           isScanning: false,
-          errorMessage: 'Failed to scan for printers',
+          errorMessage: 'Failed to scan for printers: ${e.toString()}',
         ),
       );
     }
@@ -101,6 +214,13 @@ class PrinterService extends ChangeNotifier {
   /// Connect to a specific printer
   Future<bool> connectToPrinter(BluetoothInfo printer) async {
     debugPrint('[PrinterService] Connecting to ${printer.name}...');
+
+    // Check permissions before connecting
+    final hasPermissions = await requestBluetoothPermissions();
+    if (!hasPermissions) {
+      return false;
+    }
+
     _updateState(
       _state.copyWith(
         connectingPrinterAddress: printer.macAdress,
@@ -177,6 +297,13 @@ class PrinterService extends ChangeNotifier {
   Future<bool> autoConnect() async {
     try {
       debugPrint('[PrinterService] Attempting auto-connect...');
+
+      // Check permissions first
+      final hasPermissions = await requestBluetoothPermissions();
+      if (!hasPermissions) {
+        debugPrint('[PrinterService] Auto-connect failed: no permissions');
+        return false;
+      }
 
       // Check if Bluetooth is enabled
       final isBluetoothEnabled = await PrintBluetoothThermal.bluetoothEnabled;

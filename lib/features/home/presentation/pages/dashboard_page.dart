@@ -10,6 +10,7 @@ import 'package:ch_atta_traders_billing_application/features/products/providers/
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
@@ -1191,8 +1192,25 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
-  void _handleRefreshPrinters() {
-    _printerService.scanForPrinters();
+  Future<void> _handleRefreshPrinters() async {
+    await _printerService.scanForPrinters();
+
+    // If there's an error related to permissions, show a helpful snackbar
+    if (_printerService.state.hasError &&
+        _printerService.state.errorMessage?.contains('permission') == true) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Bluetooth permissions required.',
+          type: SnackBarType.error,
+          action: SnackBarAction(
+            label: 'Open Settings',
+            onPressed: () => openAppSettings(),
+            textColor: AppColors.pepsiWhite,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildScanningPrinters() {

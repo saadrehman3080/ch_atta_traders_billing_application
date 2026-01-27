@@ -27,7 +27,7 @@ class Product {
       'name': name,
       'price': price,
       'quantity': quantity,
-      'isAvailable': isAvailable,
+      // 'isAvailable': isAvailable, // Excluded from JSON it's not needed in Firebase
     };
   }
 
