@@ -18,6 +18,7 @@ class CreditHistory implements BillBase {
   final int cratesDue;
   final bool isPaid;
   final int amountDue;
+  final bool isRecordUpdated;
 
   CreditHistory({
     required this.billId,
@@ -28,6 +29,7 @@ class CreditHistory implements BillBase {
     this.isPaid = false,
     this.amountDue = 0,
     this.cratesDue = 0,
+    this.isRecordUpdated = false,
     this.billType = BillType.credit,
   });
 
@@ -44,6 +46,7 @@ class CreditHistory implements BillBase {
       isPaid: json['isPaid'] as bool? ?? true,
       amountDue: json['amountDue'] as int? ?? 0,
       cratesDue: json['cratesDue'] as int? ?? 0,
+      isRecordUpdated: json['isRecordUpdated'] as bool? ?? false,
       billType: BillType.fromJson(json['billType'] as String?),
     );
   }
@@ -59,6 +62,7 @@ class CreditHistory implements BillBase {
       'discount': discount,
       'isPaid': isPaid,
       'amountDue': amountDue,
+      'isRecordUpdated': isRecordUpdated,
       'cratesDue': cratesDue,
       'billType': billType.toJson(),
     };
@@ -74,6 +78,7 @@ class CreditHistory implements BillBase {
     bool? isPaid,
     int? amountDue,
     int? cratesDue,
+    bool? isRecordUpdated,
     BillType? billType,
   }) {
     return CreditHistory(
@@ -85,6 +90,7 @@ class CreditHistory implements BillBase {
       isPaid: isPaid ?? this.isPaid,
       amountDue: amountDue ?? this.amountDue,
       cratesDue: cratesDue ?? this.cratesDue,
+      isRecordUpdated: isRecordUpdated ?? this.isRecordUpdated,
       billType: billType ?? this.billType,
     );
   }

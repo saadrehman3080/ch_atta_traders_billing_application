@@ -105,6 +105,17 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
+  /// Updates the price of a product.
+  ///
+  /// [index] - index of the product in the list
+  /// [price] - new price value
+  void updateProductPrice(int index, int price) {
+    if (index >= 0 && index < _products.length) {
+      _products[index] = _products[index].copyWith(price: price);
+      notifyListeners();
+    }
+  }
+
   /// Resets all product quantities to zero.
   void resetAllQuantities() {
     for (int i = 0; i < _products.length; i++) {

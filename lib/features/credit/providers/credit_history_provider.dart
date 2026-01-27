@@ -107,6 +107,7 @@ class CreditHistoryProvider extends ChangeNotifier {
     int? newAmountDue,
     int? newCratesDue,
     bool? isPaid,
+    bool? isRecordUpdated,
   }) async {
     try {
       // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
@@ -119,6 +120,7 @@ class CreditHistoryProvider extends ChangeNotifier {
         newAmountDue: newAmountDue,
         newCratesDue: newCratesDue,
         isPaid: isPaid,
+        isRecordUpdated: isRecordUpdated,
       );
 
       // Update local cache
@@ -133,6 +135,7 @@ class CreditHistoryProvider extends ChangeNotifier {
           amountDue: newAmountDue ?? credit.amountDue,
           cratesDue: newCratesDue ?? credit.cratesDue,
           isPaid: isPaid ?? credit.isPaid,
+          isRecordUpdated: isRecordUpdated ?? credit.isRecordUpdated,
         );
         _credits[index] = updatedCredit;
         _safeNotifyListeners();

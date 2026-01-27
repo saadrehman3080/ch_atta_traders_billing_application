@@ -40,6 +40,9 @@ class AppPreferences {
   /// Key for storing the salesman ID
   static const String _keySalesmanId = 'salesman_id';
 
+  /// Key for storing the salesman admin status
+  static const String _keyIsAdmin = 'is_admin';
+
   /// Key for storing the connected printer address
   static const String _keyPrinterAddress = 'printer_address';
 
@@ -227,6 +230,39 @@ class AppPreferences {
     } catch (e) {
       debugPrint('Error getting salesman identifier: $e');
       return null;
+    }
+  }
+
+  /// Gets the salesman admin status from shared preferences.
+  ///
+  /// Returns `true` if the salesman is an admin, `false` otherwise.
+  /// Defaults to `false` if not set.
+  Future<bool> get isAdmin async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getBool(_keyIsAdmin) ?? false;
+    } catch (e) {
+      debugPrint('Error reading admin status: $e');
+      return false; // Fail-safe default
+    }
+  }
+
+  /// Stores the salesman admin status.
+  ///
+  /// [isAdmin] - `true` if the salesman is an admin, `false` otherwise.
+  ///
+  /// Returns `true` if the operation was successful, `false` otherwise.
+  Future<bool> setIsAdmin(bool isAdmin) async {
+    _ensureInitialized();
+    try {
+      final result = await _prefs!.setBool(_keyIsAdmin, isAdmin);
+      if (result) {
+        debugPrint('Admin status stored: $isAdmin');
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error storing admin status: $e');
+      return false;
     }
   }
 

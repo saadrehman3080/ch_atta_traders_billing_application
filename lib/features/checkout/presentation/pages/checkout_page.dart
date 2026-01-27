@@ -296,9 +296,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
     // Determine if MT is collected
     final bool hasMt = _mtController.text.trim().isNotEmpty;
 
-    // Determine customer name: use entered name, or bill ID if anonymous with no name
+    // Determine customer name: use entered name, or 'Walk-In Customer' if anonymous
     final enteredName = _customerNameController.text.trim();
-    final customerNameForDb = enteredName.isNotEmpty ? enteredName : billId;
+    final customerNameForDb = _isAnonymousCustomer
+        ? 'Walk-In Customer'
+        : (enteredName.isNotEmpty ? enteredName : 'Walk-In Customer');
 
     // Save to Daily Sales only if: payment is cash AND MT is empty
     if (_paymentType == 'cash' && !hasMt) {
@@ -430,13 +432,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
     // Determine if MT is collected
     final bool hasMt = _mtController.text.trim().isNotEmpty;
 
-    // Determine customer name: use entered name, or bill ID if anonymous with no name
+    // Determine customer name: use entered name, or 'Walk-In Customer' if anonymous
     final enteredName = _customerNameController.text.trim();
-    final customerNameForDb = enteredName.isNotEmpty ? enteredName : billId;
-    // For printing: show name if entered, otherwise skip (empty) when anonymous
-    final customerNameForPrint = enteredName.isNotEmpty
-        ? enteredName
-        : (_isAnonymousCustomer ? '' : billId);
+    final customerNameForDb = _isAnonymousCustomer
+        ? 'Walk-In Customer'
+        : (enteredName.isNotEmpty ? enteredName : 'Walk-In Customer');
+
+    // For printing: use the same name as database (always show 'Walk-In Customer' when anonymous)
+    final customerNameForPrint = customerNameForDb;
 
     // Save to Daily Sales only if: payment is cash AND MT is empty
     if (_paymentType == 'cash' && !hasMt) {
@@ -900,26 +903,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Row(
       children: [
         Expanded(
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              textSelectionTheme: const TextSelectionThemeData(
-                selectionHandleColor: AppColors.pepsiBlueLight,
-                selectionColor: AppColors.textSecondary,
-                cursorColor: AppColors.pepsiBlueLight,
+          child: AbsorbPointer(
+            absorbing: _isAnonymousCustomer,
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                textSelectionTheme: const TextSelectionThemeData(
+                  selectionHandleColor: AppColors.pepsiBlueLight,
+                  selectionColor: AppColors.textSecondary,
+                  cursorColor: AppColors.pepsiBlueLight,
+                ),
               ),
-            ),
-            child: TextField(
-              controller: _customerNameController,
-              style: AppTextStyles.inputText.copyWith(
-                color: Colors.black87,
-                fontSize: 14,
+              child: TextField(
+                controller: _customerNameController,
+                style: AppTextStyles.inputText.copyWith(
+                  color: Colors.black87,
+                  fontSize: 14,
+                ),
+                cursorColor: AppColors.pepsiBlue,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (value) {
+                  FocusScope.of(context).unfocus();
+                },
+                decoration: _buildCustomerFieldDecoration(),
               ),
-              cursorColor: AppColors.pepsiBlue,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (value) {
-                FocusScope.of(context).unfocus();
-              },
-              decoration: _buildCustomerFieldDecoration(),
             ),
           ),
         ),
@@ -943,6 +949,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
             : () {
                 setState(() {
                   _isAnonymousCustomer = !_isAnonymousCustomer;
+                  // Clear focus and text when toggling anonymous customer ON
+                  if (_isAnonymousCustomer) {
+                    FocusScope.of(context).unfocus();
+                    _customerNameController.clear();
+                  }
                 });
               },
         borderRadius: BorderRadius.circular(8),

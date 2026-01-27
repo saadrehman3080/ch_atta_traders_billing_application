@@ -403,7 +403,7 @@ class _DailySalePageState extends State<DailySalePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          formatCustomerName(sale.customerName),
+          toTitleCase(sale.customerName),
           style: AppTextStyles.productItemName.copyWith(
             fontSize: 18,
             fontWeight: FontWeight.w700,
@@ -558,7 +558,7 @@ class _DailySalePageState extends State<DailySalePage> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Permanently delete ${formatCustomerName(sale.customerName)}\'s sale? This will remove it from sales history.',
+              'Permanently delete ${toTitleCase(sale.customerName)}\'s sale? This will remove it from sales history.',
               textAlign: TextAlign.center,
               style: AppTextStyles.helperText.copyWith(
                 color: AppColors.gray500,

@@ -777,6 +777,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         newAmountDue: newAmountDue,
         newCratesDue: newCratesDue,
         isPaid: isPaid,
+        isRecordUpdated: true,
       );
 
       if (success) {
@@ -955,6 +956,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         newAmountDue: newAmountDue,
         newCratesDue: newCratesDue,
         isPaid: isPaid,
+        isRecordUpdated: true,
       );
 
       if (!updated) {
@@ -1304,7 +1306,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                _buildActionButtons(index, billHistory),
+                _buildActionButtons(bill, index, billHistory),
               ],
             ),
             // Print Receipt (only show spacing + button when printer connected)
@@ -1537,7 +1539,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     );
   }
 
-  Widget _buildActionButtons(int index, List<CreditHistory> billHistory) {
+  Widget _buildActionButtons(
+    CreditHistory bill,
+    int index,
+    List<CreditHistory> billHistory,
+  ) {
     final isEditLoading = _editingIndex == index;
     final isCompletingLoading = _completingIndex == index;
     final isDeletingLoading = _deletingIndex == index;
@@ -1547,6 +1553,9 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         isCompletingLoading ||
         isDeletingLoading ||
         isPrintingLoading;
+
+    // Disable delete when record has been updated
+    final isDeleteDisabled = bill.isRecordUpdated || isAnyLoading;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1594,7 +1603,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: isAnyLoading
+                onTap: isDeleteDisabled
                     ? null
                     : () => _showDeleteConfirmation(index, billHistory),
                 borderRadius: BorderRadius.circular(8),
@@ -1618,9 +1627,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                           ),
                         )
                       : Icon(
-                          Icons.delete_outline,
+                          bill.isRecordUpdated
+                              ? Icons.block
+                              : Icons.delete_outline,
                           color: AppColors.pepsiRedLight.withValues(
-                            alpha: isAnyLoading ? 0.4 : 1.0,
+                            alpha: isDeleteDisabled ? 0.4 : 1.0,
                           ),
                           size: 20,
                         ),
@@ -1644,7 +1655,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.green.withValues(
-                    alpha: isAnyLoading ? 0.5 : 0.1,
+                    alpha: isAnyLoading ? 0.05 : 0.1,
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),

@@ -240,6 +240,7 @@ class CreditRepository {
     int? newAmountDue,
     int? newCratesDue,
     bool? isPaid,
+    bool? isRecordUpdated,
   }) async {
     try {
       debugPrint('Updating credit balance in Firestore...');
@@ -267,6 +268,14 @@ class CreditRepository {
       if (updates.isEmpty) {
         debugPrint('No updates to apply');
         return;
+      }
+
+      // When updating, set isRecordUpdated flag. If caller provided a value, use it;
+      // otherwise default to true when there are updates.
+      if (isRecordUpdated != null) {
+        updates['isRecordUpdated'] = isRecordUpdated;
+      } else if (updates.isNotEmpty) {
+        updates['isRecordUpdated'] = true;
       }
 
       await _firestore

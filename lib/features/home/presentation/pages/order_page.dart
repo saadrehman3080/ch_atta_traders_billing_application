@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
+import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 
 class OrderPage extends StatefulWidget {
   const OrderPage({super.key});
@@ -27,6 +28,7 @@ class _OrderPageState extends State<OrderPage> {
   List<Product> _filteredProducts = [];
   bool _hasInternetConnection = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  final Map<String, int> _originalPrices = {};
 
   @override
   void initState() {
@@ -110,6 +112,13 @@ class _OrderPageState extends State<OrderPage> {
       builder: (context, productProvider, child) {
         // Apply filter to current products
         _filteredProducts = _getFilteredProducts(productProvider.products);
+
+        // Capture original prices once when products are first loaded.
+        if (_originalPrices.isEmpty && productProvider.products.isNotEmpty) {
+          for (final p in productProvider.products) {
+            _originalPrices[p.name] = p.price;
+          }
+        }
 
         final int selectedCount = BillingCalculations.countSelectedProducts(
           productProvider.products,
@@ -253,7 +262,18 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   void _handlePrintBill() {
-    context.read<ProductProvider>().resetAllQuantities();
+    final productProvider = context.read<ProductProvider>();
+
+    // Restore original prices captured when products were first loaded.
+    for (int i = 0; i < productProvider.products.length; i++) {
+      final p = productProvider.products[i];
+      final orig = _originalPrices[p.name];
+      if (orig != null && p.price != orig) {
+        productProvider.updateProductPrice(i, orig);
+      }
+    }
+
+    productProvider.resetAllQuantities();
     _searchController.clear();
     if (_productListScrollController.hasClients) {
       _productListScrollController.animateTo(
@@ -778,7 +798,7 @@ class _OrderPageState extends State<OrderPage> {
               children: [
                 _buildProductHeader(product, index, isUnavailable),
                 const SizedBox(height: 8),
-                _buildProductFooter(product, isUnavailable, isSelected),
+                _buildProductFooter(product, isUnavailable, isSelected, index),
               ],
             ),
           ),
@@ -917,41 +937,254 @@ class _OrderPageState extends State<OrderPage> {
     Product product,
     bool isUnavailable,
     bool isSelected,
+    int index,
   ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildUnitPrice(product.price, isUnavailable),
+        _buildUnitPrice(product, isUnavailable, index),
         if (isSelected && !isUnavailable)
           _buildTotalPrice(product.price * product.quantity),
       ],
     );
   }
 
-  Widget _buildUnitPrice(int price, bool isUnavailable) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+  Widget _buildUnitPrice(Product product, bool isUnavailable, int index) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isUnavailable
-              ? AppColors.pepsiBlue.withValues(alpha: 0.4)
-              : AppColors.pepsiBlue,
-          width: 1,
-        ),
-      ),
-      child: Text(
-        'Rs. $price',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: isUnavailable
-              ? AppColors.pepsiBlue.withValues(alpha: 0.4)
-              : AppColors.pepsiBlue,
+        onTap: () async {
+          final isAdmin = await AppPreferences.instance.isAdmin;
+          if (!isAdmin) return;
+          _showCustomPriceDialog(product, index);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isUnavailable
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.4)
+                  : AppColors.pepsiBlue,
+              width: 1,
+            ),
+          ),
+          child: Text(
+            'Rs. ${product.price}',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: isUnavailable
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.4)
+                  : AppColors.pepsiBlue,
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  void _showCustomPriceDialog(Product product, int index) {
+    final priceController = TextEditingController(
+      text: product.price.toString(),
+    );
+    final int minPrice =
+        _originalPrices[product.name] ??
+        product.price; // keep original loaded price as minimum
+
+    showModal<void>(
+      context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.pepsiWhite,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Set Custom Price',
+                      style: AppTextStyles.pageTitleBlack.copyWith(
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      product.name,
+                      style: AppTextStyles.productItemName.copyWith(
+                        fontSize: 14,
+                        color: AppColors.gray500,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            final current =
+                                int.tryParse(priceController.text) ??
+                                product.price;
+                            final updated = (current - 10).clamp(
+                              minPrice,
+                              999999,
+                            );
+                            setState(
+                              () => priceController.text = updated.toString(),
+                            );
+                          },
+                          icon: const Icon(Icons.remove_circle, size: 36),
+                          color: AppColors.pepsiRed,
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          width: 120,
+                          child: Theme(
+                            data: Theme.of(context).copyWith(
+                              textSelectionTheme: TextSelectionThemeData(
+                                cursorColor: AppColors.pepsiBlue,
+                                selectionColor: AppColors.pepsiBlue.withValues(
+                                  alpha: 0.12,
+                                ),
+                                selectionHandleColor: AppColors.pepsiBlue,
+                              ),
+                            ),
+                            child: TextField(
+                              controller: priceController,
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              cursorColor: AppColors.pepsiBlue,
+                              style: AppTextStyles.inputText.copyWith(
+                                color: Colors.black87,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 12,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.gray300,
+                                    width: 1,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: AppColors.pepsiBlue,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          onPressed: () {
+                            final current =
+                                int.tryParse(priceController.text) ??
+                                product.price;
+                            final updated = (current + 10);
+                            setState(
+                              () => priceController.text = updated.toString(),
+                            );
+                          },
+                          icon: const Icon(Icons.add_circle, size: 36),
+                          color: AppColors.pepsiBlue,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.gray500,
+                              side: const BorderSide(
+                                color: AppColors.gray300,
+                                width: 1,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final parsed =
+                                  int.tryParse(priceController.text) ??
+                                  product.price;
+                              final newPrice = parsed < minPrice
+                                  ? minPrice
+                                  : parsed;
+                              try {
+                                context
+                                    .read<ProductProvider>()
+                                    .updateProductPrice(index, newPrice);
+                              } catch (_) {}
+                              Navigator.pop(context);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.pepsiBlue,
+                              foregroundColor: Colors.white,
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: const Text(
+                              'Set Price',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ).whenComplete(() {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        priceController.dispose();
+      });
+    });
   }
 
   Widget _buildTotalPrice(int total) {

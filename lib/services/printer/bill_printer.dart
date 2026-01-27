@@ -381,7 +381,7 @@ class BillPrinter {
 
       // Customer name
       final customerDisplay = customerName.isEmpty
-          ? 'Walk-In'
+          ? 'Walk-In Customer'
           : toTitleCase(customerName);
       bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 

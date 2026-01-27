@@ -14,6 +14,10 @@
 
 add the check to discount field the amount should not be entered grater then GT
 ************* DONE **************
+Implement admin rate update feature.
+Restrict the user to login
+Disable the partial paid delete button.
+Reprint bill shows customer name as ID.
 Bluetooth connectivity is only visible on the developer phone Resolved.
 Rearrange credit bill options.
 Display checkout page over the system navigation.

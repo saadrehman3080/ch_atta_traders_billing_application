@@ -5,7 +5,7 @@ import 'package:ch_atta_traders_billing_application/data/repositories/salesman_r
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 
 /// Authentication state enum
-enum AuthState { initial, loading, authenticated, failed, error }
+enum AuthState { initial, loading, authenticated, failed, error, noAccess }
 
 /// ViewModel for authentication operations.
 ///
@@ -36,6 +36,9 @@ class AuthProvider extends ChangeNotifier {
 
   /// Whether user is authenticated
   bool get isAuthenticated => _state == AuthState.authenticated;
+
+  /// Whether the current salesman is an admin
+  bool get isAdmin => _currentSalesman?.isAdmin ?? false;
 
   // ========== Authentication Methods ==========
 
@@ -88,6 +91,7 @@ class AuthProvider extends ChangeNotifier {
         // Store salesman data in shared preferences
         await AppPreferences.instance.setSalesmanName(salesman.name);
         await AppPreferences.instance.setSalesmanId(salesman.salesmanId);
+        await AppPreferences.instance.setIsAdmin(salesman.isAdmin);
 
         debugPrint('Login successful for: ${salesman.name}');
         return true;
@@ -98,6 +102,12 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('Login failed: Invalid credentials');
         return false;
       }
+    } on NoAccessException catch (e) {
+      // Specific handling when user does not have system access
+      _errorMessage = 'Sorry, you do not have access to the system.';
+      _setState(AuthState.noAccess);
+      debugPrint('Login failed: No access - $e');
+      return false;
     } catch (e) {
       _errorMessage =
           'Unable to connect to server. Please check your internet connection and try again.';
