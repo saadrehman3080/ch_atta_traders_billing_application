@@ -112,7 +112,7 @@ class DailySalesRepository {
 
   /// Converts a sale to credit, updates dashboard, and moves record
   /// From: Daily Sales/{salesmanName}/{dd-MMM-yyyy}/{billId}
-  /// To: Credit History/{salesmanName}/{dd-MMM-yyyy}/{billId}
+  /// To: Credit History/{salesmanName}/bills/{billId}
   Future<void> convertSaleToCredit({
     required SaleHistory sale,
     required String salesmanName,
@@ -148,11 +148,11 @@ class DailySalesRepository {
         'isPaid': false,
       };
 
-      // Save to credit history
+      // Save to credit history (new simplified path)
       await _firestore
           .collection('Credit History')
           .doc(salesmanName)
-          .collection(formattedDate)
+          .collection('bills')
           .doc(sale.billId)
           .set(creditData);
 

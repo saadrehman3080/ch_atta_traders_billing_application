@@ -990,9 +990,6 @@ class _OrderPageState extends State<OrderPage> {
     final priceController = TextEditingController(
       text: product.price.toString(),
     );
-    final int minPrice =
-        _originalPrices[product.name] ??
-        product.price; // keep original loaded price as minimum
 
     showModal<void>(
       context: context,
@@ -1035,10 +1032,7 @@ class _OrderPageState extends State<OrderPage> {
                             final current =
                                 int.tryParse(priceController.text) ??
                                 product.price;
-                            final updated = (current - 10).clamp(
-                              minPrice,
-                              999999,
-                            );
+                            final updated = (current - 10).clamp(0, 999999);
                             setState(
                               () => priceController.text = updated.toString(),
                             );
@@ -1140,12 +1134,9 @@ class _OrderPageState extends State<OrderPage> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
-                              final parsed =
+                              final newPrice =
                                   int.tryParse(priceController.text) ??
                                   product.price;
-                              final newPrice = parsed < minPrice
-                                  ? minPrice
-                                  : parsed;
                               try {
                                 context
                                     .read<ProductProvider>()

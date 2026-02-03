@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/credit_repository.dart';
 
@@ -32,15 +31,13 @@ class CreditHistoryProvider extends ChangeNotifier {
     }
   }
 
-  /// Loads all credit history records for a salesman across all dates
-  /// Uses optimized parallel queries for maximum speed
+  /// Loads all credit history records for a salesman
+  /// Uses single query to bills subcollection
   ///
   /// [salesmanName] - The name of the salesman
-  /// [daysToLookBack] - Number of days to look back (default: 14 days)
   /// [forceRefresh] - Skip cache and force fresh data (default: false)
   Future<void> loadAllCreditHistory(
     String salesmanName, {
-    int daysToLookBack = 14,
     bool forceRefresh = false,
   }) async {
     // Check if we have recent data and don't need to refresh
@@ -64,7 +61,6 @@ class CreditHistoryProvider extends ChangeNotifier {
 
       _credits = await _repository.getAllCreditsForSalesman(
         salesmanName: salesmanName,
-        daysToLookBack: daysToLookBack,
       );
 
       _lastFetchTime = DateTime.now();
@@ -110,12 +106,8 @@ class CreditHistoryProvider extends ChangeNotifier {
     bool? isRecordUpdated,
   }) async {
     try {
-      // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
-      final formattedDate = DateFormatters.formatForFirebase(credit.date);
-
       await _repository.updateCreditBalance(
         salesmanName: salesmanName,
-        date: formattedDate,
         billId: credit.billId,
         newAmountDue: newAmountDue,
         newCratesDue: newCratesDue,
@@ -155,21 +147,14 @@ class CreditHistoryProvider extends ChangeNotifier {
     required String salesmanName,
   }) async {
     try {
-      // Find the credit in local cache to get the date
-      final creditToDelete = _credits.firstWhere(
-        (c) => c.billId == billId,
-        orElse: () => throw Exception('Credit record not found in cache'),
-      );
-
-      // Format date as dd-MMM-yyyy (e.g., 01-Jan-2026)
-      final formattedDate = DateFormatters.formatForFirebase(
-        creditToDelete.date,
-      );
+      // Verify the credit exists in local cache
+      if (!_credits.any((c) => c.billId == billId)) {
+        throw Exception('Credit record not found in cache');
+      }
 
       // Delete from Firebase
       await _repository.deleteCredit(
         salesmanName: salesmanName,
-        date: formattedDate,
         billId: billId,
       );
 

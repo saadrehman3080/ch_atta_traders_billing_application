@@ -1164,7 +1164,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Credit transactions from last 14 days will appear here',
+              'Credit transactions will appear here',
               style: AppTextStyles.helperText.copyWith(
                 color: AppColors.gray500,
                 fontSize: 14,
@@ -1821,12 +1821,12 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.15),
+                color: Colors.green.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.receipt_long,
-                color: Colors.orange[700],
+                color: Colors.green[600],
                 size: 32,
               ),
             ),
@@ -1880,7 +1880,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                         _markBillCompleteAndPrint(index, billHistory);
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange[600],
+                        backgroundColor: Colors.green[600],
                         foregroundColor: AppColors.pepsiWhite,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),

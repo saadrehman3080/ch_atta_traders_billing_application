@@ -53,6 +53,8 @@ class BillPrinter {
     'Aquafina 1500ml',
     'Aquafina 500ml',
     'Aquafina 19L',
+    'Aquafina 19L Empty',
+    'Empty Crate',
   ];
 
   /// Checks if all products are Pepsi products
@@ -197,8 +199,6 @@ class BillPrinter {
         bytes.addAll(
           'Discount:        - Rs.${formatCashAmount(discount)}\n'.codeUnits,
         );
-      }
-      if (grandTotal != netAmount) {
         bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll(
           'Net Amount:      Rs.${formatCashAmount(netAmount)}\n'.codeUnits,
@@ -231,7 +231,6 @@ class BillPrinter {
           'Received Now:    Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
         );
         bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-        bytes.addAll('Remaining:       Rs.0\n'.codeUnits);
         bytes.addAll('--------------------------------\n'.codeUnits);
       }
 
@@ -257,11 +256,6 @@ class BillPrinter {
           bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
           bytes.addAll('Returned Now:    $cratesNow\n'.codeUnits);
           bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-        }
-
-        // If both previous and now are present, show remaining as 0 for clarity
-        if (cratesPrev > 0 && cratesNow >= 0) {
-          bytes.addAll('Remaining:       0\n'.codeUnits);
         }
         bytes.addAll('\n'.codeUnits);
       }
@@ -411,11 +405,14 @@ class BillPrinter {
         );
 
         final amountBalance = amountDue - amountReceived;
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-        bytes.addAll(
-          'Balance:         Rs.${formatCashAmount(amountBalance)}\n'.codeUnits,
-        );
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        if (amountBalance > 0) {
+          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+          bytes.addAll(
+            'Balance:         Rs.${formatCashAmount(amountBalance)}\n'
+                .codeUnits,
+          );
+          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        }
         bytes.addAll('--------------------------------\n'.codeUnits);
       }
 
@@ -433,9 +430,11 @@ class BillPrinter {
         bytes.addAll('Received:        $cratesReceived\n'.codeUnits);
 
         final cratesBalance = cratesDue - cratesReceived;
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-        bytes.addAll('Balance:         $cratesBalance\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        if (cratesBalance > 0) {
+          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+          bytes.addAll('Balance:         $cratesBalance\n'.codeUnits);
+          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        }
         bytes.addAll('--------------------------------\n'.codeUnits);
       }
 
@@ -573,11 +572,14 @@ class BillPrinter {
       if (mtCollected != null && mtRemaining != null) {
         bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll('MT Collected: $mtCollected\n'.codeUnits);
-        bytes.addAll('MT Remaining: $mtRemaining\n'.codeUnits);
+        if (mtRemaining > 0) {
+          bytes.addAll('MT Remaining: $mtRemaining\n'.codeUnits);
+        }
         bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       }
 
-      // Subtotal if discount exists
+      // Subtotal and discount if discount exists
+      final netAmount = grandTotal - discount;
       if (discount > 0) {
         bytes.addAll(
           'Subtotal: Rs.${formatCashAmount(grandTotal)}\n'.codeUnits,
@@ -589,7 +591,6 @@ class BillPrinter {
       }
 
       // Grand total - large and bold
-      final netAmount = grandTotal - discount;
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
       bytes.addAll('TOTAL: Rs.${formatCashAmount(netAmount)}\n'.codeUnits);

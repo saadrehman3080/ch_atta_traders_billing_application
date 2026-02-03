@@ -229,6 +229,128 @@ class _CheckoutPageState extends State<CheckoutPage> {
         .fold(0, (sum, product) => sum + product.quantity);
   }
 
+  /// Determines the customer name for database and display
+  /// Returns 'Walk-In Customer' if anonymous, otherwise the entered name
+  String _getCustomerName() {
+    final enteredName = _customerNameController.text.trim();
+    return _isAnonymousCustomer || enteredName.isEmpty
+        ? 'Walk-In Customer'
+        : enteredName;
+  }
+
+  /// Determines whether bill should go to Daily Sales (true) or Credit History (false)
+  ///
+  /// Business Logic:
+  /// - Daily Sales: Cash payment AND (no MT tracking OR all MT collected)
+  ///   - Fully completed transactions
+  /// - Credit History: All other cases that need tracking:
+  ///   - Credit payment (money pending)
+  ///   - Cash payment with MT pending (crates pending return)
+  bool _shouldSaveToDailySales() {
+    if (_paymentType != 'cash') {
+      return false; // Credit payments always go to Credit History
+    }
+
+    final hasMt = _mtController.text.trim().isNotEmpty;
+    if (!hasMt) {
+      return true; // No MT tracking = completed sale
+    }
+
+    // If MT is entered, check if all crates were collected
+    final totalRbQuantity = _getTotalRbQuantity();
+    final cratesDue = totalRbQuantity - _mt;
+    return cratesDue == 0; // All crates collected = completed sale
+  }
+
+  /// Creates bill data for saving to Firestore
+  /// Returns either SaleHistory or CreditHistory based on business rules
+  dynamic _prepareBillData(String billId) {
+    final customerName = _getCustomerName();
+    final products = _selectedProducts
+        .map((p) => Product(name: p.name, price: p.price, quantity: p.quantity))
+        .toList();
+
+    if (_shouldSaveToDailySales()) {
+      // Fully completed cash sale - no tracking needed
+      return SaleHistory(
+        billId: billId,
+        customerName: customerName,
+        date: DateTime.now(),
+        products: products,
+        discount: _discount,
+        billType: BillType.cash,
+      );
+    } else {
+      // Needs tracking (credit payment or MT pending)
+      final hasMt = _mtController.text.trim().isNotEmpty;
+      final totalRbQuantity = _getTotalRbQuantity();
+      final cratesDue = hasMt ? (totalRbQuantity - _mt) : 0;
+
+      return CreditHistory(
+        billId: billId,
+        customerName: customerName,
+        date: DateTime.now(),
+        products: products,
+        discount: _discount,
+        isPaid:
+            _paymentType ==
+            'cash', // True if cash (only MT pending), false if credit
+        amountDue: _grandTotal,
+        cratesDue: cratesDue,
+        billType: BillType.credit,
+      );
+    }
+  }
+
+  /// Validates checkout inputs before saving/printing
+  /// Returns error message if invalid, null if valid
+  String? _validateCheckout() {
+    // Validate customer name (must be entered or anonymous for all bills)
+    if (!_hasCustomerName && !_isAnonymousCustomer) {
+      return 'Please enter customer name or select anonymous';
+    }
+
+    // For credit payments, customer name is required (can't be anonymous)
+    if (_paymentType == 'credit' && _isAnonymousCustomer) {
+      return 'Customer name required for credit bills';
+    }
+
+    // Validate products selected
+    if (_selectedProducts.isEmpty) {
+      return 'No products selected';
+    }
+
+    // Validate grand total
+    if (_grandTotal <= 0) {
+      return 'Total amount must be greater than zero';
+    }
+
+    // Validate MT if entered
+    if (_mtController.text.trim().isNotEmpty) {
+      final totalRbQuantity = _getTotalRbQuantity();
+      if (_mt > totalRbQuantity) {
+        return 'Collected MT cannot exceed total RB quantity';
+      }
+    }
+
+    return null; // All valid
+  }
+
+  /// Saves bill to appropriate collection (Daily Sales or Credit History)
+  Future<bool> _saveBillToFirebase(
+    String billId,
+    String salesmanIdentifier,
+  ) async {
+    final billData = _prepareBillData(billId);
+
+    if (billData is SaleHistory) {
+      return await _saleProvider.saveSale(billData, salesmanIdentifier);
+    } else if (billData is CreditHistory) {
+      return await _creditProvider.saveCredit(billData, salesmanIdentifier);
+    }
+    return false;
+  }
+
   Future<void> _printBill({
     required String billId,
     required String customerName,
@@ -270,310 +392,166 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _handleSaveBill() async {
-    setState(() {
-      _isSaving = true;
-    });
-
-    // Generate bill ID using UUID
-    final billId = _uuid.v4();
-
-    // Get salesman identifier (for Firebase path) from SharedPreferences
-    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
-    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+    // Validate inputs
+    final validationError = _validateCheckout();
+    if (validationError != null) {
       if (mounted) {
         CustomSnackBar.show(
           context,
-          message: 'Salesman info not found. Please login again.',
+          message: validationError,
           type: SnackBarType.error,
         );
       }
-      setState(() {
-        _isSaving = false;
-      });
       return;
     }
 
-    // Determine if MT is collected
-    final bool hasMt = _mtController.text.trim().isNotEmpty;
+    setState(() => _isSaving = true);
 
-    // Determine customer name: use entered name, or 'Walk-In Customer' if anonymous
-    final enteredName = _customerNameController.text.trim();
-    final customerNameForDb = _isAnonymousCustomer
-        ? 'Walk-In Customer'
-        : (enteredName.isNotEmpty ? enteredName : 'Walk-In Customer');
-
-    // Save to Daily Sales only if: payment is cash AND MT is empty
-    if (_paymentType == 'cash' && !hasMt) {
-      // Create SaleHistory object
-      final sale = SaleHistory(
-        billId: billId,
-        customerName: customerNameForDb,
-        date: DateTime.now(),
-        products: _selectedProducts
-            .map(
-              (p) =>
-                  Product(name: p.name, price: p.price, quantity: p.quantity),
-            )
-            .toList(),
-        discount: _discount,
-        billType: BillType.cash,
-      );
-
-      // Save to Firebase
-      final success = await _saleProvider.saveSale(sale, salesmanIdentifier);
-
-      setState(() {
-        _isSaving = false;
-      });
-
-      if (success) {
+    try {
+      // Get salesman identifier from SharedPreferences
+      final salesmanIdentifier =
+          await AppPreferences.instance.salesmanIdentifier;
+      if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
         if (mounted) {
           CustomSnackBar.show(
             context,
-            message: 'Bill saved successfully',
-            type: SnackBarType.success,
+            message: 'Salesman info not found. Please login again.',
+            type: SnackBarType.error,
           );
         }
+        return;
+      }
 
-        // Call the original onPrint callback
-        widget.onPrint();
-      } else {
-        if (mounted) {
+      // Generate bill ID and save to Firebase
+      final billId = _uuid.v4();
+      final success = await _saveBillToFirebase(billId, salesmanIdentifier);
+
+      if (mounted) {
+        if (success) {
+          final billType = _shouldSaveToDailySales() ? 'Bill' : 'Credit';
           CustomSnackBar.show(
             context,
-            message: _saleProvider.errorMessage ?? 'Failed to save bill',
+            message: '$billType saved successfully',
+            type: SnackBarType.success,
+          );
+          widget.onPrint();
+        } else {
+          final errorMsg = _shouldSaveToDailySales()
+              ? (_saleProvider.errorMessage ?? 'Failed to save bill')
+              : (_creditProvider.errorMessage ?? 'Failed to save credit');
+          CustomSnackBar.show(
+            context,
+            message: errorMsg,
             type: SnackBarType.error,
           );
         }
       }
-    } else {
-      // Save to Credit History
-      final totalRbQuantity = _getTotalRbQuantity();
-      final cratesDue = hasMt ? (totalRbQuantity - _mt) : 0;
-
-      final credit = CreditHistory(
-        billId: billId,
-        customerName: customerNameForDb,
-        date: DateTime.now(),
-        products: _selectedProducts
-            .map(
-              (p) =>
-                  Product(name: p.name, price: p.price, quantity: p.quantity),
-            )
-            .toList(),
-        discount: _discount,
-        isPaid: _paymentType == 'cash',
-        amountDue: _grandTotal,
-        cratesDue: cratesDue,
-        billType: BillType.credit,
-      );
-
-      // Save to Firebase
-      final success = await _creditProvider.saveCredit(
-        credit,
-        salesmanIdentifier,
-      );
-
-      setState(() {
-        _isSaving = false;
-      });
-
-      if (success) {
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            message: 'Credit saved successfully',
-            type: SnackBarType.success,
-          );
-        }
-
-        // Call the original onPrint callback
-        widget.onPrint();
-      } else {
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            message: _creditProvider.errorMessage ?? 'Failed to save credit',
-            type: SnackBarType.error,
-          );
-        }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
       }
     }
   }
 
   Future<void> _handlePrintBill() async {
-    setState(() {
-      _isPrinting = true;
-    });
-
-    // Generate bill ID using UUID
-    final billId = _uuid.v4();
-
-    // Get salesman name (for printing) and identifier (for Firebase path)
-    final salesmanName = await AppPreferences.instance.salesmanName;
-    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
-    if (salesmanName == null ||
-        salesmanName.isEmpty ||
-        salesmanIdentifier == null ||
-        salesmanIdentifier.isEmpty) {
+    // Validate inputs
+    final validationError = _validateCheckout();
+    if (validationError != null) {
       if (mounted) {
         CustomSnackBar.show(
           context,
-          message: 'Salesman info not found. Please login again.',
+          message: validationError,
           type: SnackBarType.error,
         );
       }
-      setState(() {
-        _isPrinting = false;
-      });
       return;
     }
 
-    // Determine if MT is collected
-    final bool hasMt = _mtController.text.trim().isNotEmpty;
-
-    // Determine customer name: use entered name, or 'Walk-In Customer' if anonymous
-    final enteredName = _customerNameController.text.trim();
-    final customerNameForDb = _isAnonymousCustomer
-        ? 'Walk-In Customer'
-        : (enteredName.isNotEmpty ? enteredName : 'Walk-In Customer');
-
-    // For printing: use the same name as database (always show 'Walk-In Customer' when anonymous)
-    final customerNameForPrint = customerNameForDb;
-
-    // Save to Daily Sales only if: payment is cash AND MT is empty
-    if (_paymentType == 'cash' && !hasMt) {
-      // Create SaleHistory object
-      final sale = SaleHistory(
-        billId: billId,
-        customerName: customerNameForDb,
-        date: DateTime.now(),
-        products: _selectedProducts
-            .map(
-              (p) =>
-                  Product(name: p.name, price: p.price, quantity: p.quantity),
-            )
-            .toList(),
-        discount: _discount,
-        billType: BillType.cash,
-      );
-
-      // Save to Firebase
-      final success = await _saleProvider.saveSale(sale, salesmanIdentifier);
-
-      if (success) {
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            message: 'Bill saved successfully',
-            type: SnackBarType.success,
-          );
-        }
-
-        // Print the bill
-        await _printBill(
-          billId: billId,
-          customerName: customerNameForPrint,
-          date: DateTime.now(),
-          products: _selectedProducts,
-          discount: _discount,
-          salesmanName: salesmanName,
-          paymentType: _paymentType,
+    // Check printer connection
+    if (!_isPrinterConnected) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Printer not connected. Please connect printer first.',
+          type: SnackBarType.error,
         );
+      }
+      return;
+    }
 
-        setState(() {
-          _isPrinting = false;
-        });
+    setState(() => _isPrinting = true);
 
-        // Call the original onPrint callback
-        widget.onPrint();
-      } else {
-        setState(() {
-          _isPrinting = false;
-        });
-
+    try {
+      // Get salesman info from SharedPreferences
+      final salesmanName = await AppPreferences.instance.salesmanName;
+      final salesmanIdentifier =
+          await AppPreferences.instance.salesmanIdentifier;
+      if (salesmanName == null ||
+          salesmanName.isEmpty ||
+          salesmanIdentifier == null ||
+          salesmanIdentifier.isEmpty) {
         if (mounted) {
           CustomSnackBar.show(
             context,
-            message: _saleProvider.errorMessage ?? 'Failed to save bill',
+            message: 'Salesman info not found. Please login again.',
             type: SnackBarType.error,
           );
         }
+        return;
       }
-    } else {
-      // Save to Credit History if:
-      // 1. Payment is credit AND MT is not empty
-      // 2. Payment is cash AND MT is not empty
-      // 3. Payment is credit AND MT is empty
 
-      // Calculate cratesDue: 0 if MT not collected, otherwise Remaining MT - Collected MT
+      // Generate bill ID and save to Firebase
+      final billId = _uuid.v4();
+      final success = await _saveBillToFirebase(billId, salesmanIdentifier);
+
+      if (!success) {
+        if (mounted) {
+          final errorMsg = _shouldSaveToDailySales()
+              ? (_saleProvider.errorMessage ?? 'Failed to save bill')
+              : (_creditProvider.errorMessage ?? 'Failed to save credit');
+          CustomSnackBar.show(
+            context,
+            message: errorMsg,
+            type: SnackBarType.error,
+          );
+        }
+        return;
+      }
+
+      // Show success message
+      if (mounted) {
+        final billType = _shouldSaveToDailySales() ? 'Bill' : 'Credit';
+        CustomSnackBar.show(
+          context,
+          message: '$billType saved successfully',
+          type: SnackBarType.success,
+        );
+      }
+
+      // Print the bill
+      final hasMt = _mtController.text.trim().isNotEmpty;
       final totalRbQuantity = _getTotalRbQuantity();
       final cratesDue = hasMt ? (totalRbQuantity - _mt) : 0;
 
-      final credit = CreditHistory(
+      await _printBill(
         billId: billId,
-        customerName: customerNameForDb,
+        customerName: _getCustomerName(),
         date: DateTime.now(),
-        products: _selectedProducts
-            .map(
-              (p) =>
-                  Product(name: p.name, price: p.price, quantity: p.quantity),
-            )
-            .toList(),
+        products: _selectedProducts,
         discount: _discount,
-        isPaid: _paymentType == 'cash', // true if cash, false if credit
-        amountDue:
-            _grandTotal, // grandTotal already includes discount calculation
-        cratesDue: cratesDue, // Remaining MT - Collected MT
-        billType: BillType.credit,
+        salesmanName: salesmanName,
+        paymentType: _paymentType,
+        mtCollected: hasMt ? _mt : null,
+        mtRemaining: hasMt ? cratesDue : null,
       );
 
-      // Save to Firebase
-      final success = await _creditProvider.saveCredit(
-        credit,
-        salesmanIdentifier,
-      );
-
-      if (success) {
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            message: 'Credit saved successfully',
-            type: SnackBarType.success,
-          );
-        }
-
-        // Print the bill
-        await _printBill(
-          billId: billId,
-          customerName: customerNameForPrint,
-          date: DateTime.now(),
-          products: _selectedProducts,
-          discount: _discount,
-          salesmanName: salesmanName,
-          paymentType: _paymentType,
-          mtCollected: hasMt ? _mt : null,
-          mtRemaining: hasMt ? cratesDue : null,
-        );
-
-        setState(() {
-          _isPrinting = false;
-        });
-
-        // Call the original onPrint callback
+      // Call the original onPrint callback
+      if (mounted) {
         widget.onPrint();
-      } else {
-        setState(() {
-          _isPrinting = false;
-        });
-
-        if (mounted) {
-          CustomSnackBar.show(
-            context,
-            message: _creditProvider.errorMessage ?? 'Failed to save credit',
-            type: SnackBarType.error,
-          );
-        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPrinting = false);
       }
     }
   }

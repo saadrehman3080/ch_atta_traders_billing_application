@@ -74,4 +74,40 @@ class SalesmanRepository {
       return null;
     }
   }
+
+  /// Fetches a salesman by their ID to revalidate access control.
+  ///
+  /// [salesmanId] - The salesman ID to look up
+  ///
+  /// Returns the [Salesman] object if found, null otherwise.
+  /// Throws [NoAccessException] if the user does not have access.
+  Future<Salesman?> getSalesmanById(int salesmanId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collectionName)
+          .where('salesmanId', isEqualTo: salesmanId)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        debugPrint('No salesman found with ID: $salesmanId');
+        return null;
+      }
+
+      final doc = querySnapshot.docs.first;
+      final salesman = Salesman.fromFirestore(doc.id, doc.data());
+
+      // Check if salesman has access to the system
+      if (!salesman.hasAccess) {
+        debugPrint('Salesman $salesmanId does not have access to the system');
+        throw NoAccessException('User does not have access to the system');
+      }
+
+      return salesman;
+    } catch (e) {
+      debugPrint('Error fetching salesman by ID: $e');
+      if (e is NoAccessException) rethrow;
+      return null;
+    }
+  }
 }

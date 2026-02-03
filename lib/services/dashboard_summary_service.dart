@@ -114,7 +114,7 @@ class DashboardSummaryService {
   // ========== CREDIT OPERATIONS ==========
 
   /// Updates dashboard when a new credit is created.
-  /// Increments: totalCredit (if not paid), totalItemsSold, totalMtRemaining, totalDiscount, customersServed
+  /// Increments: totalCredit (if not paid), totalCollection (if paid in cash), totalItemsSold, totalMtRemaining, totalDiscount, customersServed
   Future<void> onCreditCreated({
     required String salesmanName,
     required DateTime date,
@@ -132,17 +132,21 @@ class DashboardSummaryService {
 
     final summaryRef = _getSummaryRef(salesmanName, date);
 
-    // Only add to credit if not already paid (cash with MT tracking)
-    final actualCreditAmount = isPaid ? 0 : creditAmount;
-
     final updates = {
-      'totalCredit': FieldValue.increment(actualCreditAmount),
       'totalItemsSold': FieldValue.increment(itemsSold),
       'totalMtRemaining': FieldValue.increment(mtRemaining),
       'totalDiscount': FieldValue.increment(discount),
       'customersServed': FieldValue.increment(1),
       'lastUpdated': FieldValue.serverTimestamp(),
     };
+
+    // If paid (cash payment with MT tracking), add to totalCollection
+    // If not paid (credit payment), add to totalCredit
+    if (isPaid) {
+      updates['totalCollection'] = FieldValue.increment(creditAmount);
+    } else {
+      updates['totalCredit'] = FieldValue.increment(creditAmount);
+    }
 
     if (transaction != null) {
       transaction.set(summaryRef, updates, SetOptions(merge: true));

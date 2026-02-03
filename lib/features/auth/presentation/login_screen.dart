@@ -94,6 +94,134 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Revalidates access control from Firestore and navigates to home if valid.
+  /// Shows appropriate error messages if access is denied.
+  Future<void> _revalidateAccessAndNavigate() async {
+    try {
+      // Get stored salesman ID
+      final salesmanId = await AppPreferences.instance.salesmanId;
+      if (salesmanId == null) {
+        debugPrint('No salesman ID found - redirecting to credentials login');
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Session expired. Please login with credentials.',
+            type: SnackBarType.warning,
+          );
+          // Reset to first login to force credential entry
+          await AppPreferences.instance.setIsFirstLogin(true);
+          setState(() => _isFirstLogin = true);
+        }
+        return;
+      }
+
+      // Revalidate access from Firestore
+      final authProvider = context.read<AuthProvider>();
+      final hasAccess = await authProvider.revalidateAccess(salesmanId);
+
+      if (!mounted) return;
+
+      if (hasAccess) {
+        context.go('/home');
+      } else if (authProvider.state == AuthState.noAccess) {
+        _showNoAccessDialog();
+      } else {
+        CustomSnackBar.show(
+          context,
+          message:
+              authProvider.errorMessage ??
+              'Authentication failed. Please login with credentials.',
+          type: SnackBarType.error,
+        );
+        // Reset to first login to force credential entry
+        await AppPreferences.instance.setIsFirstLogin(true);
+        setState(() => _isFirstLogin = true);
+      }
+    } catch (e) {
+      debugPrint('Error during access revalidation: $e');
+      if (mounted) {
+        // On error, still allow access (graceful degradation)
+        context.go('/home');
+      }
+    }
+  }
+
+  /// Shows dialog when user no longer has access to the system.
+  void _showNoAccessDialog() {
+    showModal<void>(
+      context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.pepsiWhite,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.pepsiRed.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.block,
+                  color: AppColors.pepsiRed,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Access Denied',
+                style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 18),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You no longer have access to the system. Please contact your administrator.',
+                style: AppTextStyles.helperText.copyWith(
+                  color: AppColors.gray500,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    // Reset to first login
+                    await AppPreferences.instance.setIsFirstLogin(true);
+                    setState(() => _isFirstLogin = true);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.pepsiBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Handles biometric authentication flow with comprehensive error handling.
   /// Shows loading state and provides clear feedback for all scenarios.
   Future<void> _authenticateWithFingerprint() async {
@@ -118,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      _handleAuthenticationResult(result);
+      await _handleAuthenticationResult(result);
     } catch (e) {
       debugPrint('Unexpected error during authentication: $e');
       if (mounted) {
@@ -136,11 +264,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Handles the result of biometric authentication.
-  void _handleAuthenticationResult(AuthResult result) {
+  Future<void> _handleAuthenticationResult(AuthResult result) async {
     switch (result) {
       case AuthResult.success:
         debugPrint('Biometric authentication successful');
-        context.go('/home');
+        // Revalidate access control from Firestore before proceeding
+        await _revalidateAccessAndNavigate();
         break;
 
       case AuthResult.failed:

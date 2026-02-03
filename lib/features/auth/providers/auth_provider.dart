@@ -125,6 +125,59 @@ class AuthProvider extends ChangeNotifier {
     debugPrint('User logged out');
   }
 
+  /// Revalidates access control by fetching the latest data from Firestore.
+  ///
+  /// This should be called during fingerprint/biometric login to ensure
+  /// the user still has access and to update isAdmin status.
+  ///
+  /// [salesmanId] - The salesman ID stored in preferences
+  ///
+  /// Returns true if the user has valid access, false otherwise.
+  Future<bool> revalidateAccess(int salesmanId) async {
+    _setState(AuthState.loading);
+    _errorMessage = null;
+
+    // Check internet connectivity first
+    final hasConnection = await _checkConnectivity();
+    if (!hasConnection) {
+      // Allow access with cached data when offline
+      debugPrint('No internet - using cached access data');
+      _setState(AuthState.authenticated);
+      return true;
+    }
+
+    try {
+      final salesman = await _repository.getSalesmanById(salesmanId);
+
+      if (salesman != null) {
+        _currentSalesman = salesman;
+        _setState(AuthState.authenticated);
+
+        // Update cached preferences with latest values from Firestore
+        await AppPreferences.instance.setSalesmanName(salesman.name);
+        await AppPreferences.instance.setIsAdmin(salesman.isAdmin);
+
+        debugPrint('Access revalidated for: ${salesman.name}');
+        debugPrint('isAdmin updated to: ${salesman.isAdmin}');
+        return true;
+      } else {
+        _errorMessage = 'User not found. Please login with credentials.';
+        _setState(AuthState.failed);
+        return false;
+      }
+    } on NoAccessException catch (e) {
+      _errorMessage = 'Sorry, you no longer have access to the system.';
+      _setState(AuthState.noAccess);
+      debugPrint('Access revalidation failed: No access - $e');
+      return false;
+    } catch (e) {
+      // On error, allow access with cached data
+      debugPrint('Error revalidating access: $e - using cached data');
+      _setState(AuthState.authenticated);
+      return true;
+    }
+  }
+
   /// Resets the authentication state to initial.
   void resetState() {
     _errorMessage = null;
