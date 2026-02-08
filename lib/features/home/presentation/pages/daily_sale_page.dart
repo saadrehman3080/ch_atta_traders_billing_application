@@ -155,10 +155,6 @@ class _DailySalePageState extends State<DailySalePage> {
                 decoration: BoxDecoration(
                   color: AppColors.pepsiBlueLight.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  // border: Border.all(
-                  //   color: AppColors.pepsiBlueLight.withValues(alpha: 0.3),
-                  //   width: 1.5,
-                  // ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

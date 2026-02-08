@@ -1094,10 +1094,6 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 decoration: BoxDecoration(
                   color: AppColors.pepsiRedLight.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  // border: Border.all(
-                  //   color: AppColors.pepsiRedLight.withValues(alpha: 0.3),
-                  //   width: 1.5,
-                  // ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

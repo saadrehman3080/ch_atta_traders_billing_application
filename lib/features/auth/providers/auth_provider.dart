@@ -92,6 +92,7 @@ class AuthProvider extends ChangeNotifier {
         await AppPreferences.instance.setSalesmanName(salesman.name);
         await AppPreferences.instance.setSalesmanId(salesman.salesmanId);
         await AppPreferences.instance.setIsAdmin(salesman.isAdmin);
+        await AppPreferences.instance.setSalesmanDocId(salesman.id);
 
         debugPrint('Login successful for: ${salesman.name}');
         return true;
@@ -156,6 +157,7 @@ class AuthProvider extends ChangeNotifier {
         // Update cached preferences with latest values from Firestore
         await AppPreferences.instance.setSalesmanName(salesman.name);
         await AppPreferences.instance.setIsAdmin(salesman.isAdmin);
+        await AppPreferences.instance.setSalesmanDocId(salesman.id);
 
         debugPrint('Access revalidated for: ${salesman.name}');
         debugPrint('isAdmin updated to: ${salesman.isAdmin}');

@@ -43,6 +43,9 @@ class AppPreferences {
   /// Key for storing the salesman admin status
   static const String _keyIsAdmin = 'is_admin';
 
+  /// Key for storing the salesman Firestore document ID
+  static const String _keySalesmanDocId = 'salesman_doc_id';
+
   /// Key for storing the connected printer address
   static const String _keyPrinterAddress = 'printer_address';
 
@@ -262,6 +265,41 @@ class AppPreferences {
       return result;
     } catch (e) {
       debugPrint('Error storing admin status: $e');
+      return false;
+    }
+  }
+
+  // ========== Salesman Firestore Doc ID ==========
+
+  /// Gets the salesman Firestore document ID from shared preferences.
+  ///
+  /// This is the auto-generated Firestore document ID for the salesman
+  /// used in paths like /salesmen/{docId}/daily_sales/.
+  ///
+  /// Returns the document ID or null if not set.
+  Future<String?> get salesmanDocId async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getString(_keySalesmanDocId);
+    } catch (e) {
+      debugPrint('Error reading salesman doc ID: $e');
+      return null;
+    }
+  }
+
+  /// Stores the salesman Firestore document ID.
+  ///
+  /// Returns `true` if the operation was successful, `false` otherwise.
+  Future<bool> setSalesmanDocId(String docId) async {
+    _ensureInitialized();
+    try {
+      final result = await _prefs!.setString(_keySalesmanDocId, docId);
+      if (result) {
+        debugPrint('Salesman doc ID stored: $docId');
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error storing salesman doc ID: $e');
       return false;
     }
   }

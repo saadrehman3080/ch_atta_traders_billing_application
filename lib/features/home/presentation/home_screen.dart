@@ -2,6 +2,7 @@ import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/dashboard_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/daily_sale_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/credit_record_page.dart';
+import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/daily_progress_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/order_page.dart';
 import 'package:flutter/material.dart';
 
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const OrderPage(),
     const DailySalePage(),
     const CreditRecordPage(),
+    const DailyProgressPage(),
   ];
 
   @override
@@ -72,6 +74,11 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(Icons.receipt_outlined),
               activeIcon: Icon(Icons.receipt),
               label: 'Credit',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.trending_up_outlined),
+              activeIcon: Icon(Icons.trending_up),
+              label: 'Progress',
             ),
           ],
         ),
