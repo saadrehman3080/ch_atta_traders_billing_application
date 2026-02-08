@@ -591,9 +591,19 @@ class BillPrinter {
       }
 
       // Grand total - large and bold
+      // For 5+ digit amounts, use double-height only (not double-width)
+      // to prevent overflow on 58mm printers (~16 chars at double size)
+      final formattedNet = formatCashAmount(netAmount);
+      final totalLine = 'TOTAL: Rs.$formattedNet';
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
-      bytes.addAll('TOTAL: Rs.${formatCashAmount(netAmount)}\n'.codeUnits);
+      if (totalLine.length > 16) {
+        // Double-height only (normal width) for long totals
+        bytes.addAll('\x1D\x21\x01'.codeUnits);
+      } else {
+        // Double width + double height for short totals
+        bytes.addAll('\x1D\x21\x11'.codeUnits);
+      }
+      bytes.addAll('$totalLine\n'.codeUnits);
       bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\n'.codeUnits);

@@ -931,6 +931,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   if (_isAnonymousCustomer) {
                     FocusScope.of(context).unfocus();
                     _customerNameController.clear();
+                    // Clear MT field and reset value when skipping customer
+                    _mtController.clear();
+                    _mt = 0;
                   }
                 });
               },
@@ -1029,27 +1032,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildMtField() {
-    return Theme(
-      data: Theme.of(context).copyWith(
-        textSelectionTheme: const TextSelectionThemeData(
-          selectionHandleColor: AppColors.pepsiBlueLight,
-          selectionColor: AppColors.textSecondary,
-          cursorColor: AppColors.pepsiBlueLight,
+    return AbsorbPointer(
+      absorbing: _isAnonymousCustomer,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          textSelectionTheme: const TextSelectionThemeData(
+            selectionHandleColor: AppColors.pepsiBlueLight,
+            selectionColor: AppColors.textSecondary,
+            cursorColor: AppColors.pepsiBlueLight,
+          ),
         ),
-      ),
-      child: TextField(
-        controller: _mtController,
-        style: AppTextStyles.inputText.copyWith(
-          color: Colors.black87,
-          fontSize: 14,
+        child: TextField(
+          controller: _mtController,
+          style: AppTextStyles.inputText.copyWith(
+            color: _isAnonymousCustomer ? AppColors.gray400 : Colors.black87,
+            fontSize: 14,
+          ),
+          cursorColor: AppColors.pepsiBlue,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) {
+            FocusScope.of(context).unfocus();
+          },
+          decoration: _buildMtFieldDecoration(),
         ),
-        cursorColor: AppColors.pepsiBlue,
-        keyboardType: TextInputType.number,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (value) {
-          FocusScope.of(context).unfocus();
-        },
-        decoration: _buildMtFieldDecoration(),
       ),
     );
   }
@@ -1057,10 +1063,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
   InputDecoration _buildMtFieldDecoration() {
     return InputDecoration(
       filled: true,
-      fillColor: Colors.white,
-      hintText: "Collected MT (Optional)",
-      hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
-      prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20),
+      fillColor: _isAnonymousCustomer ? AppColors.gray100 : Colors.white,
+      hintText: _isAnonymousCustomer
+          ? "All MT Returned"
+          : "Collected MT (Optional)",
+      hintStyle: AppTextStyles.inputHint.copyWith(
+        fontSize: 13,
+        color: _isAnonymousCustomer ? AppColors.gray500 : null,
+      ),
+      prefixIcon: Icon(
+        Icons.inventory_2_outlined,
+        size: 20,
+        color: _isAnonymousCustomer ? AppColors.gray400 : null,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),

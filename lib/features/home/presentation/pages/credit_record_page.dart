@@ -48,6 +48,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   void initState() {
     super.initState();
     _creditProvider = CreditHistoryProvider();
+    _creditProvider.addListener(_onCreditsChanged);
     // Immediately use PrinterService state (synchronous - singleton already initialized)
     _isPrinterConnected = _printerService.state.isConnected;
     _initConnectivity();
@@ -136,6 +137,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   void dispose() {
     _amountController.dispose();
     _cratesController.dispose();
+    _creditProvider.removeListener(_onCreditsChanged);
     _creditProvider.dispose();
     _connectivitySubscription?.cancel();
     _printerService.removeListener(_onPrinterStateChanged);
@@ -143,6 +145,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       _onPrinterConnectionChanged,
     );
     super.dispose();
+  }
+
+  /// Rebuild app bar when credits list changes (for bill count badge)
+  void _onCreditsChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadCredits() async {
@@ -1074,6 +1081,47 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       scrolledUnderElevation: 0,
       title: Text('Credit History', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
+      actions: [
+        if (_creditProvider.credits.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.pepsiRedLight.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  // border: Border.all(
+                  //   color: AppColors.pepsiRedLight.withValues(alpha: 0.3),
+                  //   width: 1.5,
+                  // ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.credit_card_outlined,
+                      size: 15,
+                      color: AppColors.pepsiRedLight,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${_creditProvider.credits.length} Bills',
+                      style: TextStyle(
+                        color: AppColors.pepsiRedLight,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(color: AppColors.gray300, height: 1),

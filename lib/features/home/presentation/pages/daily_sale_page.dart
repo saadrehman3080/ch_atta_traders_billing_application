@@ -32,6 +32,7 @@ class _DailySalePageState extends State<DailySalePage> {
   void initState() {
     super.initState();
     _salesProvider = DailySalesProvider();
+    _salesProvider.addListener(_onSalesChanged);
     _initConnectivity();
     _setupConnectivityListener();
   }
@@ -84,9 +85,15 @@ class _DailySalePageState extends State<DailySalePage> {
 
   @override
   void dispose() {
+    _salesProvider.removeListener(_onSalesChanged);
     _salesProvider.dispose();
     _connectivitySubscription?.cancel();
     super.dispose();
+  }
+
+  /// Rebuild app bar when sales list changes (for bill count badge)
+  void _onSalesChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadSales() async {
@@ -135,6 +142,47 @@ class _DailySalePageState extends State<DailySalePage> {
       scrolledUnderElevation: 0,
       title: Text('Daily Sales', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
+      actions: [
+        if (_salesProvider.sales.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.pepsiBlueLight.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  // border: Border.all(
+                  //   color: AppColors.pepsiBlueLight.withValues(alpha: 0.3),
+                  //   width: 1.5,
+                  // ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.receipt_long_outlined,
+                      size: 15,
+                      color: AppColors.pepsiBlueLight,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${_salesProvider.sales.length} Bills',
+                      style: TextStyle(
+                        color: AppColors.pepsiBlueLight,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(color: AppColors.gray300, height: 1),
