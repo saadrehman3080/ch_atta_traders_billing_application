@@ -5,6 +5,7 @@ import 'package:ch_atta_traders_billing_application/features/home/presentation/p
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/daily_progress_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/order_page.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -34,53 +35,111 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
-      bottomNavigationBar: Theme(
-        data: Theme.of(context).copyWith(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: AppColors.pepsiWhite,
-          selectedItemColor: AppColors.pepsiRedLight,
-          unselectedItemColor: AppColors.textSecondary,
-          showSelectedLabels: true,
-          showUnselectedLabels: true,
-          elevation: 8,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_outlined),
-              activeIcon: Icon(Icons.grid_view),
-              label: 'Dashboard',
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppColors.pepsiWhite,
+          border: Border(
+            top: BorderSide(
+              color: AppColors.gray300.withValues(alpha: 0.5),
+              width: 1,
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.shopping_cart_outlined),
-              activeIcon: Icon(Icons.shopping_cart),
-              label: 'Order',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history_outlined),
-              activeIcon: Icon(Icons.history),
-              label: 'History',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_outlined),
-              activeIcon: Icon(Icons.receipt),
-              label: 'Credit',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.trending_up_outlined),
-              activeIcon: Icon(Icons.trending_up),
-              label: 'Progress',
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
             ),
           ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(
+                  0,
+                  Icons.grid_view_outlined,
+                  Icons.grid_view,
+                  'Dashboard',
+                ),
+                _buildNavItem(
+                  1,
+                  Icons.shopping_cart_outlined,
+                  Icons.shopping_cart,
+                  'Order',
+                ),
+                _buildNavItem(
+                  2,
+                  Icons.history_outlined,
+                  Icons.history,
+                  'History',
+                ),
+                _buildNavItem(
+                  3,
+                  Icons.receipt_outlined,
+                  Icons.receipt,
+                  'Credit',
+                ),
+                _buildNavItem(
+                  4,
+                  Icons.trending_up_outlined,
+                  Icons.trending_up,
+                  'Progress',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(
+    int index,
+    IconData icon,
+    IconData activeIcon,
+    String label,
+  ) {
+    final isSelected = _selectedIndex == index;
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => setState(() => _selectedIndex = index),
+          borderRadius: BorderRadius.circular(12),
+          splashColor: AppColors.pepsiBlue.withValues(alpha: 0.08),
+          highlightColor: Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isSelected ? activeIcon : icon,
+                  size: 22,
+                  color: isSelected ? AppColors.pepsiBlue : AppColors.gray400,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? AppColors.pepsiBlue : AppColors.gray500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

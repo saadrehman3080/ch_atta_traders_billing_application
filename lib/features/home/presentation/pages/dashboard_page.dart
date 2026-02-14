@@ -10,6 +10,7 @@ import 'package:ch_atta_traders_billing_application/features/products/providers/
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -125,7 +126,7 @@ class _DashboardPageState extends State<DashboardPage>
     return ChangeNotifierProvider.value(
       value: _dashboardProvider,
       child: Scaffold(
-        backgroundColor: AppColors.gray50,
+        backgroundColor: AppColors.gray100,
         appBar: _buildAppBar(context),
         body: RefreshIndicator(
           onRefresh: () => _dashboardProvider.refreshDashboardData(),
@@ -152,72 +153,112 @@ class _DashboardPageState extends State<DashboardPage>
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,
-      title: _buildAppBarTitle(),
+      toolbarHeight: 68,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _getGreeting(),
+            style: GoogleFonts.poppins(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w400,
+              color: AppColors.gray500,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _salesmanName,
+            style: GoogleFonts.poppins(
+              fontSize: 19,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
+              height: 1.2,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
       centerTitle: false,
-      actions: _buildAppBarActions(context),
-      bottom: _buildAppBarBorder(),
-    );
-  }
-
-  Widget _buildAppBarTitle() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'ATTA TRADERS',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-            fontStyle: FontStyle.italic,
-            color: AppColors.pepsiBlueLight,
-          ),
-        ),
-        _buildSubtitleRow(),
+      actions: [
+        _buildConnectionIndicator(),
+        const SizedBox(width: 8),
+        _buildLogoutButton(context),
+        const SizedBox(width: 16),
       ],
-    );
-  }
-
-  Widget _buildSubtitleRow() {
-    return Row(
-      children: [
-        Text(
-          '$_salesmanName • Salesman Panel',
-          style: AppTextStyles.helperText.copyWith(
-            fontSize: 12,
-            color: AppColors.gray500,
-          ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          color: AppColors.gray300.withValues(alpha: 0.5),
+          height: 1,
         ),
-      ],
+      ),
     );
   }
 
-  List<Widget> _buildAppBarActions(BuildContext context) {
-    return [_buildLogoutButton(context), const SizedBox(width: 12)];
-  }
-
-  PreferredSizeWidget _buildAppBarBorder() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(1),
-      child: Container(height: 1, color: AppColors.gray300),
-    );
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
   }
 
   // ========== App Bar Action Building Methods ==========
 
-  Widget _buildLogoutButton(BuildContext context) {
+  Widget _buildConnectionIndicator() {
+    final isConnected = _printerService.state.isConnected;
     return Container(
-      width: 40,
-      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.pepsiRed.withValues(alpha: 0.1),
-        shape: BoxShape.circle,
+        color: isConnected
+            ? Colors.green.withValues(alpha: 0.08)
+            : AppColors.gray100,
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: IconButton(
-        onPressed: () => _handleLogout(context),
-        icon: const Icon(Icons.logout),
-        color: AppColors.pepsiRed,
-        iconSize: 20,
-        padding: EdgeInsets.zero,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: isConnected ? Colors.green : AppColors.gray400,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isConnected ? 'Printer' : 'Offline',
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              color: isConnected ? Colors.green[700] : AppColors.gray500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _handleLogout(context),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppColors.pepsiRed.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.logout_rounded,
+            color: AppColors.pepsiRed,
+            size: 18,
+          ),
+        ),
       ),
     );
   }
@@ -286,16 +327,22 @@ class _DashboardPageState extends State<DashboardPage>
 
   BoxDecoration _buildCollectionCardDecoration() {
     return BoxDecoration(
-      gradient: const LinearGradient(
+      gradient: LinearGradient(
         colors: [
-          AppColors.pepsiBlueLight,
           AppColors.pepsiBlue,
-          AppColors.pepsiRedLight,
+          AppColors.pepsiBlueLight.withValues(alpha: 0.95),
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.pepsiBlue.withValues(alpha: 0.3),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ],
     );
   }
 
@@ -401,38 +448,43 @@ class _DashboardPageState extends State<DashboardPage>
 
   Widget _buildStatItem(String label, String value, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.2),
-          width: 1,
-        ),
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: Colors.white70, size: 15),
-              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, color: Colors.white70, size: 14),
+              ),
+              const SizedBox(width: 6),
               Text(
                 label,
                 style: AppTextStyles.helperText.copyWith(
-                  color: Colors.white70,
-                  fontSize: 10.5,
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Text(
             value,
             style: AppTextStyles.productItemName.copyWith(
               color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -467,19 +519,18 @@ class _DashboardPageState extends State<DashboardPage>
           margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppColors.pepsiBlue.withValues(alpha: 0.08),
-                AppColors.pepsiBlueLight.withValues(alpha: 0.04),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: AppColors.pepsiBlue.withValues(alpha: 0.2),
-              width: 1.5,
+              color: AppColors.pepsiBlue.withValues(alpha: 0.15),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -707,22 +758,9 @@ class _DashboardPageState extends State<DashboardPage>
   Widget _buildLoadingCard() {
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 40),
       decoration: _buildCollectionCardDecoration(),
-      child: Center(
-        child: Column(
-          children: [
-            CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-            const SizedBox(height: 16),
-            Text(
-              'Loading dashboard data...',
-              style: AppTextStyles.helperText.copyWith(
-                color: Colors.white70,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
+      child: const Center(
+        child: CircularProgressIndicator(color: Colors.white),
       ),
     );
   }
@@ -890,9 +928,16 @@ class _DashboardPageState extends State<DashboardPage>
       margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.pepsiWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.gray300, width: 1.5),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: _buildPrintersSection(),
     );
@@ -954,9 +999,9 @@ class _DashboardPageState extends State<DashboardPage>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.gray300, width: 1.5),
+        color: AppColors.gray50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1095,19 +1140,6 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   // ========== Business Logic Methods ==========
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Good Morning';
-    } else if (hour < 17) {
-      return 'Good Afternoon';
-    } else if (hour < 21) {
-      return 'Good Evening';
-    } else {
-      return 'Good Night';
-    }
-  }
 
   IconData _getGreetingIcon() {
     final hour = DateTime.now().hour;
@@ -1298,15 +1330,16 @@ class _DashboardPageState extends State<DashboardPage>
     final isAnyPrinterConnecting = printerState.isAnyPrinterConnecting;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: isConnected
             ? AppColors.pepsiBlue.withValues(alpha: 0.05)
             : AppColors.gray50,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isConnected ? AppColors.pepsiBlue : AppColors.gray300,
-          width: 1.5,
+          color: isConnected
+              ? AppColors.pepsiBlue.withValues(alpha: 0.3)
+              : AppColors.gray300.withValues(alpha: 0.5),
         ),
       ),
       child: Row(

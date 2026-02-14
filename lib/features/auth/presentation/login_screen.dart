@@ -116,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       // Revalidate access from Firestore
+      if (!mounted) return;
       final authProvider = context.read<AuthProvider>();
       final hasAccess = await authProvider.revalidateAccess(salesmanId);
 

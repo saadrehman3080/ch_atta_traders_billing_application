@@ -121,15 +121,15 @@ class DailyProgress {
   });
 
   /// Total items sold across all products
-  int get totalItemsSold => products.fold<int>(0, (sum, p) => sum + p.sold);
+  int get totalItemsSold => products.fold<int>(0, (total, p) => total + p.sold);
 
   /// Total items taken out across all products
   int get totalItemsTakenOut =>
-      products.fold<int>(0, (sum, p) => sum + p.takenOut);
+      products.fold<int>(0, (total, p) => total + p.takenOut);
 
   /// Total items returned across all products
   int get totalItemsReturned =>
-      products.fold<int>(0, (sum, p) => sum + p.returned);
+      products.fold<int>(0, (total, p) => total + p.returned);
 
   /// Whether the daily sale is completed
   bool get isCompleted => status == 'completed';

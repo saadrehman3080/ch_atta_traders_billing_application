@@ -1,6 +1,8 @@
 import 'package:animations/animations.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
+
+import 'package:ch_atta_traders_billing_application/common/widgets/tap_scale_wrapper.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
@@ -1321,44 +1323,41 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     int index,
     List<CreditHistory> billHistory,
   ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.pepsiWhite,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.gray300, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _showBillDetails(bill),
-                    borderRadius: BorderRadius.circular(8),
-                    child: _buildCardContent(bill),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                _buildActionButtons(bill, index, billHistory),
-              ],
+    return TapScaleWrapper(
+      onTap: () => _showBillDetails(bill),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: AppColors.pepsiWhite,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            // Print Receipt (only show spacing + button when printer connected)
-            if (_isPrinterConnected) ...[
-              const SizedBox(height: 12),
-              _buildPrintReceiptButton(index, billHistory),
-            ],
           ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: _buildCardContent(bill)),
+                  const SizedBox(width: 12),
+                  _buildActionButtons(bill, index, billHistory),
+                ],
+              ),
+              // Print Receipt (only show spacing + button when printer connected)
+              if (_isPrinterConnected) ...[
+                const SizedBox(height: 12),
+                _buildPrintReceiptButton(index, billHistory),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -1381,7 +1380,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         onTap: isAnyLoading || !_isPrinterConnected
             ? null
             : () => _showFullPaymentConfirmation(index, billHistory),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
           height: isPrintingLoading ? 48 : 39,
           width: double.infinity,
@@ -1390,7 +1389,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             color: Colors.green.withValues(
               alpha: (isAnyLoading || !_isPrinterConnected) ? 0.05 : 0.1,
             ),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Center(
             child: isPrintingLoading
@@ -1613,14 +1612,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 onTap: isAnyLoading
                     ? null
                     : () => _showEditDialog(index, billHistory),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: AppColors.pepsiBlueLight.withValues(
                       alpha: isAnyLoading ? 0.05 : 0.1,
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: isEditLoading
                       ? SizedBox(
@@ -1650,14 +1649,14 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 onTap: isDeleteDisabled
                     ? null
                     : () => _showDeleteConfirmation(index, billHistory),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: AppColors.pepsiRedLight.withValues(
                       alpha: isAnyLoading ? 0.05 : 0.1,
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: isDeletingLoading
                       ? SizedBox(
@@ -1693,7 +1692,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               onTap: isAnyLoading
                   ? null
                   : () => _showCompleteConfirmation(index, billHistory),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
@@ -1701,7 +1700,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                   color: Colors.green.withValues(
                     alpha: isAnyLoading ? 0.05 : 0.1,
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
                   child: isCompletingLoading
@@ -1803,9 +1802,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             child: OutlinedButton(
               onPressed: () => Navigator.pop(context),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.gray300, width: 1.5),
+                side: BorderSide(
+                  color: AppColors.gray300.withValues(alpha: 0.5),
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
               child: Text(
@@ -1830,7 +1831,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 backgroundColor: Colors.green[600],
                 foregroundColor: AppColors.pepsiWhite,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 elevation: 0,
               ),
@@ -1897,12 +1898,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: AppColors.gray300,
-                          width: 1.5,
+                        side: BorderSide(
+                          color: AppColors.gray300.withValues(alpha: 0.5),
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       child: Text(
@@ -1927,7 +1927,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                         backgroundColor: Colors.green[600],
                         foregroundColor: AppColors.pepsiWhite,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         elevation: 0,
                       ),
@@ -2019,9 +2019,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             child: OutlinedButton(
               onPressed: () => Navigator.pop(context),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.gray300, width: 1.5),
+                side: BorderSide(
+                  color: AppColors.gray300.withValues(alpha: 0.5),
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
               child: Text(
@@ -2046,7 +2048,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 backgroundColor: AppColors.pepsiRedLight,
                 foregroundColor: AppColors.pepsiWhite,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 elevation: 0,
               ),
@@ -2209,8 +2211,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppColors.gray100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.gray300, width: 1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
         ),
         child: Column(
           children: [
@@ -2284,20 +2286,31 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           },
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.white,
-            hintText: "Amount Received",
-            hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
+            fillColor: AppColors.gray50,
+            labelText: "Amount Received",
+            labelStyle: AppTextStyles.inputHint.copyWith(
+              fontSize: 14,
+              color: AppColors.gray400,
+            ),
+            floatingLabelStyle: AppTextStyles.inputHint.copyWith(
+              fontSize: 14,
+              color: AppColors.pepsiBlue,
+              fontWeight: FontWeight.w500,
+            ),
+            floatingLabelBehavior: FloatingLabelBehavior.auto,
             prefixIcon: const Icon(Icons.payments_outlined, size: 20),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
-              vertical: 12,
+              vertical: 14,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: AppColors.gray300.withValues(alpha: 0.5),
+              ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
                 color: AppColors.pepsiBlue,
                 width: 1.5,
@@ -2324,7 +2337,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             color: displayRemainingAmount == 0
                 ? Colors.green[50]
                 : AppColors.pepsiBlueLight.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: displayRemainingAmount == 0
                   ? Colors.green[300]!
@@ -2385,8 +2398,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppColors.gray100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.gray300, width: 1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
         ),
         child: Column(
           children: [
@@ -2466,20 +2479,31 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
           },
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.white,
-            hintText: "Crates Received",
-            hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
+            fillColor: AppColors.gray50,
+            labelText: "Crates Received",
+            labelStyle: AppTextStyles.inputHint.copyWith(
+              fontSize: 14,
+              color: AppColors.gray400,
+            ),
+            floatingLabelStyle: AppTextStyles.inputHint.copyWith(
+              fontSize: 14,
+              color: AppColors.pepsiBlue,
+              fontWeight: FontWeight.w500,
+            ),
+            floatingLabelBehavior: FloatingLabelBehavior.auto,
             prefixIcon: const Icon(Icons.inventory_2_outlined, size: 20),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
-              vertical: 12,
+              vertical: 14,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: AppColors.gray300.withValues(alpha: 0.5),
+              ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
                 color: AppColors.pepsiBlue,
                 width: 1.5,
@@ -2506,7 +2530,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             color: displayRemainingCrates == 0
                 ? Colors.green[50]
                 : AppColors.pepsiBlueLight.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: displayRemainingCrates == 0
                   ? Colors.green[300]!
@@ -2570,12 +2594,11 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                 child: OutlinedButton(
                   onPressed: () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(
-                      color: AppColors.gray300,
-                      width: 1.5,
+                    side: BorderSide(
+                      color: AppColors.gray300.withValues(alpha: 0.5),
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: Text(
@@ -2617,7 +2640,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
                     backgroundColor: AppColors.pepsiBlueLight,
                     foregroundColor: AppColors.pepsiWhite,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 0,
                   ),
@@ -2664,7 +2687,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
               disabledBackgroundColor: AppColors.gray300,
               disabledForegroundColor: AppColors.gray500,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
               elevation: 0,
             ),

@@ -1,6 +1,8 @@
 import 'package:animations/animations.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
+
+import 'package:ch_atta_traders_billing_application/common/widgets/tap_scale_wrapper.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
@@ -127,7 +129,7 @@ class _OrderPageState extends State<OrderPage> {
         // Show no internet state
         if (!_hasInternetConnection) {
           return Scaffold(
-            backgroundColor: Colors.grey[100],
+            backgroundColor: AppColors.gray100,
             appBar: _buildAppBar(selectedCount),
             body: _buildNoInternetState(),
           );
@@ -136,7 +138,7 @@ class _OrderPageState extends State<OrderPage> {
         // Show loading indicator
         if (productProvider.isLoading) {
           return Scaffold(
-            backgroundColor: Colors.grey[100],
+            backgroundColor: AppColors.gray100,
             appBar: _buildAppBar(selectedCount),
             body: const Center(
               child: CircularProgressIndicator(color: AppColors.pepsiBlue),
@@ -147,7 +149,7 @@ class _OrderPageState extends State<OrderPage> {
         // Show error state
         if (productProvider.state == ProductState.error) {
           return Scaffold(
-            backgroundColor: Colors.grey[100],
+            backgroundColor: AppColors.gray100,
             appBar: _buildAppBar(selectedCount),
             body: Center(
               child: Column(
@@ -175,7 +177,7 @@ class _OrderPageState extends State<OrderPage> {
         }
 
         return Scaffold(
-          backgroundColor: Colors.grey[100],
+          backgroundColor: AppColors.gray100,
           appBar: _buildAppBar(selectedCount),
           body: Column(children: [_buildSearchBar(), _buildProductList()]),
         );
@@ -344,6 +346,10 @@ class _OrderPageState extends State<OrderPage> {
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(color: AppColors.gray300, height: 1),
+      ),
     );
   }
 
@@ -364,11 +370,18 @@ class _OrderPageState extends State<OrderPage> {
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [AppColors.pepsiBlue, AppColors.pepsiRed],
+            colors: [AppColors.pepsiBlue, AppColors.pepsiBlueLight],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.pepsiBlue.withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Material(
           color: Colors.transparent,
@@ -403,36 +416,31 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildSearchBar() {
     return Container(
       color: AppColors.pepsiWhite,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _searchController,
         builder: (context, value, child) {
           return Theme(
             data: Theme.of(context).copyWith(
               textSelectionTheme: TextSelectionThemeData(
-                cursorColor: AppColors.textSecondary,
-                selectionHandleColor: AppColors.textSecondary,
-                selectionColor: AppColors.textSecondary,
+                cursorColor: AppColors.pepsiBlue,
+                selectionHandleColor: AppColors.pepsiBlue,
+                selectionColor: AppColors.pepsiBlue.withValues(alpha: 0.2),
               ),
             ),
             child: TextField(
-              cursorColor: AppColors.textSecondary,
+              cursorColor: AppColors.pepsiBlue,
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search items...',
-                hintStyle: TextStyle(
-                  color: AppColors.textSecondary.withValues(alpha: 0.6),
-                ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: AppColors.textSecondary.withValues(alpha: 0.6),
-                ),
+                hintStyle: TextStyle(color: AppColors.gray400, fontSize: 14),
+                prefixIcon: Icon(Icons.search, color: AppColors.gray400),
                 suffixIcon: value.text.isNotEmpty
                     ? IconButton(
-                        iconSize: 24,
+                        iconSize: 20,
                         icon: Icon(
                           Icons.clear,
-                          color: AppColors.pepsiRed.withValues(alpha: 0.6),
+                          color: AppColors.pepsiRed.withValues(alpha: 0.7),
                         ),
                         onPressed: () {
                           _searchController.clear();
@@ -440,11 +448,11 @@ class _OrderPageState extends State<OrderPage> {
                       )
                     : null,
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: AppColors.gray100,
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: AppColors.textSecondary,
+                    color: AppColors.pepsiBlue,
                     width: 1.5,
                   ),
                 ),
@@ -458,12 +466,12 @@ class _OrderPageState extends State<OrderPage> {
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: Colors.grey.withValues(alpha: 0.1),
+                    color: AppColors.gray300.withValues(alpha: 0.5),
                     width: 1,
                   ),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
-                  vertical: 8,
+                  vertical: 10,
                   horizontal: 12,
                 ),
                 isDense: true,
@@ -781,26 +789,23 @@ class _OrderPageState extends State<OrderPage> {
     final isUnavailable = !product.isAvailable;
     final isSelected = product.quantity > 0;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: _buildProductCardDecoration(isUnavailable, isSelected),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: isUnavailable
-              ? null
-              : () => _showQuickQuantityDialog(product, index),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildProductHeader(product, index, isUnavailable),
-                const SizedBox(height: 8),
-                _buildProductFooter(product, isUnavailable, isSelected, index),
-              ],
-            ),
+    return TapScaleWrapper(
+      onTap: isUnavailable
+          ? null
+          : () => _showQuickQuantityDialog(product, index),
+      enabled: !isUnavailable,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: _buildProductCardDecoration(isUnavailable, isSelected),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildProductHeader(product, index, isUnavailable),
+              const SizedBox(height: 8),
+              _buildProductFooter(product, isUnavailable, isSelected, index),
+            ],
           ),
         ),
       ),
@@ -812,20 +817,21 @@ class _OrderPageState extends State<OrderPage> {
     bool isSelected,
   ) {
     return BoxDecoration(
-      color: isUnavailable ? Colors.grey[100] : Colors.white,
-      borderRadius: BorderRadius.circular(8),
+      color: isUnavailable ? AppColors.gray50 : Colors.white,
+      borderRadius: BorderRadius.circular(14),
       border: Border.all(
         color: isUnavailable
-            ? AppColors.gray300
-            : (isSelected ? AppColors.pepsiBlue : AppColors.gray300),
-        width: 1.5,
+            ? AppColors.gray300.withValues(alpha: 0.5)
+            : (isSelected
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.4)
+                  : AppColors.gray300.withValues(alpha: 0.5)),
       ),
       boxShadow: !isUnavailable
           ? [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ]
           : null,
@@ -867,14 +873,12 @@ class _OrderPageState extends State<OrderPage> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: isUnavailable
-            ? Colors.grey.withValues(alpha: 0.1)
-            : Colors.grey.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(10),
+        color: isUnavailable ? AppColors.gray100 : AppColors.gray100,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isUnavailable
-              ? AppColors.textSecondary.withValues(alpha: 0.3)
-              : AppColors.textSecondary,
+              ? AppColors.gray300.withValues(alpha: 0.5)
+              : AppColors.gray300,
           width: 1,
         ),
       ),
@@ -962,13 +966,12 @@ class _OrderPageState extends State<OrderPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
           decoration: BoxDecoration(
-            color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+            color: AppColors.pepsiBlue.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isUnavailable
-                  ? AppColors.pepsiBlue.withValues(alpha: 0.4)
-                  : AppColors.pepsiBlue,
-              width: 1,
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.2)
+                  : AppColors.pepsiBlue.withValues(alpha: 0.3),
             ),
           ),
           child: Text(

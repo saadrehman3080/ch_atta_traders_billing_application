@@ -1,4 +1,5 @@
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
+
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
@@ -108,18 +109,26 @@ class _CheckoutPageState extends State<CheckoutPage> {
         ChangeNotifierProvider.value(value: _saleProvider),
         ChangeNotifierProvider.value(value: _creditProvider),
       ],
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        decoration: _buildContainerDecoration(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDragHandle(),
-            _buildSummaryInfo(),
-            const SizedBox(height: 12),
-            _buildScrollableContent(),
-          ],
+      child: SafeArea(
+        top: false,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            16 + MediaQuery.of(context).padding.bottom,
+          ),
+          decoration: _buildContainerDecoration(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDragHandle(),
+              _buildSummaryInfo(),
+              const SizedBox(height: 12),
+              _buildScrollableContent(),
+            ],
+          ),
         ),
       ),
     );
@@ -561,12 +570,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
   BoxDecoration _buildContainerDecoration() {
     return BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
-          color: AppColors.shadowColor,
-          blurRadius: 10,
-          offset: const Offset(0, 4),
+          color: Colors.black.withValues(alpha: 0.08),
+          blurRadius: 16,
+          offset: const Offset(0, -4),
         ),
       ],
     );
@@ -575,9 +584,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Widget _buildDragHandle() {
     return Center(
       child: Container(
-        width: 36,
-        height: 3,
-        margin: const EdgeInsets.only(bottom: 12),
+        width: 40,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
           color: AppColors.gray300,
           borderRadius: BorderRadius.circular(2),
@@ -630,12 +639,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   BoxDecoration _buildSummaryDecoration() {
     return BoxDecoration(
-      color: AppColors.pepsiBlueLight.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(
-        color: AppColors.pepsiBlueLight.withValues(alpha: 0.2),
-        width: 1,
+      gradient: LinearGradient(
+        colors: [
+          AppColors.pepsiBlue.withValues(alpha: 0.06),
+          AppColors.pepsiBlueLight.withValues(alpha: 0.03),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: AppColors.pepsiBlue.withValues(alpha: 0.15)),
     );
   }
 
@@ -677,10 +690,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   Widget _buildTotalItemsProductsSection() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.pepsiBlue,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.max,
@@ -715,8 +728,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.gray300, width: 1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
         ),
         child: Stack(
           children: [
@@ -944,15 +957,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
           decoration: BoxDecoration(
             color: isDisabled
                 ? AppColors.gray100
-                : (_isAnonymousCustomer ? AppColors.pepsiBlue : Colors.white),
-            borderRadius: BorderRadius.circular(8),
+                : (_isAnonymousCustomer
+                      ? AppColors.pepsiBlue
+                      : AppColors.gray50),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isDisabled
-                  ? AppColors.gray300
+                  ? AppColors.gray300.withValues(alpha: 0.5)
                   : (_isAnonymousCustomer
                         ? AppColors.pepsiBlue
-                        : AppColors.gray300),
-              width: 1,
+                        : AppColors.gray300.withValues(alpha: 0.5)),
             ),
           ),
           child: Icon(
@@ -970,17 +984,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
   InputDecoration _buildCustomerFieldDecoration() {
     return InputDecoration(
       filled: true,
-      fillColor: Colors.white,
-      hintText: "Customer Name",
-      hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
-      prefixIcon: const Icon(Icons.person_outline, size: 20),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      fillColor: AppColors.gray50,
+      labelText: "Customer Name",
+      labelStyle: AppTextStyles.inputHint.copyWith(
+        fontSize: 14,
+        color: AppColors.gray400,
+      ),
+      floatingLabelStyle: AppTextStyles.inputHint.copyWith(
+        fontSize: 14,
+        color: AppColors.pepsiBlue,
+        fontWeight: FontWeight.w500,
+      ),
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      prefixIcon: const Icon(
+        Icons.person_outline,
+        size: 20,
+        color: AppColors.gray500,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.gray300.withValues(alpha: 0.5)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 1.5),
       ),
     );
@@ -1015,17 +1042,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
   InputDecoration _buildDiscountFieldDecoration() {
     return InputDecoration(
       filled: true,
-      fillColor: Colors.white,
-      hintText: "Discount (Optional)",
-      hintStyle: AppTextStyles.inputHint.copyWith(fontSize: 13),
-      prefixIcon: const Icon(Icons.discount_outlined, size: 20),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      fillColor: AppColors.gray50,
+      labelText: "Discount (Optional)",
+      labelStyle: AppTextStyles.inputHint.copyWith(
+        fontSize: 14,
+        color: AppColors.gray400,
+      ),
+      floatingLabelStyle: AppTextStyles.inputHint.copyWith(
+        fontSize: 14,
+        color: AppColors.pepsiBlue,
+        fontWeight: FontWeight.w500,
+      ),
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      prefixIcon: const Icon(
+        Icons.discount_outlined,
+        size: 20,
+        color: AppColors.gray500,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.gray300.withValues(alpha: 0.5)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 1.5),
       ),
     );
@@ -1063,26 +1103,32 @@ class _CheckoutPageState extends State<CheckoutPage> {
   InputDecoration _buildMtFieldDecoration() {
     return InputDecoration(
       filled: true,
-      fillColor: _isAnonymousCustomer ? AppColors.gray100 : Colors.white,
-      hintText: _isAnonymousCustomer
+      fillColor: _isAnonymousCustomer ? AppColors.gray100 : AppColors.gray50,
+      labelText: _isAnonymousCustomer
           ? "All MT Returned"
           : "Collected MT (Optional)",
-      hintStyle: AppTextStyles.inputHint.copyWith(
-        fontSize: 13,
-        color: _isAnonymousCustomer ? AppColors.gray500 : null,
+      labelStyle: AppTextStyles.inputHint.copyWith(
+        fontSize: 14,
+        color: _isAnonymousCustomer ? AppColors.gray500 : AppColors.gray400,
       ),
+      floatingLabelStyle: AppTextStyles.inputHint.copyWith(
+        fontSize: 14,
+        color: AppColors.pepsiBlue,
+        fontWeight: FontWeight.w500,
+      ),
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
       prefixIcon: Icon(
         Icons.inventory_2_outlined,
         size: 20,
-        color: _isAnonymousCustomer ? AppColors.gray400 : null,
+        color: _isAnonymousCustomer ? AppColors.gray400 : AppColors.gray500,
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.gray300, width: 1),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.gray300.withValues(alpha: 0.5)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 1.5),
       ),
     );
@@ -1203,7 +1249,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       foregroundColor: canEnable ? Colors.white : AppColors.gray500,
       disabledBackgroundColor: AppColors.gray300,
       disabledForegroundColor: AppColors.gray500,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: canEnable ? 2 : 0,
     );
   }
@@ -1216,7 +1262,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       foregroundColor: canEnable ? Colors.white : AppColors.gray500,
       disabledBackgroundColor: AppColors.gray300,
       disabledForegroundColor: AppColors.gray500,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: canEnable ? 2 : 0,
       padding: EdgeInsets.zero,
     );

@@ -1,6 +1,8 @@
 import 'package:animations/animations.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
+
+import 'package:ch_atta_traders_billing_application/common/widgets/tap_scale_wrapper.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
@@ -398,41 +400,37 @@ class _DailySalePageState extends State<DailySalePage> {
     // Hide delete button and divider for credit type bills (converted from credit)
     final bool isCreditBill = sale.billType == BillType.credit;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.pepsiWhite,
-        borderRadius: BorderRadius.circular(8),
-
-        border: Border.all(color: AppColors.gray300, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.pepsiBlue.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: InkWell(
-                onTap: () => _showBillDetails(context, sale),
-                borderRadius: BorderRadius.circular(8),
-                child: _buildCardContent(sale),
-              ),
+    return TapScaleWrapper(
+      onTap: () => _showBillDetails(context, sale),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: AppColors.pepsiWhite,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            // Only show divider and delete button for cash bills (not converted from credit)
-            if (!isCreditBill) ...[
-              const SizedBox(width: 16),
-              Container(height: 90, width: 1.5, color: AppColors.gray300),
-              const SizedBox(width: 16),
-              _buildDeleteButton(index),
-            ],
           ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _buildCardContent(sale)),
+              // Only show divider and delete button for cash bills (not converted from credit)
+              if (!isCreditBill) ...[
+                const SizedBox(width: 16),
+                Container(height: 90, width: 1.5, color: AppColors.gray300),
+                const SizedBox(width: 16),
+                _buildDeleteButton(index),
+              ],
+            ],
+          ),
         ),
       ),
     );
