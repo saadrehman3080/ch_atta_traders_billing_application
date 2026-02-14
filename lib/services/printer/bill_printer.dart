@@ -22,77 +22,27 @@ class PrintResult {
 class BillPrinter {
   BillPrinter._();
 
-  /// List of Master products
-  static const List<String> _masterProducts = [
-    'Master Cola 1500ml',
-    'Master Cola 2250ml',
-    'Master Cola NR 300ml',
-    'Master Water 1500ml',
-    'Master Water 500ml',
-  ];
-
-  /// List of Pepsi products
-  static const List<String> _pepsiProducts = [
-    'Pepsi 1500ml',
-    'Pepsi 250ml RB',
-    'Pepsi NR 300ml',
-    'Sting 250ml RB',
-    'Sting 500ml',
-    'Sting NR 300ml',
-    'Slice 200ml TP',
-
-    'Revive NR 300ml',
-    'Slice 1000ml TP',
-    'Pepsi Can 330ml',
-    'Sting Can 330ml',
-    'Pepsi 1000ml',
-
-    'Pepsi 500ml',
-    'Gatorade 500ml',
-
-    'Aquafina 1500ml',
-    'Aquafina 500ml',
-    'Aquafina 19L',
-    'Aquafina 19L Empty',
-    'Empty Crate',
-  ];
-
-  /// Checks if all products are Pepsi products
-  static bool _allProductsArePepsi(List<Product> products) {
-    for (final product in products) {
-      if (!_pepsiProducts.contains(product.name)) {
-        return false;
-      }
-    }
-    return true;
+  /// Checks if all products share the same type
+  static bool _allProductsAreType(List<Product> products, String type) {
+    return products.every((product) => product.type == type);
   }
 
-  /// Checks if all products are Master products
-  static bool _allProductsAreMaster(List<Product> products) {
-    for (final product in products) {
-      if (!_masterProducts.contains(product.name)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /// Returns the store name to display based on products
-  /// - "CH. ATTA TRADERS" if all products are Pepsi
-  /// - "CH. SAAD TRADERS" if all products are Master
-  /// - null if products are mixed or from other brands
+  /// Returns the store name to display based on product types
+  /// - "CH. ATTA TRADERS" if all products are type 'pepsi'
+  /// - "CH. SAAD TRADERS" if all products are type 'masterCola'
+  /// - null if products are mixed or type 'others'
   static String? _getStoreName(List<Product> products) {
     if (products.isEmpty) return null;
-    if (_allProductsArePepsi(products)) return 'CH. ATTA TRADERS';
-    if (_allProductsAreMaster(products)) return 'CH. SAAD TRADERS';
+    if (_allProductsAreType(products, 'pepsi')) return 'CH. ATTA TRADERS';
+    if (_allProductsAreType(products, 'masterCola')) return 'CH. SAAD TRADERS';
     return null;
   }
 
-  /// Returns the phone number for the store based on products
+  /// Returns the phone number for the store based on product types
   static String? _getStorePhone(List<Product> products) {
     if (products.isEmpty) return null;
-    if (_allProductsArePepsi(products)) return '0309 2000948';
-    if (_allProductsAreMaster(products)) return '0331 5348202';
+    if (_allProductsAreType(products, 'pepsi')) return '0309 2000948';
+    if (_allProductsAreType(products, 'masterCola')) return '0331 5348202';
     return null;
   }
 

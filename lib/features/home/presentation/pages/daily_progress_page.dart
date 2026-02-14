@@ -147,29 +147,48 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                padding: const EdgeInsets.only(
+                  left: 4,
+                  right: 12,
+                  top: 4,
+                  bottom: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.pepsiBlueLight.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.pepsiBlue.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: AppColors.pepsiBlue.withValues(alpha: 0.15),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.calendar_month_outlined,
-                      size: 15,
-                      color: AppColors.pepsiBlueLight,
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: AppColors.pepsiBlue,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${_progressProvider.progressList.length}',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 7),
                     Text(
-                      '${_progressProvider.progressList.length} Days',
-                      style: TextStyle(
-                        color: AppColors.pepsiBlueLight,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                      _progressProvider.progressList.length == 1
+                          ? 'Day'
+                          : 'Days',
+                      style: GoogleFonts.poppins(
+                        color: AppColors.pepsiBlue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -234,7 +253,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
     final netMt = provider.totalNetMt;
     final netCash = provider.totalNetCash;
     final isMtShort = netMt < 0;
-    final isCashShort = netCash < 0;
+    final isCashShort = netCash > 0;
 
     return Container(
       width: double.infinity,
@@ -350,13 +369,13 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                         Icon(
                           isCashShort
                               ? Icons.arrow_downward_rounded
-                              : netCash > 0
+                              : netCash < 0
                               ? Icons.arrow_upward_rounded
                               : Icons.check_rounded,
                           size: 13,
                           color: isCashShort
                               ? Colors.redAccent.shade100
-                              : netCash > 0
+                              : netCash < 0
                               ? Colors.greenAccent
                               : Colors.white60,
                         ),
@@ -364,7 +383,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                         Text(
                           isCashShort
                               ? 'Short'
-                              : netCash > 0
+                              : netCash < 0
                               ? 'Excess'
                               : 'Balanced',
                           style: GoogleFonts.poppins(
@@ -372,7 +391,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                             fontWeight: FontWeight.w600,
                             color: isCashShort
                                 ? Colors.redAccent.shade100
-                                : netCash > 0
+                                : netCash < 0
                                 ? Colors.greenAccent
                                 : Colors.white60,
                           ),
@@ -700,7 +719,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                           ? 'MT Short'
                           : record.emptyCrates.excess > 0
                           ? 'MT Excess'
-                          : 'MT',
+                          : 'MT Balanced',
                       record.emptyCrates.short > 0
                           ? '${record.emptyCrates.short}'
                           : record.emptyCrates.excess > 0
@@ -710,16 +729,32 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                           ? Colors.orange
                           : record.emptyCrates.excess > 0
                           ? AppColors.textSuccess
-                          : AppColors.gray500,
+                          : AppColors.pepsiBlue,
+                      icon: record.emptyCrates.short > 0
+                          ? Icons.arrow_downward_rounded
+                          : record.emptyCrates.excess > 0
+                          ? Icons.arrow_upward_rounded
+                          : Icons.check_circle_outline_rounded,
                     ),
                   ),
                   Expanded(
                     child: _buildInfoItem(
-                      'Final',
-                      _formatCurrency(record.finalAmount),
-                      record.finalAmount < 0
+                      record.finalAmount > 0
+                          ? 'Short'
+                          : record.finalAmount < 0
+                          ? 'Excess'
+                          : 'Balanced',
+                      _formatCurrency(record.finalAmount.abs()),
+                      record.finalAmount > 0
                           ? AppColors.pepsiRed
-                          : AppColors.textSuccess,
+                          : record.finalAmount < 0
+                          ? AppColors.textSuccess
+                          : AppColors.pepsiBlue,
+                      icon: record.finalAmount > 0
+                          ? Icons.arrow_downward_rounded
+                          : record.finalAmount < 0
+                          ? Icons.arrow_upward_rounded
+                          : Icons.check_circle_outline_rounded,
                     ),
                   ),
                 ],
@@ -731,7 +766,12 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
     );
   }
 
-  Widget _buildInfoItem(String label, String value, Color valueColor) {
+  Widget _buildInfoItem(
+    String label,
+    String value,
+    Color valueColor, {
+    IconData? icon,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -744,13 +784,22 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          value,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: valueColor,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: valueColor),
+              const SizedBox(width: 3),
+            ],
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: valueColor,
+              ),
+            ),
+          ],
         ),
       ],
     );

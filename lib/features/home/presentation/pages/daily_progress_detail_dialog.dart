@@ -92,15 +92,19 @@ class DailyProgressDetailDialog extends StatelessWidget {
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
-                record.salesmanName,
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+              Expanded(
+                child: Text(
+                  record.salesmanName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               _buildStatusBadge(record.status),
             ],
           ),
@@ -492,8 +496,8 @@ class DailyProgressDetailDialog extends StatelessWidget {
   // ========== Final Result Section ==========
 
   Widget _buildFinalResultSection() {
-    final isShort = record.finalAmount < 0;
-    final isExcess = record.finalAmount > 0;
+    final isShort = record.finalAmount > 0;
+    final isExcess = record.finalAmount < 0;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

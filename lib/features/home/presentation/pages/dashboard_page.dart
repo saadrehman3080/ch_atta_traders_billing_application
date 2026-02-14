@@ -11,6 +11,7 @@ import 'package:ch_atta_traders_billing_application/services/printer/printer_ser
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -148,36 +149,82 @@ class _DashboardPageState extends State<DashboardPage>
 
   // ========== Main UI Building Methods ==========
 
+  /// Check if the dashboard has actual data to display
+  bool get _hasActualData {
+    final data = _dashboardProvider.dashboardData;
+    if (data == null) return false;
+    return data.totalCollection != 0 ||
+        data.totalItemsSold != 0 ||
+        data.totalMtRemaining != 0 ||
+        data.totalCredit != 0 ||
+        data.totalDiscount != 0 ||
+        data.customersServed != 0;
+  }
+
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,
       toolbarHeight: 68,
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _getGreeting(),
-            style: GoogleFonts.poppins(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w400,
-              color: AppColors.gray500,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            _salesmanName,
-            style: GoogleFonts.poppins(
-              fontSize: 19,
-              fontWeight: FontWeight.w600,
-              color: Colors.black,
-              height: 1.2,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+      title: Consumer<DashboardProvider>(
+        builder: (context, provider, child) {
+          // When there's no data or all values zero, show current date and day
+          // to keep theme consistent without duplicating the greeting
+          if (!_hasActualData) {
+            final now = DateTime.now();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  DateFormat('EEEE').format(now),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.gray500,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  DateFormat('dd MMM, yyyy').format(now),
+                  style: GoogleFonts.poppins(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _getGreeting(),
+                style: GoogleFonts.poppins(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.gray500,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _salesmanName,
+                style: GoogleFonts.poppins(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
+                  height: 1.2,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          );
+        },
       ),
       centerTitle: false,
       actions: [
@@ -758,6 +805,7 @@ class _DashboardPageState extends State<DashboardPage>
   Widget _buildLoadingCard() {
     return Container(
       margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 40),
       decoration: _buildCollectionCardDecoration(),
       child: const Center(
         child: CircularProgressIndicator(color: Colors.white),

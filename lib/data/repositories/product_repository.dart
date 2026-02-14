@@ -91,6 +91,7 @@ class ProductRepository {
           price: (data['price'] as num?)?.toInt() ?? 0,
           quantity: 0, // Default quantity is 0 for ordering
           isAvailable: data['isAvailable'] as bool? ?? true,
+          type: data['type'] as String? ?? 'others',
         );
       }).toList();
 

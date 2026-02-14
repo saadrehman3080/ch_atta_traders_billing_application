@@ -19,6 +19,7 @@ import 'package:ch_atta_traders_billing_application/services/printer/bill_printe
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -32,7 +33,8 @@ class CreditRecordPage extends StatefulWidget {
   State<CreditRecordPage> createState() => _CreditRecordPageState();
 }
 
-class _CreditRecordPageState extends State<CreditRecordPage> {
+class _CreditRecordPageState extends State<CreditRecordPage>
+    with TickerProviderStateMixin {
   late final CreditHistoryProvider _creditProvider;
   bool _hasLoadedOnce = false;
   final TextEditingController _amountController = TextEditingController();
@@ -41,6 +43,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
   int? _editingIndex;
   int? _deletingIndex;
   int? _printingIndex;
+  String? _removingBillId;
+  AnimationController? _removeAnimController;
   bool _hasInternetConnection = true;
   late bool _isPrinterConnected;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -141,6 +145,7 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
     _cratesController.dispose();
     _creditProvider.removeListener(_onCreditsChanged);
     _creditProvider.dispose();
+    _removeAnimController?.dispose();
     _connectivitySubscription?.cancel();
     _printerService.removeListener(_onPrinterStateChanged);
     PrinterConnectionService.instance.removeListener(
@@ -282,7 +287,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       );
     }
 
-    // Delete from credit history using CreditHistoryProvider
+    // Animate removal then delete from credit history
+    await _animateBillRemoval(deletedBill.billId);
     final deletedFromCredit = await _creditProvider.deleteCreditRecord(
       billId: deletedBill.billId,
       salesmanName: salesmanIdentifier,
@@ -393,7 +399,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       );
     }
 
-    // Delete from credit history
+    // Animate removal then delete from credit history
+    await _animateBillRemoval(deletedBill.billId);
     final deletedFromCredit = await _creditProvider.deleteCreditRecord(
       billId: deletedBill.billId,
       salesmanName: salesmanIdentifier,
@@ -519,7 +526,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         }
       }
 
-      // Delete from credit history
+      // Animate removal then delete from credit history
+      await _animateBillRemoval(billToDelete.billId);
       final deletedFromCredit = await _creditProvider.deleteCreditRecord(
         billId: billToDelete.billId,
         salesmanName: salesmanIdentifier,
@@ -723,7 +731,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         );
       }
 
-      // Delete from credit history using CreditHistoryProvider
+      // Animate removal then delete from credit history
+      await _animateBillRemoval(bill.billId);
       final deletedFromCredit = await _creditProvider.deleteCreditRecord(
         billId: bill.billId,
         salesmanName: salesmanIdentifier,
@@ -912,7 +921,8 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
         );
       }
 
-      // Delete from credit history
+      // Animate removal then delete from credit history
+      await _animateBillRemoval(bill.billId);
       final deletedFromCredit = await _creditProvider.deleteCreditRecord(
         billId: bill.billId,
         salesmanName: salesmanIdentifier,
@@ -1089,29 +1099,46 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                padding: const EdgeInsets.only(
+                  left: 4,
+                  right: 12,
+                  top: 4,
+                  bottom: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.pepsiRedLight.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.pepsiRed.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: AppColors.pepsiRed.withValues(alpha: 0.15),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.credit_card_outlined,
-                      size: 15,
-                      color: AppColors.pepsiRedLight,
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: AppColors.pepsiRed,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${_creditProvider.credits.length}',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 7),
                     Text(
-                      '${_creditProvider.credits.length} Bills',
-                      style: TextStyle(
-                        color: AppColors.pepsiRedLight,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                      'Pending',
+                      style: GoogleFonts.poppins(
+                        color: AppColors.pepsiRed,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -1311,9 +1338,55 @@ class _CreditRecordPageState extends State<CreditRecordPage> {
       itemCount: billHistory.length,
       itemBuilder: (context, index) {
         final bill = billHistory[index];
+        final isRemoving = _removingBillId == bill.billId;
+
+        if (isRemoving && _removeAnimController != null) {
+          return SizeTransition(
+            sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(
+              CurvedAnimation(
+                parent: _removeAnimController!,
+                curve: Curves.easeInOut,
+              ),
+            ),
+            child: FadeTransition(
+              opacity: Tween<double>(begin: 1.0, end: 0.0).animate(
+                CurvedAnimation(
+                  parent: _removeAnimController!,
+                  curve: Curves.easeOut,
+                ),
+              ),
+              child: SlideTransition(
+                position:
+                    Tween<Offset>(
+                      begin: Offset.zero,
+                      end: const Offset(-0.3, 0.0),
+                    ).animate(
+                      CurvedAnimation(
+                        parent: _removeAnimController!,
+                        curve: Curves.easeInOut,
+                      ),
+                    ),
+                child: _buildCreditCard(bill, index, billHistory),
+              ),
+            ),
+          );
+        }
+
         return _buildCreditCard(bill, index, billHistory);
       },
     );
+  }
+
+  /// Animate a bill out of the list before actual removal
+  Future<void> _animateBillRemoval(String billId) async {
+    _removeAnimController?.dispose();
+    _removeAnimController = AnimationController(
+      duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
+    setState(() => _removingBillId = billId);
+    await _removeAnimController!.forward();
+    _removingBillId = null;
   }
 
   // ========== Card Building Methods ==========

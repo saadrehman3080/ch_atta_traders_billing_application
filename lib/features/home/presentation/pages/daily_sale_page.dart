@@ -12,6 +12,7 @@ import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/daily_sales_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
@@ -23,11 +24,14 @@ class DailySalePage extends StatefulWidget {
   State<DailySalePage> createState() => _DailySalePageState();
 }
 
-class _DailySalePageState extends State<DailySalePage> {
+class _DailySalePageState extends State<DailySalePage>
+    with TickerProviderStateMixin {
   late final DailySalesProvider _salesProvider;
   bool _hasLoadedOnce = false;
   bool _hasInternetConnection = true;
   int? _deletingIndex;
+  String? _removingBillId;
+  AnimationController? _removeAnimController;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -89,6 +93,7 @@ class _DailySalePageState extends State<DailySalePage> {
   void dispose() {
     _salesProvider.removeListener(_onSalesChanged);
     _salesProvider.dispose();
+    _removeAnimController?.dispose();
     _connectivitySubscription?.cancel();
     super.dispose();
   }
@@ -150,29 +155,46 @@ class _DailySalePageState extends State<DailySalePage> {
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                padding: const EdgeInsets.only(
+                  left: 4,
+                  right: 12,
+                  top: 4,
+                  bottom: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.pepsiBlueLight.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.pepsiBlue.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: AppColors.pepsiBlue.withValues(alpha: 0.15),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.receipt_long_outlined,
-                      size: 15,
-                      color: AppColors.pepsiBlueLight,
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: AppColors.pepsiBlue,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${_salesProvider.sales.length}',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 7),
                     Text(
-                      '${_salesProvider.sales.length} Bills',
-                      style: TextStyle(
-                        color: AppColors.pepsiBlueLight,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                      _salesProvider.sales.length == 1 ? 'Bill' : 'Bills',
+                      style: GoogleFonts.poppins(
+                        color: AppColors.pepsiBlue,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -312,6 +334,40 @@ class _DailySalePageState extends State<DailySalePage> {
         itemCount: saleHistory.length,
         itemBuilder: (context, index) {
           final sale = saleHistory[index];
+          final isRemoving = _removingBillId == sale.billId;
+
+          if (isRemoving && _removeAnimController != null) {
+            return SizeTransition(
+              sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(
+                CurvedAnimation(
+                  parent: _removeAnimController!,
+                  curve: Curves.easeInOut,
+                ),
+              ),
+              child: FadeTransition(
+                opacity: Tween<double>(begin: 1.0, end: 0.0).animate(
+                  CurvedAnimation(
+                    parent: _removeAnimController!,
+                    curve: Curves.easeOut,
+                  ),
+                ),
+                child: SlideTransition(
+                  position:
+                      Tween<Offset>(
+                        begin: Offset.zero,
+                        end: const Offset(-0.3, 0.0),
+                      ).animate(
+                        CurvedAnimation(
+                          parent: _removeAnimController!,
+                          curve: Curves.easeInOut,
+                        ),
+                      ),
+                  child: _buildSalesCard(context, sale, index),
+                ),
+              ),
+            );
+          }
+
           return _buildSalesCard(context, sale, index);
         },
       ),
@@ -681,10 +737,21 @@ class _DailySalePageState extends State<DailySalePage> {
     }
 
     try {
+      // Animate the card out before deleting from provider
+      _removeAnimController?.dispose();
+      _removeAnimController = AnimationController(
+        duration: const Duration(milliseconds: 350),
+        vsync: this,
+      );
+      setState(() => _removingBillId = saleToDelete.billId);
+      await _removeAnimController!.forward();
+
       final success = await _salesProvider.deleteSale(
         sale: saleToDelete,
         salesmanName: salesmanIdentifier,
       );
+
+      _removingBillId = null;
 
       if (success) {
         if (mounted) {
@@ -698,6 +765,7 @@ class _DailySalePageState extends State<DailySalePage> {
         _showErrorSnackBar('Failed to delete sale.');
       }
     } catch (e) {
+      _removingBillId = null;
       _showErrorSnackBar('Error deleting sale: ${e.toString()}');
     }
 

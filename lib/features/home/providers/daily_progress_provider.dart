@@ -40,16 +40,18 @@ class DailyProgressProvider extends ChangeNotifier {
   int get totalMtExcess => totalNetMt > 0 ? totalNetMt : 0;
 
   /// Net cash balance across ALL records: sum of all finalAmount
-  /// positive = excess, negative = short
+  /// positive = short, negative = excess
   int get totalNetCash {
     return _progressList.fold<int>(0, (sum, p) => sum + p.finalAmount);
   }
 
-  /// Total cash short (absolute, only if net is negative)
-  int get totalCashShort => totalNetCash < 0 ? totalNetCash.abs() : 0;
+  /// Total cash short (absolute, only if net is positive)
+  /// Positive finalAmount means salesman didn't return enough cash (SHORT)
+  int get totalCashShort => totalNetCash > 0 ? totalNetCash : 0;
 
-  /// Total cash excess (only if net is positive)
-  int get totalCashExcess => totalNetCash > 0 ? totalNetCash : 0;
+  /// Total cash excess (only if net is negative)
+  /// Negative finalAmount means salesman returned more cash than expected (EXCESS)
+  int get totalCashExcess => totalNetCash < 0 ? totalNetCash.abs() : 0;
 
   /// Total cash received across ALL records
   int get totalCashReceived =>
