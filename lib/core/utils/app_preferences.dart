@@ -49,6 +49,12 @@ class AppPreferences {
   /// Key for storing the connected printer address
   static const String _keyPrinterAddress = 'printer_address';
 
+  /// Key for storing the anonymous print mode
+  static const String _keyAnonymousPrint = 'anonymous_print';
+
+  /// Key for storing whether anonymous print is currently enabled
+  static const String _keyAnonymousPrintEnabled = 'anonymous_print_enabled';
+
   // ========== Initialization ==========
 
   /// Initializes the SharedPreferences instance.
@@ -300,6 +306,75 @@ class AppPreferences {
       return result;
     } catch (e) {
       debugPrint('Error storing salesman doc ID: $e');
+      return false;
+    }
+  }
+
+  // ========== Anonymous Print Management ==========
+
+  /// Gets the anonymous print access from shared preferences (from Firebase).
+  /// This controls whether the user has access to the anonymous print feature.
+  ///
+  /// Returns `true` if user has access to anonymous print, `false` otherwise.
+  /// Defaults to `false` if not set.
+  Future<bool> get hasAnonymousPrintAccess async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getBool(_keyAnonymousPrint) ?? false;
+    } catch (e) {
+      debugPrint('Error reading anonymous print access: $e');
+      return false;
+    }
+  }
+
+  /// Stores the anonymous print access (from Firebase).
+  ///
+  /// [hasAccess] - `true` if user has access to anonymous print, `false` otherwise.
+  ///
+  /// Returns `true` if the operation was successful, `false` otherwise.
+  Future<bool> setAnonymousPrint(bool hasAccess) async {
+    _ensureInitialized();
+    try {
+      final result = await _prefs!.setBool(_keyAnonymousPrint, hasAccess);
+      if (result) {
+        debugPrint('Anonymous print access stored: $hasAccess');
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error storing anonymous print access: $e');
+      return false;
+    }
+  }
+
+  /// Gets whether anonymous print is currently enabled (toggle state).
+  ///
+  /// Returns `true` if anonymous print is enabled, `false` otherwise.
+  /// Defaults to `false` if not set.
+  Future<bool> get isAnonymousPrintEnabled async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getBool(_keyAnonymousPrintEnabled) ?? false;
+    } catch (e) {
+      debugPrint('Error reading anonymous print enabled status: $e');
+      return false;
+    }
+  }
+
+  /// Stores whether anonymous print is currently enabled (toggle state).
+  ///
+  /// [enabled] - `true` to enable anonymous print, `false` otherwise.
+  ///
+  /// Returns `true` if the operation was successful, `false` otherwise.
+  Future<bool> setAnonymousPrintEnabled(bool enabled) async {
+    _ensureInitialized();
+    try {
+      final result = await _prefs!.setBool(_keyAnonymousPrintEnabled, enabled);
+      if (result) {
+        debugPrint('Anonymous print enabled status stored: $enabled');
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error storing anonymous print enabled status: $e');
       return false;
     }
   }

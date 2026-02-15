@@ -145,6 +145,7 @@ class CreditHistoryProvider extends ChangeNotifier {
   Future<bool> deleteCreditRecord({
     required String billId,
     required String salesmanName,
+    bool removeLocally = true,
   }) async {
     try {
       // Verify the credit exists in local cache
@@ -158,15 +159,23 @@ class CreditHistoryProvider extends ChangeNotifier {
         billId: billId,
       );
 
-      // Remove from local cache
-      _credits.removeWhere((c) => c.billId == billId);
-      _safeNotifyListeners();
+      if (removeLocally) {
+        // Remove from local cache
+        _credits.removeWhere((c) => c.billId == billId);
+        _safeNotifyListeners();
+      }
 
       return true;
     } catch (e) {
       debugPrint('Error deleting credit record: $e');
       return false;
     }
+  }
+
+  /// Remove a credit record from the local list only (used after animation completes)
+  void removeCreditLocally(String billId) {
+    _credits.removeWhere((c) => c.billId == billId);
+    _safeNotifyListeners();
   }
 
   /// Saves a credit record to delete history

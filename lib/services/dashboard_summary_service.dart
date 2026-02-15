@@ -74,6 +74,7 @@ class DashboardSummaryService {
   /// Updates dashboard when a sale is deleted.
   /// Decrements: totalCollection, totalItemsSold, totalDiscount, customersServed
   /// Only updates if the sale is from today.
+  /// Uses a transaction to prevent values from going below zero.
   Future<bool> onSaleDeleted({
     required String salesmanName,
     required DateTime date,
@@ -95,13 +96,42 @@ class DashboardSummaryService {
       );
 
       final summaryRef = _getSummaryRef(salesmanName, date);
-      await summaryRef.set({
-        'totalCollection': FieldValue.increment(-totalAmount),
-        'totalItemsSold': FieldValue.increment(-itemsSold),
-        'totalDiscount': FieldValue.increment(-discount),
-        'customersServed': FieldValue.increment(-1),
-        'lastUpdated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(summaryRef);
+
+        if (!snapshot.exists) {
+          debugPrint(
+            'DashboardSummaryService: Summary doc not found, skipping delete update',
+          );
+          return;
+        }
+
+        final data = snapshot.data() as Map<String, dynamic>? ?? {};
+        final currentCollection =
+            (data['totalCollection'] as num?)?.toInt() ?? 0;
+        final currentItemsSold = (data['totalItemsSold'] as num?)?.toInt() ?? 0;
+        final currentDiscount = (data['totalDiscount'] as num?)?.toInt() ?? 0;
+        final currentCustomers =
+            (data['customersServed'] as num?)?.toInt() ?? 0;
+
+        transaction.set(summaryRef, {
+          'totalCollection': (currentCollection - totalAmount).clamp(
+            0,
+            currentCollection,
+          ),
+          'totalItemsSold': (currentItemsSold - itemsSold).clamp(
+            0,
+            currentItemsSold,
+          ),
+          'totalDiscount': (currentDiscount - discount).clamp(
+            0,
+            currentDiscount,
+          ),
+          'customersServed': (currentCustomers - 1).clamp(0, currentCustomers),
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
 
       return true;
     } catch (e, stackTrace) {
@@ -158,6 +188,7 @@ class DashboardSummaryService {
   /// Updates dashboard when a credit is deleted permanently.
   /// Decrements: totalCredit (if not paid), totalItemsSold, totalMtRemaining, totalDiscount, customersServed
   /// Only updates if the credit is from today.
+  /// Uses a transaction to prevent values from going below zero.
   Future<bool> onCreditDeleted({
     required String salesmanName,
     required DateTime date,
@@ -181,34 +212,68 @@ class DashboardSummaryService {
       );
 
       final summaryRef = _getSummaryRef(salesmanName, date);
-      final Map<String, dynamic> updates = {
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
 
-      // Decrement credit if bill was not paid
-      if (amountDue > 0 && !isPaidBill) {
-        updates['totalCredit'] = FieldValue.increment(-amountDue);
-      }
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(summaryRef);
 
-      // Decrement MT remaining if there were crates due
-      if (cratesDue > 0) {
-        updates['totalMtRemaining'] = FieldValue.increment(-cratesDue);
-      }
+        if (!snapshot.exists) {
+          debugPrint(
+            'DashboardSummaryService: Summary doc not found, skipping credit delete update',
+          );
+          return;
+        }
 
-      // Decrement items sold
-      if (itemsSold > 0) {
-        updates['totalItemsSold'] = FieldValue.increment(-itemsSold);
-      }
+        final data = snapshot.data() as Map<String, dynamic>? ?? {};
+        final Map<String, dynamic> updates = {
+          'lastUpdated': FieldValue.serverTimestamp(),
+        };
 
-      // Decrement discount
-      if (discount > 0) {
-        updates['totalDiscount'] = FieldValue.increment(-discount);
-      }
+        // Decrement credit if bill was not paid (clamped to 0)
+        if (amountDue > 0 && !isPaidBill) {
+          final currentCredit = (data['totalCredit'] as num?)?.toInt() ?? 0;
+          updates['totalCredit'] = (currentCredit - amountDue).clamp(
+            0,
+            currentCredit,
+          );
+        }
 
-      // Decrement customer count
-      updates['customersServed'] = FieldValue.increment(-1);
+        // Decrement MT remaining if there were crates due (clamped to 0)
+        if (cratesDue > 0) {
+          final currentMt = (data['totalMtRemaining'] as num?)?.toInt() ?? 0;
+          updates['totalMtRemaining'] = (currentMt - cratesDue).clamp(
+            0,
+            currentMt,
+          );
+        }
 
-      await summaryRef.set(updates, SetOptions(merge: true));
+        // Decrement items sold (clamped to 0)
+        if (itemsSold > 0) {
+          final currentItems = (data['totalItemsSold'] as num?)?.toInt() ?? 0;
+          updates['totalItemsSold'] = (currentItems - itemsSold).clamp(
+            0,
+            currentItems,
+          );
+        }
+
+        // Decrement discount (clamped to 0)
+        if (discount > 0) {
+          final currentDiscount = (data['totalDiscount'] as num?)?.toInt() ?? 0;
+          updates['totalDiscount'] = (currentDiscount - discount).clamp(
+            0,
+            currentDiscount,
+          );
+        }
+
+        // Decrement customer count (clamped to 0)
+        final currentCustomers =
+            (data['customersServed'] as num?)?.toInt() ?? 0;
+        updates['customersServed'] = (currentCustomers - 1).clamp(
+          0,
+          currentCustomers,
+        );
+
+        transaction.set(summaryRef, updates, SetOptions(merge: true));
+      });
 
       debugPrint('Dashboard summary updated successfully');
       return true;
@@ -225,6 +290,7 @@ class DashboardSummaryService {
   /// Decrements: totalCredit (if not paid), totalMtRemaining
   /// Increments: totalCollection (if not paid)
   /// Only updates if the bill is from today.
+  /// Uses a transaction to prevent values from going below zero.
   Future<bool> onCreditConvertedToSale({
     required String salesmanName,
     required DateTime date,
@@ -246,18 +312,36 @@ class DashboardSummaryService {
       );
 
       final summaryRef = _getSummaryRef(salesmanName, date);
-      final Map<String, dynamic> updates = {
-        'totalMtRemaining': FieldValue.increment(-cratesDue),
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
 
-      // Only update credit and collection if bill was NOT already paid
-      if (!isPaidBill) {
-        updates['totalCollection'] = FieldValue.increment(amountDue);
-        updates['totalCredit'] = FieldValue.increment(-amountDue);
-      }
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(summaryRef);
+        final data = snapshot.data() as Map<String, dynamic>? ?? {};
 
-      await summaryRef.set(updates, SetOptions(merge: true));
+        final Map<String, dynamic> updates = {
+          'lastUpdated': FieldValue.serverTimestamp(),
+        };
+
+        // Decrement MT remaining (clamped to 0)
+        final currentMt = (data['totalMtRemaining'] as num?)?.toInt() ?? 0;
+        updates['totalMtRemaining'] = (currentMt - cratesDue).clamp(
+          0,
+          currentMt,
+        );
+
+        // Only update credit and collection if bill was NOT already paid
+        if (!isPaidBill) {
+          final currentCredit = (data['totalCredit'] as num?)?.toInt() ?? 0;
+          updates['totalCredit'] = (currentCredit - amountDue).clamp(
+            0,
+            currentCredit,
+          );
+          final currentCollection =
+              (data['totalCollection'] as num?)?.toInt() ?? 0;
+          updates['totalCollection'] = currentCollection + amountDue;
+        }
+
+        transaction.set(summaryRef, updates, SetOptions(merge: true));
+      });
 
       debugPrint('Dashboard summary updated for credit-to-sale conversion');
       return true;
@@ -272,6 +356,7 @@ class DashboardSummaryService {
   /// Decrements: totalCollection, totalItemsSold
   /// Increments: totalCredit
   /// Only updates if the sale is from today.
+  /// Uses a transaction to prevent values from going below zero.
   Future<bool> onSaleConvertedToCredit({
     required String salesmanName,
     required DateTime date,
@@ -290,14 +375,31 @@ class DashboardSummaryService {
       debugPrint('Amount: $totalAmount, Items: $itemsSold');
 
       final summaryRef = _getSummaryRef(salesmanName, date);
-      await summaryRef.set({
-        'totalCollection': FieldValue.increment(-totalAmount),
-        'totalItemsSold': FieldValue.increment(-itemsSold),
-        'totalCredit': FieldValue.increment(totalAmount),
-        'totalMtRemaining': FieldValue.increment(0),
-        // customersServed stays the same
-        'lastUpdated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(summaryRef);
+        final data = snapshot.data() as Map<String, dynamic>? ?? {};
+
+        final currentCollection =
+            (data['totalCollection'] as num?)?.toInt() ?? 0;
+        final currentItemsSold = (data['totalItemsSold'] as num?)?.toInt() ?? 0;
+        final currentCredit = (data['totalCredit'] as num?)?.toInt() ?? 0;
+
+        transaction.set(summaryRef, {
+          'totalCollection': (currentCollection - totalAmount).clamp(
+            0,
+            currentCollection,
+          ),
+          'totalItemsSold': (currentItemsSold - itemsSold).clamp(
+            0,
+            currentItemsSold,
+          ),
+          'totalCredit': currentCredit + totalAmount,
+          'totalMtRemaining': FieldValue.increment(0),
+          // customersServed stays the same
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
 
       debugPrint('Dashboard summary updated for sale-to-credit conversion');
       return true;
@@ -314,6 +416,7 @@ class DashboardSummaryService {
   /// Increments: totalCollection (cash received)
   /// Decrements: totalCredit (cash received), totalMtRemaining (crates received)
   /// Only updates if the bill is from today.
+  /// Uses a transaction to prevent values from going below zero.
   Future<bool> onPartialPaymentReceived({
     required String salesmanName,
     required DateTime date,
@@ -341,22 +444,38 @@ class DashboardSummaryService {
       );
 
       final summaryRef = _getSummaryRef(salesmanName, date);
-      final Map<String, dynamic> updates = {
-        'lastUpdated': FieldValue.serverTimestamp(),
-      };
 
-      // Only update credit and collection if bill was NOT already paid
-      if (cashReceived != null && cashReceived > 0 && !isPaidBill) {
-        updates['totalCollection'] = FieldValue.increment(cashReceived);
-        updates['totalCredit'] = FieldValue.increment(-cashReceived);
-      }
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(summaryRef);
+        final data = snapshot.data() as Map<String, dynamic>? ?? {};
 
-      // Always update crates when received
-      if (cratesReceived != null && cratesReceived > 0) {
-        updates['totalMtRemaining'] = FieldValue.increment(-cratesReceived);
-      }
+        final Map<String, dynamic> updates = {
+          'lastUpdated': FieldValue.serverTimestamp(),
+        };
 
-      await summaryRef.set(updates, SetOptions(merge: true));
+        // Only update credit and collection if bill was NOT already paid
+        if (cashReceived != null && cashReceived > 0 && !isPaidBill) {
+          final currentCredit = (data['totalCredit'] as num?)?.toInt() ?? 0;
+          final currentCollection =
+              (data['totalCollection'] as num?)?.toInt() ?? 0;
+          updates['totalCredit'] = (currentCredit - cashReceived).clamp(
+            0,
+            currentCredit,
+          );
+          updates['totalCollection'] = currentCollection + cashReceived;
+        }
+
+        // Decrement crates when received (clamped to 0)
+        if (cratesReceived != null && cratesReceived > 0) {
+          final currentMt = (data['totalMtRemaining'] as num?)?.toInt() ?? 0;
+          updates['totalMtRemaining'] = (currentMt - cratesReceived).clamp(
+            0,
+            currentMt,
+          );
+        }
+
+        transaction.set(summaryRef, updates, SetOptions(merge: true));
+      });
 
       debugPrint('Dashboard summary updated for partial payment');
       return true;

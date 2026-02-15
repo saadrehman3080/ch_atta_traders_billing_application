@@ -49,19 +49,27 @@ class DailySalesProvider extends ChangeNotifier {
   Future<bool> deleteSale({
     required SaleHistory sale,
     required String salesmanName,
+    bool removeLocally = true,
   }) async {
     try {
       await _repository.deleteSale(sale: sale, salesmanName: salesmanName);
 
-      // Remove from local list
-      _sales.removeWhere((s) => s.billId == sale.billId);
-      _safeNotifyListeners();
+      if (removeLocally) {
+        _sales.removeWhere((s) => s.billId == sale.billId);
+        _safeNotifyListeners();
+      }
 
       return true;
     } catch (e) {
       debugPrint('Error deleting sale: $e');
       return false;
     }
+  }
+
+  /// Remove a sale from the local list only (used after animation completes)
+  void removeSaleLocally(String billId) {
+    _sales.removeWhere((s) => s.billId == billId);
+    _safeNotifyListeners();
   }
 
   Future<bool> convertSaleToCredit({

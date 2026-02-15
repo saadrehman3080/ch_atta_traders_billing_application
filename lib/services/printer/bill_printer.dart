@@ -74,12 +74,17 @@ class BillPrinter {
 
       List<int> bytes = [];
 
+      // Check anonymous print mode
+      final isAnonymousPrint =
+          await AppPreferences.instance.isAnonymousPrintEnabled;
+
       // Get store name and phone based on products
       final storeName = _getStoreName(products);
       final storePhone = _getStorePhone(products);
 
       // Store name - centered, large text (only if all products are from same brand)
-      if (storeName != null) {
+      // Skip business name in anonymous print mode
+      if (storeName != null && !isAnonymousPrint) {
         bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
         bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
         bytes.addAll('$storeName\n'.codeUnits);
@@ -100,10 +105,19 @@ class BillPrinter {
       // Separator
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Current date and time - left align
+      // Current date (and time if not anonymous) - left align
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
-      final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
-      bytes.addAll('Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits);
+      if (isAnonymousPrint) {
+        final dateFormatter = DateFormat('dd MMM yyyy');
+        bytes.addAll(
+          'Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits,
+        );
+      } else {
+        final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
+        bytes.addAll(
+          'Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits,
+        );
+      }
       bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Bill Reference - left aligned
@@ -115,8 +129,9 @@ class BillPrinter {
             .codeUnits,
       );
 
-      // Get salesman name from shared preferences
+      // Get salesman name/ID from shared preferences
       final savedSalesmanName = await AppPreferences.instance.salesmanName;
+      final savedSalesmanId = await AppPreferences.instance.salesmanId;
       String displayName = savedSalesmanName ?? salesmanName;
 
       // Customer name
@@ -125,8 +140,12 @@ class BillPrinter {
           : toTitleCase(customerName);
       bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 
-      // Salesman name
-      bytes.addAll('Received By: ${toTitleCase(displayName)}\n'.codeUnits);
+      // Salesman: show ID in anonymous mode, name otherwise
+      if (isAnonymousPrint) {
+        bytes.addAll('Received By: ${savedSalesmanId ?? ''}\n'.codeUnits);
+      } else {
+        bytes.addAll('Received By: ${toTitleCase(displayName)}\n'.codeUnits);
+      }
       bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Calculate totals
@@ -140,7 +159,10 @@ class BillPrinter {
       bytes.addAll('BILL SUMMARY:\n'.codeUnits);
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
-      bytes.addAll('Total Items:     $totalItems\n'.codeUnits);
+      bytes.addAll(
+        'Total ${totalItems == 1 ? 'Item' : 'Items'}:     $totalItems\n'
+            .codeUnits,
+      );
       bytes.addAll('Total Crates:    $totalCrates\n'.codeUnits);
       bytes.addAll(
         'Bill Total:      Rs.${formatCashAmount(grandTotal)}\n'.codeUnits,
@@ -269,12 +291,17 @@ class BillPrinter {
 
       List<int> bytes = [];
 
+      // Check anonymous print mode
+      final isAnonymousPrint =
+          await AppPreferences.instance.isAnonymousPrintEnabled;
+
       // Get store name and phone based on products
       final storeName = _getStoreName(products);
       final storePhone = _getStorePhone(products);
 
       // Store name - centered, large text (only if all products are from same brand)
-      if (storeName != null) {
+      // Skip business name in anonymous print mode
+      if (storeName != null && !isAnonymousPrint) {
         bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
         bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
         bytes.addAll('$storeName\n'.codeUnits);
@@ -304,10 +331,19 @@ class BillPrinter {
       // Separator
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Current date and time - left align
+      // Current date (and time if not anonymous) - left align
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
-      final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
-      bytes.addAll('Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits);
+      if (isAnonymousPrint) {
+        final dateFormatter = DateFormat('dd MMM yyyy');
+        bytes.addAll(
+          'Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits,
+        );
+      } else {
+        final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
+        bytes.addAll(
+          'Date: ${dateFormatter.format(DateTime.now())}\n'.codeUnits,
+        );
+      }
       bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Bill Reference - left aligned
@@ -319,8 +355,9 @@ class BillPrinter {
             .codeUnits,
       );
 
-      // Get salesman name from shared preferences
+      // Get salesman name/ID from shared preferences
       final savedSalesmanName = await AppPreferences.instance.salesmanName;
+      final savedSalesmanId = await AppPreferences.instance.salesmanId;
       String displayName = savedSalesmanName ?? '';
 
       // Customer name
@@ -329,8 +366,10 @@ class BillPrinter {
           : toTitleCase(customerName);
       bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 
-      // Salesman name
-      if (displayName.isNotEmpty) {
+      // Salesman: show ID in anonymous mode, name otherwise
+      if (isAnonymousPrint) {
+        bytes.addAll('Received By: ${savedSalesmanId ?? ''}\n'.codeUnits);
+      } else if (displayName.isNotEmpty) {
         bytes.addAll('Received By: ${toTitleCase(displayName)}\n'.codeUnits);
       }
       bytes.addAll('--------------------------------\n'.codeUnits);
@@ -438,12 +477,18 @@ class BillPrinter {
 
       List<int> bytes = [];
 
+      // Check anonymous print mode
+      final isAnonymousPrint =
+          await AppPreferences.instance.isAnonymousPrintEnabled;
+      final savedSalesmanId = await AppPreferences.instance.salesmanId;
+
       // Get store name and phone based on products
       final storeName = _getStoreName(products);
       final storePhone = _getStorePhone(products);
 
       // Store name - centered, large text (only if all products are from same brand)
-      if (storeName != null) {
+      // Skip business name in anonymous print mode
+      if (storeName != null && !isAnonymousPrint) {
         bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
         bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
         bytes.addAll('$storeName\n'.codeUnits);
@@ -459,8 +504,13 @@ class BillPrinter {
 
       // Date and Bill ID - left align
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
-      final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
-      bytes.addAll('Date: ${dateFormatter.format(date)}\n'.codeUnits);
+      if (isAnonymousPrint) {
+        final dateFormatter = DateFormat('dd MMM yyyy');
+        bytes.addAll('Date: ${dateFormatter.format(date)}\n'.codeUnits);
+      } else {
+        final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
+        bytes.addAll('Date: ${dateFormatter.format(date)}\n'.codeUnits);
+      }
       bytes.addAll('Bill ID: ${truncateBillId(billId)}\n'.codeUnits);
       bytes.addAll('--------------------------------\n'.codeUnits);
 
@@ -470,8 +520,12 @@ class BillPrinter {
           : toTitleCase(customerName);
       bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 
-      // Salesman name
-      bytes.addAll('Salesman: ${toTitleCase(salesmanName)}\n'.codeUnits);
+      // Salesman: show ID in anonymous mode, name otherwise
+      if (isAnonymousPrint) {
+        bytes.addAll('Salesman: ${savedSalesmanId ?? ''}\n'.codeUnits);
+      } else {
+        bytes.addAll('Salesman: ${toTitleCase(salesmanName)}\n'.codeUnits);
+      }
 
       // Payment type indicator - bold if credit
       if (paymentType == 'credit') {
@@ -516,7 +570,9 @@ class BillPrinter {
       final grandTotal = BillingCalculations.calculateGrandTotal(products);
 
       // Total items
-      bytes.addAll('Total Items: $totalItems\n'.codeUnits);
+      bytes.addAll(
+        'Total ${totalItems == 1 ? 'Item' : 'Items'}: $totalItems\n'.codeUnits,
+      );
 
       // MT details if user entered any value (including 0)
       if (mtCollected != null && mtRemaining != null) {

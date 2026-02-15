@@ -446,6 +446,13 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     setState(() => _printingIndex = null);
   }
 
+  /// Checks if any operation is currently in progress
+  bool get _isAnyOperationInProgress =>
+      _deletingIndex != null ||
+      _completingIndex != null ||
+      _editingIndex != null ||
+      _printingIndex != null;
+
   bool _isValidIndex(int index, List<CreditHistory> billHistory) {
     return index >= 0 && index < billHistory.length;
   }
@@ -455,6 +462,15 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     List<CreditHistory> billHistory,
   ) async {
     if (!_isValidIndex(index, billHistory)) return;
+    // Prevent concurrent operations
+    if (_isAnyOperationInProgress) {
+      CustomSnackBar.show(
+        context,
+        message: 'Please wait, an operation is in progress.',
+        type: SnackBarType.warning,
+      );
+      return;
+    }
 
     setState(() => _deletingIndex = index);
 
@@ -469,14 +485,13 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     }
 
     try {
-      // Save to delete history
+      // Step 1: Save to delete history (spinner visible on button)
       final formattedDate = DateFormatters.formatForDeleteHistory(
         billToDelete.date,
       );
       final deleteHistoryPath =
           'Deleted History/$salesmanIdentifier/$formattedDate/${billToDelete.billId}';
 
-      // Use CreditHistoryProvider's deleteCreditRecordToHistory method
       final savedToDeleteHistory = await _creditProvider
           .saveCreditToDeleteHistory(
             path: deleteHistoryPath,
@@ -491,7 +506,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         return;
       }
 
-      // Update dashboard summary if bill is from today
+      // Step 2: Update dashboard summary if bill is from today
       final today = DateTime.now();
       final billDate = billToDelete.date;
       final isTodaysBill =
@@ -500,7 +515,6 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           billDate.day == today.day;
 
       if (isTodaysBill) {
-        // Calculate items sold for dashboard update
         final itemsSold = billToDelete.products.fold<int>(
           0,
           (sum, p) => sum + p.quantity,
@@ -526,32 +540,43 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         }
       }
 
-      // Animate removal then delete from credit history
-      await _animateBillRemoval(billToDelete.billId);
+      // Step 3: Delete from credit history, keep in local list (spinner still visible)
       final deletedFromCredit = await _creditProvider.deleteCreditRecord(
         billId: billToDelete.billId,
         salesmanName: salesmanIdentifier,
+        removeLocally: false,
       );
 
       if (!mounted) return;
 
       if (deletedFromCredit) {
-        CustomSnackBar.show(
-          context,
-          message: 'Bill deleted.',
-          type: SnackBarType.success,
-        );
+        // Step 4: Animate the card out (item is still in local list)
+        setState(() => _deletingIndex = null);
+        await _animateBillRemoval(billToDelete.billId);
+
+        // Step 5: Remove from local list after animation completes
+        _creditProvider.removeCreditLocally(billToDelete.billId);
+
+        // Step 6: Show success snackbar
+        if (mounted) {
+          CustomSnackBar.show(
+            context,
+            message: 'Bill deleted.',
+            type: SnackBarType.success,
+          );
+        }
       } else {
+        setState(() => _deletingIndex = null);
         _showErrorSnackBar('Failed to delete from credit records.');
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _deletingIndex = null;
+          _removingBillId = null;
+        });
         _showErrorSnackBar('Error deleting bill: ${e.toString()}');
       }
-    }
-
-    if (mounted) {
-      setState(() => _deletingIndex = null);
     }
   }
 
@@ -1332,6 +1357,136 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     );
   }
 
+  /// Checks if two dates are on the same calendar day
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  /// Returns a human-readable day label for the date
+  String _getDayLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final difference = today.difference(dateOnly).inDays;
+
+    if (difference == 0) return 'Today';
+    if (difference == 1) return 'Yesterday';
+
+    // Return day of the week for older dates
+    return DateFormat('EEEE').format(date);
+  }
+
+  /// Builds a date divider widget shown between groups of different dates
+  Widget _buildDateDivider(DateTime date) {
+    final dayLabel = _getDayLabel(date);
+    final formattedDate = DateFormat('d MMM yyyy').format(date);
+    final isToday = dayLabel == 'Today';
+    final isYesterday = dayLabel == 'Yesterday';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 14),
+      child: Row(
+        children: [
+          const SizedBox(width: 4),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.gray300.withValues(alpha: 0.0),
+                    AppColors.gray300,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isToday
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.08)
+                  : isYesterday
+                  ? Colors.orange.withValues(alpha: 0.08)
+                  : AppColors.gray100,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isToday
+                    ? AppColors.pepsiBlue.withValues(alpha: 0.2)
+                    : isYesterday
+                    ? Colors.orange.withValues(alpha: 0.2)
+                    : AppColors.gray300.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isToday
+                      ? Icons.today
+                      : isYesterday
+                      ? Icons.event
+                      : Icons.calendar_today_outlined,
+                  size: 12,
+                  color: isToday
+                      ? AppColors.pepsiBlue
+                      : isYesterday
+                      ? Colors.orange[700]
+                      : AppColors.gray500,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  dayLabel,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isToday
+                        ? AppColors.pepsiBlue
+                        : isYesterday
+                        ? Colors.orange[700]
+                        : AppColors.gray500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                Text(
+                  '  ·  ',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: AppColors.gray400,
+                  ),
+                ),
+                Text(
+                  formattedDate,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.gray500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.gray300,
+                    AppColors.gray300.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBillList(List<CreditHistory> billHistory) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -1340,8 +1495,14 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         final bill = billHistory[index];
         final isRemoving = _removingBillId == bill.billId;
 
+        // Determine if we need a date divider before this item
+        final bool showDivider =
+            index > 0 && !_isSameDay(bill.date, billHistory[index - 1].date);
+
+        Widget cardWidget;
+
         if (isRemoving && _removeAnimController != null) {
-          return SizeTransition(
+          cardWidget = SizeTransition(
             sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(
               CurvedAnimation(
                 parent: _removeAnimController!,
@@ -1370,9 +1531,18 @@ class _CreditRecordPageState extends State<CreditRecordPage>
               ),
             ),
           );
+        } else {
+          cardWidget = _buildCreditCard(bill, index, billHistory);
         }
 
-        return _buildCreditCard(bill, index, billHistory);
+        if (showDivider) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [_buildDateDivider(bill.date), cardWidget],
+          );
+        }
+
+        return cardWidget;
       },
     );
   }
@@ -1670,9 +1840,6 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         isDeletingLoading ||
         isPrintingLoading;
 
-    // Disable delete when record has been updated
-    final isDeleteDisabled = bill.isRecordUpdated || isAnyLoading;
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1719,9 +1886,20 @@ class _CreditRecordPageState extends State<CreditRecordPage>
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: isDeleteDisabled
+                onTap: isDeletingLoading || bill.isRecordUpdated
                     ? null
-                    : () => _showDeleteConfirmation(index, billHistory),
+                    : () {
+                        if (_isAnyOperationInProgress) {
+                          CustomSnackBar.show(
+                            context,
+                            message:
+                                'Please wait, an operation is in progress.',
+                            type: SnackBarType.warning,
+                          );
+                          return;
+                        }
+                        _showDeleteConfirmation(index, billHistory);
+                      },
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
                   padding: const EdgeInsets.all(10),
@@ -1747,7 +1925,9 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                               ? Icons.block
                               : Icons.delete_outline,
                           color: AppColors.pepsiRedLight.withValues(
-                            alpha: isDeleteDisabled ? 0.4 : 1.0,
+                            alpha: (bill.isRecordUpdated || isDeletingLoading)
+                                ? 0.4
+                                : 1.0,
                           ),
                           size: 20,
                         ),

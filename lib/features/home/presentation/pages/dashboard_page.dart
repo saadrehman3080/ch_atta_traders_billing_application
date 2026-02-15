@@ -33,6 +33,8 @@ class _DashboardPageState extends State<DashboardPage>
   late final PrinterService _printerService;
   String _salesmanName = 'Salesman';
   bool _hasInternetConnection = true;
+  bool _hasAnonymousPrintAccess = false; // From Firebase - controls visibility
+  bool _isAnonymousPrintEnabled = false; // Toggle state
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -42,6 +44,7 @@ class _DashboardPageState extends State<DashboardPage>
     _dashboardProvider = DashboardProvider();
     _printerService = PrinterService();
     _loadSalesmanName();
+    _loadAnonymousPrintSettings();
     _initConnectivity();
     _setupConnectivityListener();
     _dashboardProvider.loadDashboardData();
@@ -82,6 +85,29 @@ class _DashboardPageState extends State<DashboardPage>
     if (name != null && mounted) {
       setState(() {
         _salesmanName = name;
+      });
+    }
+  }
+
+  /// Load anonymous print access and enabled state
+  Future<void> _loadAnonymousPrintSettings() async {
+    final hasAccess = await AppPreferences.instance.hasAnonymousPrintAccess;
+    final isEnabled = await AppPreferences.instance.isAnonymousPrintEnabled;
+    if (mounted) {
+      setState(() {
+        _hasAnonymousPrintAccess = hasAccess;
+        _isAnonymousPrintEnabled = isEnabled;
+      });
+    }
+  }
+
+  /// Toggle anonymous print on/off
+  Future<void> _toggleAnonymousPrint() async {
+    final newValue = !_isAnonymousPrintEnabled;
+    await AppPreferences.instance.setAnonymousPrintEnabled(newValue);
+    if (mounted) {
+      setState(() {
+        _isAnonymousPrintEnabled = newValue;
       });
     }
   }
@@ -1001,6 +1027,7 @@ class _DashboardPageState extends State<DashboardPage>
           _buildPrintersSectionHeader(),
           const SizedBox(height: 12),
           _buildScanningPrinters(),
+          _buildAnonymousPrintToggle(),
         ],
       );
     }
@@ -1012,6 +1039,7 @@ class _DashboardPageState extends State<DashboardPage>
           _buildPrintersSectionHeader(),
           const SizedBox(height: 12),
           _buildPrinterError(),
+          _buildAnonymousPrintToggle(),
         ],
       );
     }
@@ -1023,6 +1051,7 @@ class _DashboardPageState extends State<DashboardPage>
           _buildPrintersSectionHeader(),
           const SizedBox(height: 12),
           _buildNoPrintersFound(),
+          _buildAnonymousPrintToggle(),
         ],
       );
     }
@@ -1038,7 +1067,112 @@ class _DashboardPageState extends State<DashboardPage>
             child: _buildPrinterItem(printer),
           ),
         ),
+        _buildAnonymousPrintToggle(),
       ],
+    );
+  }
+
+  /// Builds the anonymous print toggle button
+  /// Only shown if user has access to this feature (from Firebase)
+  Widget _buildAnonymousPrintToggle() {
+    // Don't show button if user doesn't have access to this feature
+    if (!_hasAnonymousPrintAccess) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _toggleAnonymousPrint,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: _isAnonymousPrintEnabled
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.05)
+                  : AppColors.gray50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isAnonymousPrintEnabled
+                    ? AppColors.pepsiBlue.withValues(alpha: 0.3)
+                    : AppColors.gray300.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _isAnonymousPrintEnabled
+                      ? Icons.visibility_off
+                      : Icons.visibility_off_outlined,
+                  color: _isAnonymousPrintEnabled
+                      ? AppColors.pepsiBlue
+                      : AppColors.gray400,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Anonymous Print',
+                        style: AppTextStyles.productItemName.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _isAnonymousPrintEnabled
+                              ? AppColors.pepsiBlue
+                              : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isAnonymousPrintEnabled
+                            ? 'Receipts print without business name, salesman identity, and time'
+                            : 'Hide business name, use ID instead of name, and remove time from receipts',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 11,
+                          color: _isAnonymousPrintEnabled
+                              ? AppColors.pepsiBlue
+                              : AppColors.gray500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 40,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(11),
+                    color: _isAnonymousPrintEnabled
+                        ? AppColors.pepsiBlue
+                        : AppColors.gray300,
+                  ),
+                  child: AnimatedAlign(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    alignment: _isAnonymousPrintEnabled
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

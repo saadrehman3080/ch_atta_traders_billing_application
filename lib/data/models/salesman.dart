@@ -6,6 +6,7 @@ class Salesman {
   final int salesmanId;
   final bool isAdmin;
   final bool hasAccess;
+  final bool anonymousPrint;
 
   Salesman({
     required this.id,
@@ -14,6 +15,7 @@ class Salesman {
     required this.salesmanId,
     this.isAdmin = false,
     this.hasAccess = true,
+    this.anonymousPrint = false,
   });
 
   /// Creates a [Salesman] instance from Firestore document data.
@@ -25,6 +27,7 @@ class Salesman {
       salesmanId: data['salesmanId'] as int? ?? 0,
       isAdmin: data['isAdmin'] as bool? ?? false,
       hasAccess: data['hasAccess'] as bool? ?? true,
+      anonymousPrint: data['anonymousPrint'] as bool? ?? false,
     );
   }
 }

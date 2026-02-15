@@ -93,6 +93,9 @@ class AuthProvider extends ChangeNotifier {
         await AppPreferences.instance.setSalesmanId(salesman.salesmanId);
         await AppPreferences.instance.setIsAdmin(salesman.isAdmin);
         await AppPreferences.instance.setSalesmanDocId(salesman.id);
+        await AppPreferences.instance.setAnonymousPrint(
+          salesman.anonymousPrint,
+        );
 
         debugPrint('Login successful for: ${salesman.name}');
         return true;
@@ -158,6 +161,9 @@ class AuthProvider extends ChangeNotifier {
         await AppPreferences.instance.setSalesmanName(salesman.name);
         await AppPreferences.instance.setIsAdmin(salesman.isAdmin);
         await AppPreferences.instance.setSalesmanDocId(salesman.id);
+        await AppPreferences.instance.setAnonymousPrint(
+          salesman.anonymousPrint,
+        );
 
         debugPrint('Access revalidated for: ${salesman.name}');
         debugPrint('isAdmin updated to: ${salesman.isAdmin}');

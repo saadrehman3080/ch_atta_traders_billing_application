@@ -576,22 +576,35 @@ class _DailySalePageState extends State<DailySalePage>
   // ========== Dialog Methods ==========
 
   Widget _buildDeleteButton(int index) {
-    final isDeleting = _deletingIndex == index;
+    final isThisDeleting = _deletingIndex == index;
+    final isOtherDeleting = _deletingIndex != null && _deletingIndex != index;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: isDeleting ? null : () => _showDeleteConfirmation(index),
+        onTap: isThisDeleting
+            ? null
+            : () {
+                if (isOtherDeleting) {
+                  CustomSnackBar.show(
+                    context,
+                    message: 'Please wait, a deletion is in progress.',
+                    type: SnackBarType.warning,
+                  );
+                  return;
+                }
+                _showDeleteConfirmation(index);
+              },
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
           decoration: BoxDecoration(
             color: AppColors.pepsiRedLight.withValues(
-              alpha: isDeleting ? 0.05 : 0.1,
+              alpha: isThisDeleting ? 0.05 : 0.1,
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: isDeleting
+          child: isThisDeleting
               ? SizedBox(
                   width: 20,
                   height: 20,
@@ -604,9 +617,7 @@ class _DailySalePageState extends State<DailySalePage>
                 )
               : Icon(
                   Icons.delete_outline,
-                  color: AppColors.pepsiRedLight.withValues(
-                    alpha: isDeleting ? 0.4 : 1.0,
-                  ),
+                  color: AppColors.pepsiRedLight,
                   size: 24,
                 ),
         ),
@@ -724,6 +735,9 @@ class _DailySalePageState extends State<DailySalePage>
   }
 
   Future<void> _deleteSalePermanently(int index) async {
+    // Prevent concurrent deletions
+    if (_deletingIndex != null) return;
+
     setState(() => _deletingIndex = index);
 
     final saleToDelete = _salesProvider.sales[index];
@@ -737,23 +751,33 @@ class _DailySalePageState extends State<DailySalePage>
     }
 
     try {
-      // Animate the card out before deleting from provider
-      _removeAnimController?.dispose();
-      _removeAnimController = AnimationController(
-        duration: const Duration(milliseconds: 350),
-        vsync: this,
-      );
-      setState(() => _removingBillId = saleToDelete.billId);
-      await _removeAnimController!.forward();
-
+      // Step 1: Delete from backend only, keep item in local list (spinner visible)
       final success = await _salesProvider.deleteSale(
         sale: saleToDelete,
         salesmanName: salesmanIdentifier,
+        removeLocally: false,
       );
 
-      _removingBillId = null;
+      if (!mounted) return;
 
       if (success) {
+        // Step 2: Animate the card out (item is still in local list)
+        _removeAnimController?.dispose();
+        _removeAnimController = AnimationController(
+          duration: const Duration(milliseconds: 350),
+          vsync: this,
+        );
+        setState(() {
+          _deletingIndex = null;
+          _removingBillId = saleToDelete.billId;
+        });
+        await _removeAnimController!.forward();
+
+        // Step 3: Remove from local list after animation completes
+        _salesProvider.removeSaleLocally(saleToDelete.billId);
+        setState(() => _removingBillId = null);
+
+        // Step 4: Show success snackbar
         if (mounted) {
           CustomSnackBar.show(
             context,
@@ -762,14 +786,16 @@ class _DailySalePageState extends State<DailySalePage>
           );
         }
       } else {
+        setState(() => _deletingIndex = null);
         _showErrorSnackBar('Failed to delete sale.');
       }
     } catch (e) {
-      _removingBillId = null;
+      setState(() {
+        _deletingIndex = null;
+        _removingBillId = null;
+      });
       _showErrorSnackBar('Error deleting sale: ${e.toString()}');
     }
-
-    setState(() => _deletingIndex = null);
   }
 
   void _showErrorSnackBar(String message) {
