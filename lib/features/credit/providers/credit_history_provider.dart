@@ -104,6 +104,7 @@ class CreditHistoryProvider extends ChangeNotifier {
     int? newCratesDue,
     bool? isPaid,
     bool? isRecordUpdated,
+    PartialPayment? newPartialPayment,
   }) async {
     try {
       await _repository.updateCreditBalance(
@@ -113,11 +114,16 @@ class CreditHistoryProvider extends ChangeNotifier {
         newCratesDue: newCratesDue,
         isPaid: isPaid,
         isRecordUpdated: isRecordUpdated,
+        newPartialPayment: newPartialPayment,
       );
 
       // Update local cache
       final index = _credits.indexWhere((c) => c.billId == credit.billId);
       if (index != -1) {
+        final updatedPartialPayments = [
+          ...credit.partialPayments,
+          if (newPartialPayment != null) newPartialPayment,
+        ];
         final updatedCredit = CreditHistory(
           billId: credit.billId,
           customerName: credit.customerName,
@@ -128,6 +134,7 @@ class CreditHistoryProvider extends ChangeNotifier {
           cratesDue: newCratesDue ?? credit.cratesDue,
           isPaid: isPaid ?? credit.isPaid,
           isRecordUpdated: isRecordUpdated ?? credit.isRecordUpdated,
+          partialPayments: updatedPartialPayments,
         );
         _credits[index] = updatedCredit;
         _safeNotifyListeners();

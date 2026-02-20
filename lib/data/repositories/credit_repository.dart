@@ -167,6 +167,7 @@ class CreditRepository {
     int? newCratesDue,
     bool? isPaid,
     bool? isRecordUpdated,
+    PartialPayment? newPartialPayment,
   }) async {
     try {
       debugPrint('Updating credit balance in Firestore...');
@@ -188,6 +189,14 @@ class CreditRepository {
       if (isPaid != null) {
         updates['isPaid'] = isPaid;
         debugPrint('New isPaid: $isPaid');
+      }
+
+      // Append partial payment to the existing list
+      if (newPartialPayment != null) {
+        updates['partialPayments'] = FieldValue.arrayUnion([
+          newPartialPayment.toJson(),
+        ]);
+        debugPrint('Adding partial payment: ${newPartialPayment.amount}');
       }
 
       if (updates.isEmpty) {

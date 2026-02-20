@@ -465,6 +465,8 @@ class BillPrinter {
     required String paymentType,
     int? mtCollected,
     int? mtRemaining,
+    int? partialPayment,
+    bool isReferenceOnly = false,
   }) async {
     try {
       // Check if printer is connected
@@ -520,8 +522,8 @@ class BillPrinter {
           : toTitleCase(customerName);
       bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
 
-      // Salesman: show ID in anonymous mode, name otherwise
-      if (isAnonymousPrint) {
+      // Salesman: show ID in anonymous mode or when products are mixed/others, name otherwise
+      if (isAnonymousPrint || storeName == null) {
         bytes.addAll('Salesman: ${savedSalesmanId ?? ''}\n'.codeUnits);
       } else {
         bytes.addAll('Salesman: ${toTitleCase(salesmanName)}\n'.codeUnits);
@@ -596,6 +598,23 @@ class BillPrinter {
         bytes.addAll('--------------------------------\n'.codeUnits);
       }
 
+      // Partial payment section for credit bills
+      if (partialPayment != null && partialPayment > 0) {
+        bytes.addAll('--------------------------------\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('PARTIAL PAYMENT:\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll(
+          'Paid Now:        Rs.${formatCashAmount(partialPayment)}\n'.codeUnits,
+        );
+        final remaining = (grandTotal - discount) - partialPayment;
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll(
+          'Remaining:       Rs.${formatCashAmount(remaining)}\n'.codeUnits,
+        );
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      }
+
       // Grand total - large and bold
       // For 5+ digit amounts, use double-height only (not double-width)
       // to prevent overflow on 58mm printers (~16 chars at double size)
@@ -616,6 +635,15 @@ class BillPrinter {
 
       // Footer - center align, bold
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+
+      // Reference-only indicator for reprints / print-button bills
+      if (isReferenceOnly) {
+        bytes.addAll('--------------------------------\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('** FOR REFERENCE ONLY **\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+      }
+
       bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('Thank you for your business!\n'.codeUnits);
       bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off

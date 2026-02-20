@@ -95,6 +95,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
         discount: widget.bill.discount,
         salesmanName: salesmanName,
         paymentType: paymentType,
+        isReferenceOnly: true,
       );
 
       if (mounted) {
@@ -405,6 +406,13 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                         ],
                       ),
                     ],
+                    // Partial Payment Breakdown (for credit bills with partial payments)
+                    if (widget.bill is CreditHistory) ...[
+                      _buildPartialPaymentBreakdown(
+                        widget.bill as CreditHistory,
+                        grandTotal,
+                      ),
+                    ],
                     const SizedBox(height: 24),
 
                     // Reprint Button
@@ -448,6 +456,137 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPartialPaymentBreakdown(CreditHistory credit, int grandTotal) {
+    if (credit.partialPayments.isEmpty) return const SizedBox.shrink();
+
+    final netAmount = grandTotal - credit.discount;
+    final totalPaid = credit.partialPayments.fold<int>(
+      0,
+      (sum, p) => sum + p.amount,
+    );
+    final remaining = netAmount - totalPaid;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        const Divider(color: AppColors.gray300, thickness: 1),
+        const SizedBox(height: 12),
+        Text(
+          'PAYMENT HISTORY',
+          style: AppTextStyles.helperText.copyWith(
+            color: AppColors.gray500,
+            letterSpacing: 0.5,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.gray100,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            children: [
+              // Total Bill row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Total Bill',
+                    style: AppTextStyles.helperText.copyWith(
+                      fontSize: 13,
+                      color: AppColors.gray500,
+                    ),
+                  ),
+                  Text(
+                    'Rs. ${formatCashAmount(netAmount)}',
+                    style: AppTextStyles.productItemTotal.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Each partial payment
+              ...credit.partialPayments.map((payment) {
+                final dateStr =
+                    '${payment.date.day}-${payment.date.month}-${payment.date.year}';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 14,
+                            color: Colors.green[600],
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Paid on $dateStr',
+                            style: AppTextStyles.helperText.copyWith(
+                              fontSize: 12,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '- Rs. ${formatCashAmount(payment.amount)}',
+                        style: AppTextStyles.productItemTotal.copyWith(
+                          fontSize: 13,
+                          color: Colors.green[700],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const Divider(color: AppColors.gray300, thickness: 1),
+              const SizedBox(height: 4),
+              // Remaining amount
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    remaining > 0 ? 'Remaining' : 'Fully Paid',
+                    style: AppTextStyles.productItemTotal.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: remaining > 0
+                          ? AppColors.pepsiRed
+                          : Colors.green[700],
+                    ),
+                  ),
+                  Text(
+                    remaining > 0
+                        ? 'Rs. ${formatCashAmount(remaining)}'
+                        : 'Rs. 0',
+                    style: AppTextStyles.productItemTotal.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: remaining > 0
+                          ? AppColors.pepsiRed
+                          : Colors.green[700],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

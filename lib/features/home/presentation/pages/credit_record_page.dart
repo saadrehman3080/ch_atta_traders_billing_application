@@ -821,6 +821,9 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         newCratesDue: newCratesDue,
         isPaid: isPaid,
         isRecordUpdated: true,
+        newPartialPayment: (amountReceived != null && amountReceived > 0)
+            ? PartialPayment(date: DateTime.now(), amount: amountReceived)
+            : null,
       );
 
       if (success) {
@@ -1001,6 +1004,9 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         newCratesDue: newCratesDue,
         isPaid: isPaid,
         isRecordUpdated: true,
+        newPartialPayment: (amountReceived != null && amountReceived > 0)
+            ? PartialPayment(date: DateTime.now(), amount: amountReceived)
+            : null,
       );
 
       if (!updated) {
@@ -1381,59 +1387,34 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     final dayLabel = _getDayLabel(date);
     final formattedDate = DateFormat('d MMM yyyy').format(date);
     final isToday = dayLabel == 'Today';
-    final isYesterday = dayLabel == 'Yesterday';
 
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 14),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(width: 4),
-          Expanded(
-            child: Container(
-              height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.gray300.withValues(alpha: 0.0),
-                    AppColors.gray300,
-                  ],
-                ),
-              ),
-            ),
-          ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 12),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: isToday
                   ? AppColors.pepsiBlue.withValues(alpha: 0.08)
-                  : isYesterday
-                  ? Colors.orange.withValues(alpha: 0.08)
                   : AppColors.gray100,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
+                width: 1.25,
                 color: isToday
                     ? AppColors.pepsiBlue.withValues(alpha: 0.2)
-                    : isYesterday
-                    ? Colors.orange.withValues(alpha: 0.2)
-                    : AppColors.gray300.withValues(alpha: 0.5),
+                    : AppColors.gray300.withValues(alpha: 0.85),
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  isToday
-                      ? Icons.today
-                      : isYesterday
-                      ? Icons.event
-                      : Icons.calendar_today_outlined,
+                  isToday ? Icons.today : Icons.calendar_today_outlined,
                   size: 12,
-                  color: isToday
-                      ? AppColors.pepsiBlue
-                      : isYesterday
-                      ? Colors.orange[700]
-                      : AppColors.gray500,
+                  color: isToday ? AppColors.pepsiBlue : AppColors.gray500,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -1441,16 +1422,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: isToday
-                        ? AppColors.pepsiBlue
-                        : isYesterday
-                        ? Colors.orange[700]
-                        : AppColors.gray500,
+                    color: isToday ? AppColors.pepsiBlue : AppColors.gray500,
                     letterSpacing: 0.2,
                   ),
                 ),
                 Text(
-                  '  ·  ',
+                  '  -  ',
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     color: AppColors.gray400,
@@ -1468,20 +1445,6 @@ class _CreditRecordPageState extends State<CreditRecordPage>
               ],
             ),
           ),
-          Expanded(
-            child: Container(
-              height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.gray300,
-                    AppColors.gray300.withValues(alpha: 0.0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
         ],
       ),
     );
@@ -1740,7 +1703,8 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         Icon(Icons.calendar_today_outlined, size: 12, color: AppColors.gray500),
         const SizedBox(width: 4),
         Text(
-          '$date • $time',
+          //'$date • $time',
+          time,
           style: AppTextStyles.helperText.copyWith(
             fontSize: 12,
             color: AppColors.gray500,
@@ -1886,7 +1850,10 @@ class _CreditRecordPageState extends State<CreditRecordPage>
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: isDeletingLoading || bill.isRecordUpdated
+                onTap:
+                    isDeletingLoading ||
+                        bill.isRecordUpdated ||
+                        bill.partialPayments.isNotEmpty
                     ? null
                     : () {
                         if (_isAnyOperationInProgress) {
@@ -1921,11 +1888,15 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                           ),
                         )
                       : Icon(
-                          bill.isRecordUpdated
+                          (bill.isRecordUpdated ||
+                                  bill.partialPayments.isNotEmpty)
                               ? Icons.block
                               : Icons.delete_outline,
                           color: AppColors.pepsiRedLight.withValues(
-                            alpha: (bill.isRecordUpdated || isDeletingLoading)
+                            alpha:
+                                (bill.isRecordUpdated ||
+                                    bill.partialPayments.isNotEmpty ||
+                                    isDeletingLoading)
                                 ? 0.4
                                 : 1.0,
                           ),

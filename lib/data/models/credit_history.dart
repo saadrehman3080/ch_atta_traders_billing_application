@@ -1,6 +1,25 @@
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 
+/// Represents a single partial payment entry with date and amount
+class PartialPayment {
+  final DateTime date;
+  final int amount;
+
+  PartialPayment({required this.date, required this.amount});
+
+  factory PartialPayment.fromJson(Map<String, dynamic> json) {
+    return PartialPayment(
+      date: DateTime.parse(json['date'] as String),
+      amount: json['amount'] as int,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'date': date.toIso8601String(), 'amount': amount};
+  }
+}
+
 class CreditHistory implements BillBase {
   @override
   final String billId;
@@ -19,6 +38,7 @@ class CreditHistory implements BillBase {
   final bool isPaid;
   final int amountDue;
   final bool isRecordUpdated;
+  final List<PartialPayment> partialPayments;
 
   CreditHistory({
     required this.billId,
@@ -31,6 +51,7 @@ class CreditHistory implements BillBase {
     this.cratesDue = 0,
     this.isRecordUpdated = false,
     this.billType = BillType.credit,
+    this.partialPayments = const [],
   });
 
   // Factory constructor to create CreditHistory from JSON (Firebase)
@@ -48,6 +69,14 @@ class CreditHistory implements BillBase {
       cratesDue: json['cratesDue'] as int? ?? 0,
       isRecordUpdated: json['isRecordUpdated'] as bool? ?? false,
       billType: BillType.fromJson(json['billType'] as String?),
+      partialPayments: json['partialPayments'] != null
+          ? (json['partialPayments'] as List<dynamic>)
+                .map(
+                  (item) =>
+                      PartialPayment.fromJson(item as Map<String, dynamic>),
+                )
+                .toList()
+          : [],
     );
   }
 
@@ -65,6 +94,7 @@ class CreditHistory implements BillBase {
       'isRecordUpdated': isRecordUpdated,
       'cratesDue': cratesDue,
       'billType': billType.toJson(),
+      'partialPayments': partialPayments.map((p) => p.toJson()).toList(),
     };
   }
 
@@ -80,6 +110,7 @@ class CreditHistory implements BillBase {
     int? cratesDue,
     bool? isRecordUpdated,
     BillType? billType,
+    List<PartialPayment>? partialPayments,
   }) {
     return CreditHistory(
       billId: billId ?? this.billId,
@@ -92,6 +123,7 @@ class CreditHistory implements BillBase {
       cratesDue: cratesDue ?? this.cratesDue,
       isRecordUpdated: isRecordUpdated ?? this.isRecordUpdated,
       billType: billType ?? this.billType,
+      partialPayments: partialPayments ?? this.partialPayments,
     );
   }
 

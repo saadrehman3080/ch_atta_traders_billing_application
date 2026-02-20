@@ -43,10 +43,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _discountController = TextEditingController();
   final TextEditingController _mtController = TextEditingController();
+  final TextEditingController _partialPaymentController =
+      TextEditingController();
   bool _isScrollable = false;
   String _paymentType = 'cash';
   int _discount = 0;
   int _mt = 0;
+  int _partialPayment = 0;
   bool _isSaving = false;
   bool _isPrinting = false;
   bool _isAnonymousCustomer = false; // When true, skip customer name on bill
@@ -59,6 +62,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _customerNameController.addListener(_updateButtonState);
     _discountController.addListener(_updateDiscount);
     _mtController.addListener(_updateMt);
+    _partialPaymentController.addListener(_updatePartialPayment);
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
     _checkPrinterConnection();
@@ -89,11 +93,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _customerNameController.removeListener(_updateButtonState);
     _discountController.removeListener(_updateDiscount);
     _mtController.removeListener(_updateMt);
+    _partialPaymentController.removeListener(_updatePartialPayment);
     _scrollController.removeListener(_checkScrollable);
     _scrollController.dispose();
     _customerNameController.dispose();
     _discountController.dispose();
     _mtController.dispose();
+    _partialPaymentController.dispose();
     _saleProvider.dispose();
     _creditProvider.dispose();
     PrinterConnectionService.instance.removeListener(
@@ -198,6 +204,32 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
   }
 
+  void _updatePartialPayment() {
+    final text = _partialPaymentController.text.trim();
+    if (text.isEmpty) {
+      setState(() {
+        _partialPayment = 0;
+      });
+      return;
+    }
+
+    final value = int.tryParse(text) ?? 0;
+
+    if (value < 0 || value > _grandTotal) {
+      _partialPaymentController.text = '0';
+      _partialPaymentController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _partialPaymentController.text.length),
+      );
+      setState(() {
+        _partialPayment = 0;
+      });
+    } else {
+      setState(() {
+        _partialPayment = value;
+      });
+    }
+  }
+
   void _checkScrollable() {
     if (_scrollController.hasClients) {
       final isScrollable = _scrollController.position.maxScrollExtent > 0;
@@ -295,6 +327,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
       final totalRbQuantity = _getTotalRbQuantity();
       final cratesDue = hasMt ? (totalRbQuantity - _mt) : 0;
 
+      // Handle partial payment for credit
+      final hasPartialPayment = _paymentType == 'credit' && _partialPayment > 0;
+      final amountDue = hasPartialPayment
+          ? (_grandTotal - _partialPayment)
+          : _grandTotal;
+      final List<PartialPayment> partialPayments = hasPartialPayment
+          ? [PartialPayment(date: DateTime.now(), amount: _partialPayment)]
+          : [];
+
       return CreditHistory(
         billId: billId,
         customerName: customerName,
@@ -304,9 +345,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
         isPaid:
             _paymentType ==
             'cash', // True if cash (only MT pending), false if credit
-        amountDue: _grandTotal,
+        amountDue: amountDue,
         cratesDue: cratesDue,
         billType: BillType.credit,
+        partialPayments: partialPayments,
       );
     }
   }
@@ -370,6 +412,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     required String paymentType,
     int? mtCollected,
     int? mtRemaining,
+    int? partialPayment,
   }) async {
     final result = await BillPrinter.printBill(
       billId: billId,
@@ -381,20 +424,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
       paymentType: paymentType,
       mtCollected: mtCollected,
       mtRemaining: mtRemaining,
+      partialPayment: partialPayment,
+      isReferenceOnly: true,
     );
 
     if (mounted) {
       if (result.success) {
         CustomSnackBar.show(
           context,
-          message: 'Bill printed successfully',
+          message: 'Bill saved & printed successfully',
           type: SnackBarType.success,
         );
       } else {
         CustomSnackBar.show(
           context,
-          message: result.errorMessage ?? 'Failed to print bill',
-          type: SnackBarType.error,
+          message:
+              'Bill saved but print failed: ${result.errorMessage ?? 'Unknown error'}',
+          type: SnackBarType.warning,
         );
       }
     }
@@ -527,16 +573,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
-      // Show success message
-      if (mounted) {
-        final billType = _shouldSaveToDailySales() ? 'Bill' : 'Credit';
-        CustomSnackBar.show(
-          context,
-          message: '$billType saved successfully',
-          type: SnackBarType.success,
-        );
-      }
-
       // Print the bill
       final hasMt = _mtController.text.trim().isNotEmpty;
       final totalRbQuantity = _getTotalRbQuantity();
@@ -552,6 +588,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         paymentType: _paymentType,
         mtCollected: hasMt ? _mt : null,
         mtRemaining: hasMt ? cratesDue : null,
+        partialPayment: _paymentType == 'credit' && _partialPayment > 0
+            ? _partialPayment
+            : null,
       );
 
       // Call the original onPrint callback
@@ -608,6 +647,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
             _buildCustomerNameField(),
             const SizedBox(height: 10),
             _buildDiscountField(),
+            if (_paymentType == 'credit') ...[
+              const SizedBox(height: 10),
+              _buildPartialPaymentField(),
+            ],
             if (_hasRbProducts) ...[
               const SizedBox(height: 10),
               _buildMtField(),
@@ -844,6 +887,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
             if (_paymentType == 'credit') {
               _isAnonymousCustomer = false;
             }
+            // Reset partial payment when switching payment type
+            if (_paymentType != 'credit') {
+              _partialPaymentController.clear();
+              _partialPayment = 0;
+            }
           });
         },
         style: _buildSegmentedButtonStyle(),
@@ -1043,7 +1091,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return InputDecoration(
       filled: true,
       fillColor: AppColors.gray50,
-      labelText: "Discount (Optional)",
+      labelText: "Discount",
       labelStyle: AppTextStyles.inputHint.copyWith(
         fontSize: 14,
         color: AppColors.gray400,
@@ -1104,9 +1152,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return InputDecoration(
       filled: true,
       fillColor: _isAnonymousCustomer ? AppColors.gray100 : AppColors.gray50,
-      labelText: _isAnonymousCustomer
-          ? "All MT Returned"
-          : "Collected MT (Optional)",
+      labelText: _isAnonymousCustomer ? "All MT Returned" : "Collected MT",
       labelStyle: AppTextStyles.inputHint.copyWith(
         fontSize: 14,
         color: _isAnonymousCustomer ? AppColors.gray500 : AppColors.gray400,
@@ -1131,6 +1177,103 @@ class _CheckoutPageState extends State<CheckoutPage> {
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.pepsiBlue, width: 1.5),
       ),
+    );
+  }
+
+  Widget _buildPartialPaymentField() {
+    final remaining = _grandTotal - _partialPayment;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Theme(
+          data: Theme.of(context).copyWith(
+            textSelectionTheme: const TextSelectionThemeData(
+              selectionHandleColor: AppColors.pepsiBlueLight,
+              selectionColor: AppColors.textSecondary,
+              cursorColor: AppColors.pepsiBlueLight,
+            ),
+          ),
+          child: TextField(
+            controller: _partialPaymentController,
+            style: AppTextStyles.inputText.copyWith(
+              color: Colors.black87,
+              fontSize: 14,
+            ),
+            cursorColor: AppColors.pepsiBlue,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) {
+              FocusScope.of(context).unfocus();
+            },
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.gray50,
+              labelText: "Partial Payment Received",
+              labelStyle: AppTextStyles.inputHint.copyWith(
+                fontSize: 14,
+                color: AppColors.gray400,
+              ),
+              floatingLabelStyle: AppTextStyles.inputHint.copyWith(
+                fontSize: 14,
+                color: AppColors.pepsiBlue,
+                fontWeight: FontWeight.w500,
+              ),
+              floatingLabelBehavior: FloatingLabelBehavior.auto,
+              prefixIcon: const Icon(
+                Icons.payments_outlined,
+                size: 20,
+                color: AppColors.gray500,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: AppColors.gray300.withValues(alpha: 0.5),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppColors.pepsiBlue,
+                  width: 1.5,
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_partialPayment > 0) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.pepsiBlue.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppColors.pepsiBlue.withValues(alpha: 0.15),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: AppColors.pepsiBlue, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Total: Rs. ${formatCashAmount(_grandTotal)} - Paid: Rs. ${formatCashAmount(_partialPayment)} = Remaining: Rs. ${formatCashAmount(remaining)}',
+                    style: AppTextStyles.helperText.copyWith(
+                      fontSize: 12,
+                      color: AppColors.pepsiBlue,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1166,6 +1309,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             _customerNameController.clear();
                             _discountController.clear();
                             _mtController.clear();
+                            _partialPaymentController.clear();
                           }
                         }
                       : null,
@@ -1216,6 +1360,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             _customerNameController.clear();
                             _discountController.clear();
                             _mtController.clear();
+                            _partialPaymentController.clear();
                           }
                         }
                       : null,

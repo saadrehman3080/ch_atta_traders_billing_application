@@ -389,8 +389,8 @@ class _DashboardPageState extends State<DashboardPage>
               _buildStatsGrid(data),
               const SizedBox(height: 10),
               _buildCustomersServedSection(data),
-              const SizedBox(height: 10),
-              _buildNewBillButton(),
+              const SizedBox(height: 5),
+              //_buildNewBillButton(),
             ],
           ),
         );

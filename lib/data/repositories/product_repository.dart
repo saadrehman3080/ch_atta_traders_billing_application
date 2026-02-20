@@ -27,45 +27,11 @@ class ProductRepository {
     'Sting NR 300ml',
     'Slice 200ml TP',
     'Aquafina 1500ml',
-    'Revive NR 300ml',
-    'Murree Sparklet 1500ml',
-    'Murree Sparklet 500ml',
-    'Shezan 250ml RB',
-
-    // Carbonated Drinks — 1500ml
-    'Big Apple 1500ml',
-    'Coke 1500ml',
-    'Master Cola 1500ml',
-
-    // Carbonated Drinks — 300ml (NR)
-    'Bigapple NR 300ml',
-    'Master Cola NR 300ml',
-
-    // Juices
-    'Slice 1000ml TP',
     'Tops Tangy 250ml',
     'Shezan 250ml TP',
-
-    // Cans
-    'Pepsi Can 330ml',
-    'Sting Can 330ml',
-
-    // Carbonated Drinks — 2250ml
-    'Pepsi 2250ml',
-    'Master Cola 2250ml',
-
-    // Carbonated Drinks — 1000ml
-    'Pepsi 1000ml',
-
-    // 500ml Bottles
-    'Pepsi 500ml',
-    'Gatorade 500ml',
-
-    // Water
     'Aquafina 500ml',
-    'Aquafina 19L',
-    'Nestle 1500ml',
-    'Master Water',
+    'Revive NR 300ml',
+    'Slice 1000ml TP',
   ];
 
   /// Fetches all products from Firestore.
@@ -95,7 +61,8 @@ class ProductRepository {
         );
       }).toList();
 
-      // Sort products according to predefined order
+      // Sort products: predefined order first, then remaining pepsi, then masterCola, then others
+      // Each sub-group sorted alphabetically
       products.sort((a, b) {
         final aIndex = _productOrder.indexOf(a.name);
         final bIndex = _productOrder.indexOf(b.name);
@@ -108,7 +75,15 @@ class ProductRepository {
         if (aIndex != -1) return -1;
         // If only 'b' is in the list, it comes first
         if (bIndex != -1) return 1;
-        // If neither is in the list, sort alphabetically
+
+        // Neither is in the predefined list — sort by type priority then alphabetically
+        final typePriority = {'pepsi': 0, 'masterCola': 1, 'others': 2};
+        final aPriority = typePriority[a.type] ?? 2;
+        final bPriority = typePriority[b.type] ?? 2;
+
+        if (aPriority != bPriority) {
+          return aPriority.compareTo(bPriority);
+        }
         return a.name.compareTo(b.name);
       });
 
