@@ -55,6 +55,9 @@ class AppPreferences {
   /// Key for storing whether anonymous print is currently enabled
   static const String _keyAnonymousPrintEnabled = 'anonymous_print_enabled';
 
+  /// Key for storing whether skip customer name is enabled by default
+  static const String _keySkipCustomerName = 'skip_customer_name_default';
+
   // ========== Initialization ==========
 
   /// Initializes the SharedPreferences instance.
@@ -375,6 +378,41 @@ class AppPreferences {
       return result;
     } catch (e) {
       debugPrint('Error storing anonymous print enabled status: $e');
+      return false;
+    }
+  }
+
+  // ========== Skip Customer Name Default ==========
+
+  /// Gets whether skip customer name is enabled by default.
+  ///
+  /// Returns `true` if skip customer name is enabled by default, `false` otherwise.
+  /// Defaults to `false` if not set.
+  Future<bool> get isSkipCustomerNameDefault async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getBool(_keySkipCustomerName) ?? false;
+    } catch (e) {
+      debugPrint('Error reading skip customer name default: $e');
+      return false;
+    }
+  }
+
+  /// Stores whether skip customer name should be enabled by default.
+  ///
+  /// [enabled] - `true` to enable skip customer name by default, `false` otherwise.
+  ///
+  /// Returns `true` if the operation was successful, `false` otherwise.
+  Future<bool> setSkipCustomerNameDefault(bool enabled) async {
+    _ensureInitialized();
+    try {
+      final result = await _prefs!.setBool(_keySkipCustomerName, enabled);
+      if (result) {
+        debugPrint('Skip customer name default stored: $enabled');
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error storing skip customer name default: $e');
       return false;
     }
   }

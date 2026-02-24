@@ -66,6 +66,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
     _checkPrinterConnection();
+    _loadSkipCustomerNamePreference();
     // Listen to printer connection changes
     PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
   }
@@ -85,6 +86,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
         .checkConnection();
     if (mounted) {
       setState(() => _isPrinterConnected = isConnected);
+    }
+  }
+
+  /// Load skip customer name preference and apply it
+  Future<void> _loadSkipCustomerNamePreference() async {
+    final skipByDefault =
+        await AppPreferences.instance.isSkipCustomerNameDefault;
+    if (skipByDefault && _paymentType != 'credit' && mounted) {
+      setState(() {
+        _isAnonymousCustomer = true;
+        if (_hasRbProducts) {
+          final totalRb = _getTotalRbQuantity();
+          _mtController.text = '$totalRb';
+          _mt = totalRb;
+        }
+      });
     }
   }
 
@@ -215,7 +232,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     final value = int.tryParse(text) ?? 0;
 
-    if (value < 0 || value > _grandTotal) {
+    if (value < 0 || value >= _grandTotal) {
       _partialPaymentController.text = '0';
       _partialPaymentController.selection = TextSelection.fromPosition(
         TextPosition(offset: _partialPaymentController.text.length),
@@ -308,7 +325,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
   dynamic _prepareBillData(String billId) {
     final customerName = _getCustomerName();
     final products = _selectedProducts
-        .map((p) => Product(name: p.name, price: p.price, quantity: p.quantity))
+        .map(
+          (p) => Product(
+            name: p.name,
+            price: p.price,
+            quantity: p.quantity,
+            type: p.type,
+          ),
+        )
         .toList();
 
     if (_shouldSaveToDailySales()) {
@@ -425,7 +449,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
       mtCollected: mtCollected,
       mtRemaining: mtRemaining,
       partialPayment: partialPayment,
-      isReferenceOnly: true,
     );
 
     if (mounted) {
@@ -992,9 +1015,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   if (_isAnonymousCustomer) {
                     FocusScope.of(context).unfocus();
                     _customerNameController.clear();
-                    // Clear MT field and reset value when skipping customer
-                    _mtController.clear();
-                    _mt = 0;
+                    // Auto-fill MT with total RB quantity (all MT returned)
+                    if (_hasRbProducts) {
+                      final totalRb = _getTotalRbQuantity();
+                      _mtController.text = '$totalRb';
+                      _mtController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _mtController.text.length),
+                      );
+                      _mt = totalRb;
+                    }
                   }
                 });
               },
@@ -1152,13 +1181,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return InputDecoration(
       filled: true,
       fillColor: _isAnonymousCustomer ? AppColors.gray100 : AppColors.gray50,
-      labelText: _isAnonymousCustomer ? "All MT Returned" : "Collected MT",
+      labelText: _isAnonymousCustomer
+          ? "Total Empty Crates Returned"
+          : "Collected MT",
       labelStyle: AppTextStyles.inputHint.copyWith(
         fontSize: 14,
         color: _isAnonymousCustomer ? AppColors.gray500 : AppColors.gray400,
       ),
       floatingLabelStyle: AppTextStyles.inputHint.copyWith(
-        fontSize: 14,
+        fontSize: 16,
         color: AppColors.pepsiBlue,
         fontWeight: FontWeight.w500,
       ),

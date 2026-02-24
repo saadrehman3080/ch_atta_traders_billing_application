@@ -341,7 +341,13 @@ class _OrderPageState extends State<OrderPage> {
   PreferredSizeWidget _buildAppBar(int selectedCount) {
     return AppBar(
       title: _buildAppBarTitle(selectedCount),
-      actions: [_buildResetButton(), SizedBox(width: 8), _buildPrintButton()],
+      actions: [
+        if (_hasInternetConnection) ...[
+          _buildResetButton(),
+          SizedBox(width: 8),
+          _buildPrintButton(),
+        ],
+      ],
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,

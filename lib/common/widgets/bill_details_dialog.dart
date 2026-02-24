@@ -87,6 +87,15 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
       // Determine payment type: cash for paid bills, credit for unpaid
       final paymentType = _isPaid ? 'cash' : 'credit';
 
+      // Get payment history for credit bills with partial payments
+      List<PartialPayment>? paymentHistory;
+      if (widget.bill is CreditHistory) {
+        final creditBill = widget.bill as CreditHistory;
+        if (creditBill.partialPayments.isNotEmpty) {
+          paymentHistory = creditBill.partialPayments;
+        }
+      }
+
       final result = await BillPrinter.printBill(
         billId: widget.bill.billId,
         customerName: widget.bill.customerName,
@@ -96,6 +105,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
         salesmanName: salesmanName,
         paymentType: paymentType,
         isReferenceOnly: true,
+        paymentHistory: paymentHistory,
       );
 
       if (mounted) {

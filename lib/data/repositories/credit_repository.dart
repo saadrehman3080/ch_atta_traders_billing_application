@@ -49,6 +49,7 @@ class CreditRepository {
           mtRemaining: mtRemaining,
           discount: credit.discount,
           isPaid: credit.isPaid,
+          partialPaymentAmount: credit.totalPartialPaymentAmount,
           transaction: transaction,
         );
       });

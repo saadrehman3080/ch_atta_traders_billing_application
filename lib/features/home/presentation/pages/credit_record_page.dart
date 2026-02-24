@@ -426,6 +426,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       previouslyReturnedCrates: previouslyReturnedCrates > 0
           ? previouslyReturnedCrates
           : null,
+      isCashAlreadyPaid: deletedBill.isPaid,
     );
 
     if (!mounted) {
@@ -529,6 +530,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           itemsSold: itemsSold,
           discount: billToDelete.discount,
           isPaidBill: billToDelete.isPaid,
+          partialPaymentTotal: billToDelete.totalPartialPaymentAmount,
         );
 
         if (!summaryUpdated) {
@@ -1125,7 +1127,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       title: Text('Credit History', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
       actions: [
-        if (_creditProvider.credits.isNotEmpty)
+        if (_hasInternetConnection && _creditProvider.credits.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
@@ -1661,7 +1663,14 @@ class _CreditRecordPageState extends State<CreditRecordPage>
 
   Widget _buildCardContent(CreditHistory bill) {
     final totalItems = BillingCalculations.calculateTotalItems(bill.products);
-    final formattedDate = DateFormat('d-MMM').format(bill.date);
+    final now = DateTime.now();
+    final isToday =
+        bill.date.year == now.year &&
+        bill.date.month == now.month &&
+        bill.date.day == now.day;
+    final formattedDate = isToday
+        ? DateFormat('d-MMM').format(bill.date)
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1697,14 +1706,13 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     );
   }
 
-  Widget _buildDateTimeInfo(String date, String time) {
+  Widget _buildDateTimeInfo(String? date, String time) {
     return Row(
       children: [
         Icon(Icons.calendar_today_outlined, size: 12, color: AppColors.gray500),
         const SizedBox(width: 4),
         Text(
-          //'$date • $time',
-          time,
+          date != null ? '$time • $date' : time,
           style: AppTextStyles.helperText.copyWith(
             fontSize: 12,
             color: AppColors.gray500,

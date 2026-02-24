@@ -127,6 +127,11 @@ class CreditHistory implements BillBase {
     );
   }
 
+  /// Total amount received via partial payments
+  int get totalPartialPaymentAmount {
+    return partialPayments.fold(0, (sum, p) => sum + p.amount);
+  }
+
   // Helper methods
   @override
   String get formattedDate {

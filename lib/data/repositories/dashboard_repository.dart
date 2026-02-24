@@ -124,6 +124,7 @@ class DashboardRepository {
     required int itemsSold,
     required int discount,
     required bool isPaidBill,
+    int partialPaymentTotal = 0,
   }) async {
     return _dashboardService.onCreditDeleted(
       salesmanName: salesmanName,
@@ -133,6 +134,7 @@ class DashboardRepository {
       itemsSold: itemsSold,
       discount: discount,
       isPaidBill: isPaidBill,
+      partialPaymentTotal: partialPaymentTotal,
     );
   }
 

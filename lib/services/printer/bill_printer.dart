@@ -1,6 +1,7 @@
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -62,6 +63,7 @@ class BillPrinter {
     int? cratesReceived, // Crates returned with this payment
     int?
     previouslyReturnedCrates, // Crates already returned before this payment
+    bool isCashAlreadyPaid = false, // True if cash was already paid (only crates were pending)
   }) async {
     try {
       // Check if printer is connected
@@ -97,9 +99,7 @@ class BillPrinter {
 
       // Header - centered
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('PAYMENT RECEIVED\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\n'.codeUnits);
 
       // Separator
@@ -155,9 +155,7 @@ class BillPrinter {
       final netAmount = grandTotal - discount;
 
       // Bill summary section
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('BILL SUMMARY:\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
       bytes.addAll(
         'Total ${totalItems == 1 ? 'Item' : 'Items'}:     $totalItems\n'
@@ -171,20 +169,23 @@ class BillPrinter {
         bytes.addAll(
           'Discount:        - Rs.${formatCashAmount(discount)}\n'.codeUnits,
         );
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll(
           'Net Amount:      Rs.${formatCashAmount(netAmount)}\n'.codeUnits,
         );
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       }
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Only show payment section if the bill is not already fully paid (i.e., amountReceived > 0 or previouslyPaid < netAmount)
-      if ((amountReceived > 0) ||
-          (previouslyPaid != null && previouslyPaid < netAmount)) {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+      // Payment section
+      if (isCashAlreadyPaid) {
+        // Cash was already paid at time of sale - only crates were pending
         bytes.addAll('PAYMENT DETAILS:\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll(
+          'Cash Already Paid: Rs.${formatCashAmount(netAmount)}\n'.codeUnits,
+        );
+        bytes.addAll('--------------------------------\n'.codeUnits);
+      } else if ((amountReceived > 0) ||
+          (previouslyPaid != null && previouslyPaid < netAmount)) {
+        bytes.addAll('PAYMENT DETAILS:\n'.codeUnits);
 
         // Show previously paid if there was a prior payment
         if (previouslyPaid != null && previouslyPaid > 0) {
@@ -198,11 +199,9 @@ class BillPrinter {
           );
         }
 
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll(
           'Received Now:    Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
         );
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
         bytes.addAll('--------------------------------\n'.codeUnits);
       }
 
@@ -214,9 +213,7 @@ class BillPrinter {
       final bool hasCratesToShow = (cratesNow + cratesPrev) > 0;
 
       if (hasCratesToShow) {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll('EMPTY/CRATES:\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
         // Show previously returned crates if any
         if (cratesPrev > 0) {
@@ -225,27 +222,21 @@ class BillPrinter {
 
         // Show crates returned now if any
         if (cratesNow > 0) {
-          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
           bytes.addAll('Returned Now:    $cratesNow\n'.codeUnits);
-          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
         }
         bytes.addAll('\n'.codeUnits);
       }
 
-      // Full payment confirmation - centered, bold
+      // Full payment confirmation - centered
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('** BILL CLEARED **\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
       bytes.addAll('\n'.codeUnits);
 
       // Footer - center align
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
       bytes.addAll('--------------------------------\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('Payment Confirmed\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('Thank you!\n'.codeUnits);
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
       bytes.addAll('\n\n\n'.codeUnits);
@@ -314,7 +305,6 @@ class BillPrinter {
 
       // Header - centered (dynamic based on what's being received)
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
 
       // Determine header based on what's being received
       if (amountReceived > 0 && cratesReceived > 0) {
@@ -324,8 +314,6 @@ class BillPrinter {
       } else if (cratesReceived > 0) {
         bytes.addAll('CRATE RETURN RECEIPT\n'.codeUnits);
       }
-
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\n'.codeUnits);
 
       // Separator
@@ -376,9 +364,7 @@ class BillPrinter {
 
       // Amount section (if received)
       if (amountReceived > 0) {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll('AMOUNT DETAILS:\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
         bytes.addAll(
           'Bill Total:      Rs.${formatCashAmount(billTotal)}\n'.codeUnits,
@@ -395,21 +381,17 @@ class BillPrinter {
 
         final amountBalance = amountDue - amountReceived;
         if (amountBalance > 0) {
-          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
           bytes.addAll(
             'Balance:         Rs.${formatCashAmount(amountBalance)}\n'
                 .codeUnits,
           );
-          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
         }
         bytes.addAll('--------------------------------\n'.codeUnits);
       }
 
       // Crates section (if received)
       if (cratesReceived > 0) {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll('CRATES (EMPTY) DETAILS:\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
 
         bytes.addAll('Total Crates:    $totalCrates\n'.codeUnits);
         // Only show Crates Due if it differs from Total Crates (partial returns made)
@@ -420,9 +402,7 @@ class BillPrinter {
 
         final cratesBalance = cratesDue - cratesReceived;
         if (cratesBalance > 0) {
-          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
           bytes.addAll('Balance:         $cratesBalance\n'.codeUnits);
-          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
         }
         bytes.addAll('--------------------------------\n'.codeUnits);
       }
@@ -431,9 +411,7 @@ class BillPrinter {
 
       // Footer - center align
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
       bytes.addAll('Payment Recorded\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('Thank you!\n'.codeUnits);
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
       bytes.addAll('\n\n\n'.codeUnits);
@@ -467,6 +445,7 @@ class BillPrinter {
     int? mtRemaining,
     int? partialPayment,
     bool isReferenceOnly = false,
+    List<PartialPayment>? paymentHistory,
   }) async {
     try {
       // Check if printer is connected
@@ -529,20 +508,16 @@ class BillPrinter {
         bytes.addAll('Salesman: ${toTitleCase(salesmanName)}\n'.codeUnits);
       }
 
-      // Payment type indicator - bold if credit
+      // Payment type indicator
       if (paymentType == 'credit') {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll('Payment: CREDIT\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       } else {
         bytes.addAll('Payment: Cash\n'.codeUnits);
       }
       bytes.addAll('--------------------------------\n'.codeUnits);
 
-      // Items header - bold
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+      // Items header
       bytes.addAll('Item                       Total\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('--------------------------------\n'.codeUnits);
 
       // Add each product
@@ -578,12 +553,10 @@ class BillPrinter {
 
       // MT details if user entered any value (including 0)
       if (mtCollected != null && mtRemaining != null) {
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
         bytes.addAll('MT Collected: $mtCollected\n'.codeUnits);
         if (mtRemaining > 0) {
           bytes.addAll('MT Remaining: $mtRemaining\n'.codeUnits);
         }
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       }
 
       // Subtotal and discount if discount exists
@@ -595,58 +568,88 @@ class BillPrinter {
         bytes.addAll(
           'Discount: - Rs.${formatCashAmount(discount)}\n'.codeUnits,
         );
-        bytes.addAll('--------------------------------\n'.codeUnits);
       }
 
       // Partial payment section for credit bills
       if (partialPayment != null && partialPayment > 0) {
         bytes.addAll('--------------------------------\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-        bytes.addAll('PARTIAL PAYMENT:\n'.codeUnits);
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
         bytes.addAll(
-          'Paid Now:        Rs.${formatCashAmount(partialPayment)}\n'.codeUnits,
+          'Total:           Rs.${formatCashAmount(netAmount)}\n'.codeUnits,
         );
-        final remaining = (grandTotal - discount) - partialPayment;
-        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll(
+          'Now Paying:      Rs.${formatCashAmount(partialPayment)}\n'.codeUnits,
+        );
+        final remaining = netAmount - partialPayment;
         bytes.addAll(
           'Remaining:       Rs.${formatCashAmount(remaining)}\n'.codeUnits,
         );
-        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      }
-
-      // Grand total - large and bold
-      // For 5+ digit amounts, use double-height only (not double-width)
-      // to prevent overflow on 58mm printers (~16 chars at double size)
-      final formattedNet = formatCashAmount(netAmount);
-      final totalLine = 'TOTAL: Rs.$formattedNet';
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      if (totalLine.length > 16) {
-        // Double-height only (normal width) for long totals
-        bytes.addAll('\x1D\x21\x01'.codeUnits);
+        bytes.addAll('\n'.codeUnits);
       } else {
-        // Double width + double height for short totals
-        bytes.addAll('\x1D\x21\x11'.codeUnits);
+        // Grand total - large and bold (only when no partial payment)
+        // For 5+ digit amounts, use double-height only (not double-width)
+        // to prevent overflow on 58mm printers (~16 chars at double size)
+        final formattedNet = formatCashAmount(netAmount);
+        final totalLine = 'TOTAL: Rs.$formattedNet';
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        if (totalLine.length > 16) {
+          // Double-height only (normal width) for long totals
+          bytes.addAll('\x1D\x21\x01'.codeUnits);
+        } else {
+          // Double width + double height for short totals
+          bytes.addAll('\x1D\x21\x11'.codeUnits);
+        }
+        bytes.addAll('$totalLine\n'.codeUnits);
+        bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll('\n'.codeUnits);
       }
-      bytes.addAll('$totalLine\n'.codeUnits);
-      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
-      bytes.addAll('\n'.codeUnits);
 
-      // Footer - center align, bold
+      // Payment History section (for reprinted credit bills with partial payments)
+      if (paymentHistory != null && paymentHistory.isNotEmpty) {
+        bytes.addAll('--------------------------------\n'.codeUnits);
+        bytes.addAll('PAYMENT HISTORY:\n'.codeUnits);
+
+        final paymentDateFmt = DateFormat('dd MMM yyyy');
+        for (final payment in paymentHistory) {
+          final dateStr = paymentDateFmt.format(payment.date);
+          final amtStr = 'Rs.${formatCashAmount(payment.amount)}';
+          bytes.addAll(
+            'Paid $amtStr on $dateStr\n'.codeUnits,
+          );
+        }
+
+        final totalPaid = paymentHistory.fold<int>(
+          0, (sum, p) => sum + p.amount);
+        final remaining = netAmount - totalPaid;
+        if (remaining > 0) {
+          bytes.addAll(
+            'Remaining: Rs.${formatCashAmount(remaining)}\n'.codeUnits,
+          );
+        } else {
+          bytes.addAll('Fully Paid\n'.codeUnits);
+        }
+        bytes.addAll('\n'.codeUnits);
+      }
+
+      // Footer - center align
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
 
-      // Reference-only indicator for reprints / print-button bills
+      bytes.addAll('Thank you for your business!\n'.codeUnits);
+
       if (isReferenceOnly) {
+        bytes.addAll('\n'.codeUnits);
         bytes.addAll('--------------------------------\n'.codeUnits);
         bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-        bytes.addAll('** FOR REFERENCE ONLY **\n'.codeUnits);
+        // "Duplicate Bill" = 14 chars → double width + height (same as short TOTAL)
+        bytes.addAll('\x1D\x21\x11'.codeUnits);
+        bytes.addAll('Duplicate Bill\n'.codeUnits);
+        // "For Reference Only" = 18 chars → double height only (same as long TOTAL)
+        bytes.addAll('\x1D\x21\x01'.codeUnits);
+        bytes.addAll('For Reference Only\n'.codeUnits);
+        bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
         bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       }
 
-      bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
-      bytes.addAll('Thank you for your business!\n'.codeUnits);
-      bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
       bytes.addAll('\n\n\n'.codeUnits);
 

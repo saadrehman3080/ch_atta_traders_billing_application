@@ -35,6 +35,7 @@ class _DashboardPageState extends State<DashboardPage>
   bool _hasInternetConnection = true;
   bool _hasAnonymousPrintAccess = false; // From Firebase - controls visibility
   bool _isAnonymousPrintEnabled = false; // Toggle state
+  bool _isSkipCustomerNameDefault = false; // Skip customer name toggle state
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -93,10 +94,13 @@ class _DashboardPageState extends State<DashboardPage>
   Future<void> _loadAnonymousPrintSettings() async {
     final hasAccess = await AppPreferences.instance.hasAnonymousPrintAccess;
     final isEnabled = await AppPreferences.instance.isAnonymousPrintEnabled;
+    final skipCustomer =
+        await AppPreferences.instance.isSkipCustomerNameDefault;
     if (mounted) {
       setState(() {
         _hasAnonymousPrintAccess = hasAccess;
         _isAnonymousPrintEnabled = isEnabled;
+        _isSkipCustomerNameDefault = skipCustomer;
       });
     }
   }
@@ -108,6 +112,17 @@ class _DashboardPageState extends State<DashboardPage>
     if (mounted) {
       setState(() {
         _isAnonymousPrintEnabled = newValue;
+      });
+    }
+  }
+
+  /// Toggle skip customer name default on/off
+  Future<void> _toggleSkipCustomerName() async {
+    final newValue = !_isSkipCustomerNameDefault;
+    await AppPreferences.instance.setSkipCustomerNameDefault(newValue);
+    if (mounted) {
+      setState(() {
+        _isSkipCustomerNameDefault = newValue;
       });
     }
   }
@@ -1028,6 +1043,7 @@ class _DashboardPageState extends State<DashboardPage>
           const SizedBox(height: 12),
           _buildScanningPrinters(),
           _buildAnonymousPrintToggle(),
+          _buildSkipCustomerNameToggle(),
         ],
       );
     }
@@ -1040,6 +1056,7 @@ class _DashboardPageState extends State<DashboardPage>
           const SizedBox(height: 12),
           _buildPrinterError(),
           _buildAnonymousPrintToggle(),
+          _buildSkipCustomerNameToggle(),
         ],
       );
     }
@@ -1052,6 +1069,7 @@ class _DashboardPageState extends State<DashboardPage>
           const SizedBox(height: 12),
           _buildNoPrintersFound(),
           _buildAnonymousPrintToggle(),
+          _buildSkipCustomerNameToggle(),
         ],
       );
     }
@@ -1068,6 +1086,7 @@ class _DashboardPageState extends State<DashboardPage>
           ),
         ),
         _buildAnonymousPrintToggle(),
+        _buildSkipCustomerNameToggle(),
       ],
     );
   }
@@ -1155,6 +1174,105 @@ class _DashboardPageState extends State<DashboardPage>
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeInOut,
                     alignment: _isAnonymousPrintEnabled
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the skip customer name toggle
+  /// Always visible for all users
+  Widget _buildSkipCustomerNameToggle() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _toggleSkipCustomerName,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: _isSkipCustomerNameDefault
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.05)
+                  : AppColors.gray50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isSkipCustomerNameDefault
+                    ? AppColors.pepsiBlue.withValues(alpha: 0.3)
+                    : AppColors.gray300.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _isSkipCustomerNameDefault
+                      ? Icons.person_off
+                      : Icons.person_off_outlined,
+                  color: _isSkipCustomerNameDefault
+                      ? AppColors.pepsiBlue
+                      : AppColors.gray400,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Skip Customer Name',
+                        style: AppTextStyles.productItemName.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _isSkipCustomerNameDefault
+                              ? AppColors.pepsiBlue
+                              : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isSkipCustomerNameDefault
+                            ? 'Customer name is skipped by default on new orders'
+                            : 'Enable to auto-skip customer name on checkout',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 11,
+                          color: _isSkipCustomerNameDefault
+                              ? AppColors.pepsiBlue
+                              : AppColors.gray500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 40,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(11),
+                    color: _isSkipCustomerNameDefault
+                        ? AppColors.pepsiBlue
+                        : AppColors.gray300,
+                  ),
+                  child: AnimatedAlign(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    alignment: _isSkipCustomerNameDefault
                         ? Alignment.centerRight
                         : Alignment.centerLeft,
                     child: Container(

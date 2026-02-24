@@ -150,7 +150,7 @@ class _DailySalePageState extends State<DailySalePage>
       title: Text('Daily Sales', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
       actions: [
-        if (_salesProvider.sales.isNotEmpty)
+        if (_hasInternetConnection && _salesProvider.sales.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(

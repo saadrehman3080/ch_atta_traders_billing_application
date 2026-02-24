@@ -142,7 +142,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
       title: Text('My Progress', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
       actions: [
-        if (_progressProvider.progressList.isNotEmpty)
+        if (_hasInternetConnection && _progressProvider.progressList.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(

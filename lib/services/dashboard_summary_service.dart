@@ -144,7 +144,8 @@ class DashboardSummaryService {
   // ========== CREDIT OPERATIONS ==========
 
   /// Updates dashboard when a new credit is created.
-  /// Increments: totalCredit (if not paid), totalCollection (if paid in cash), totalItemsSold, totalMtRemaining, totalDiscount, customersServed
+  /// Increments: totalCredit (if not paid), totalCollection (if paid in cash or partial payment received),
+  /// totalItemsSold, totalMtRemaining, totalDiscount, customersServed
   Future<void> onCreditCreated({
     required String salesmanName,
     required DateTime date,
@@ -153,11 +154,12 @@ class DashboardSummaryService {
     required int mtRemaining,
     required int discount,
     required bool isPaid,
+    int partialPaymentAmount = 0,
     Transaction? transaction,
   }) async {
     debugPrint('DashboardSummaryService: onCreditCreated');
     debugPrint(
-      'Credit: $creditAmount, Items: $itemsSold, MT: $mtRemaining, Discount: $discount, IsPaid: $isPaid',
+      'Credit: $creditAmount, Items: $itemsSold, MT: $mtRemaining, Discount: $discount, IsPaid: $isPaid, PartialPayment: $partialPaymentAmount',
     );
 
     final summaryRef = _getSummaryRef(salesmanName, date);
@@ -170,12 +172,16 @@ class DashboardSummaryService {
       'lastUpdated': FieldValue.serverTimestamp(),
     };
 
-    // If paid (cash payment with MT tracking), add to totalCollection
-    // If not paid (credit payment), add to totalCredit
+    // If paid (cash payment with MT tracking), add full amount to totalCollection
+    // If not paid (credit payment), add remaining to totalCredit
+    //   and add any partial payment received to totalCollection
     if (isPaid) {
       updates['totalCollection'] = FieldValue.increment(creditAmount);
     } else {
       updates['totalCredit'] = FieldValue.increment(creditAmount);
+      if (partialPaymentAmount > 0) {
+        updates['totalCollection'] = FieldValue.increment(partialPaymentAmount);
+      }
     }
 
     if (transaction != null) {
@@ -197,6 +203,7 @@ class DashboardSummaryService {
     required int itemsSold,
     required int discount,
     required bool isPaidBill,
+    int partialPaymentTotal = 0,
   }) async {
     if (!_isToday(date)) {
       debugPrint(
@@ -208,7 +215,7 @@ class DashboardSummaryService {
     try {
       debugPrint('DashboardSummaryService: onCreditDeleted');
       debugPrint(
-        'Amount: $amountDue, Crates: $cratesDue, Items: $itemsSold, Discount: $discount, WasPaid: $isPaidBill',
+        'Amount: $amountDue, Crates: $cratesDue, Items: $itemsSold, Discount: $discount, WasPaid: $isPaidBill, PartialPaymentTotal: $partialPaymentTotal',
       );
 
       final summaryRef = _getSummaryRef(salesmanName, date);
@@ -235,6 +242,22 @@ class DashboardSummaryService {
             0,
             currentCredit,
           );
+        }
+
+        // Reverse totalCollection:
+        // - For paid bills (cash+MT): full amountDue was in collection
+        // - For unpaid bills (credit): partial payments were in collection
+        int collectionToReverse = 0;
+        if (isPaidBill) {
+          collectionToReverse = amountDue;
+        } else if (partialPaymentTotal > 0) {
+          collectionToReverse = partialPaymentTotal;
+        }
+        if (collectionToReverse > 0) {
+          final currentCollection =
+              (data['totalCollection'] as num?)?.toInt() ?? 0;
+          updates['totalCollection'] = (currentCollection - collectionToReverse)
+              .clamp(0, currentCollection);
         }
 
         // Decrement MT remaining if there were crates due (clamped to 0)
