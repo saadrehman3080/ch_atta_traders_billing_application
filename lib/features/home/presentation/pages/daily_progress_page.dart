@@ -172,7 +172,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        '${_progressProvider.progressList.length}',
+                        '${_progressProvider.totalRecordCount}',
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 12,
@@ -182,9 +182,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                     ),
                     const SizedBox(width: 7),
                     Text(
-                      _progressProvider.progressList.length == 1
-                          ? 'Day'
-                          : 'Days',
+                      _progressProvider.totalRecordCount == 1 ? 'Day' : 'Days',
                       style: GoogleFonts.poppins(
                         color: AppColors.pepsiBlue,
                         fontSize: 12,
@@ -239,8 +237,59 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
               ),
             ),
 
+            // Record count indicator
+            if (provider.totalRecordCount > list.length)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 8),
+                child: Text(
+                  'Showing ${list.length} of ${provider.allRecentRecords.length} recent'
+                  ' (${provider.totalRecordCount} total)',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: AppColors.gray500,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+
             // List of daily records
             ...list.map((record) => _buildDayCard(record)),
+
+            // Load More button
+            if (provider.hasMoreRecords)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 16),
+                child: Center(
+                  child: TextButton.icon(
+                    onPressed: () => provider.loadMore(),
+                    icon: const Icon(
+                      Icons.expand_more_rounded,
+                      size: 20,
+                      color: AppColors.pepsiBlue,
+                    ),
+                    label: Text(
+                      'Load More (${provider.allRecentRecords.length - list.length} remaining)',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.pepsiBlue,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: AppColors.pepsiBlue.withValues(alpha: 0.2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -316,7 +365,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${provider.progressList.length} records',
+                    '${provider.totalRecordCount} records',
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,

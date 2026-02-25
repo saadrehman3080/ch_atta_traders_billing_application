@@ -58,6 +58,9 @@ class AppPreferences {
   /// Key for storing whether skip customer name is enabled by default
   static const String _keySkipCustomerName = 'skip_customer_name_default';
 
+  /// Key for storing the selected shop route filter
+  static const String _keySelectedShopRoute = 'selected_shop_route';
+
   // ========== Initialization ==========
 
   /// Initializes the SharedPreferences instance.
@@ -413,6 +416,41 @@ class AppPreferences {
       return result;
     } catch (e) {
       debugPrint('Error storing skip customer name default: $e');
+      return false;
+    }
+  }
+
+  // ========== Shop Route Selection ==========
+
+  /// Gets the selected shop route from shared preferences.
+  ///
+  /// Returns the route title (e.g., "KALLAR SYEDAN-1") or null if not set.
+  /// Defaults to "KALLAR SYEDAN-1" if not set.
+  Future<String> get selectedShopRoute async {
+    _ensureInitialized();
+    try {
+      return _prefs!.getString(_keySelectedShopRoute) ?? 'KALLAR SYEDAN-1';
+    } catch (e) {
+      debugPrint('Error reading selected shop route: $e');
+      return 'KALLAR SYEDAN-1';
+    }
+  }
+
+  /// Stores the selected shop route.
+  ///
+  /// [route] - The route title (e.g., "KALLAR SYEDAN-1").
+  ///
+  /// Returns `true` if the operation was successful, `false` otherwise.
+  Future<bool> setSelectedShopRoute(String route) async {
+    _ensureInitialized();
+    try {
+      final result = await _prefs!.setString(_keySelectedShopRoute, route);
+      if (result) {
+        debugPrint('Selected shop route stored: $route');
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error storing selected shop route: $e');
       return false;
     }
   }

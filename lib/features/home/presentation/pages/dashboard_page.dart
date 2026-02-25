@@ -5,6 +5,7 @@ import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackb
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
+import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/cleared_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
@@ -603,196 +604,274 @@ class _DashboardPageState extends State<DashboardPage>
         final previousDayMt = data.previousDayMt ?? 0;
         final totalCash = data.totalCollection + previousDayCash;
 
-        return Container(
-          margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppColors.pepsiBlue.withValues(alpha: 0.15),
+        return GestureDetector(
+          onTap: () => _navigateToClearedBills(),
+          child: Container(
+            margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.pepsiBlue.withValues(alpha: 0.15),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.pepsiBlue.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.pepsiBlue.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.history,
-                      color: AppColors.pepsiBlue,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Previous Day Collection',
-                    style: AppTextStyles.productItemName.copyWith(
-                      color: AppColors.pepsiBlue,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Cash Collection Section (only show if previousDayCash > 0)
-              if (previousDayCash > 0) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppColors.pepsiBlue.withValues(alpha: 0.2),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.pepsiBlue.withValues(alpha: 0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header Row with title and arrow
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.pepsiBlue.withValues(alpha: 0.15),
+                            AppColors.pepsiBlue.withValues(alpha: 0.08),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      // Previous Day Cash
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Icon(
+                        Icons.history_rounded,
+                        color: AppColors.pepsiBlue,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Previous Day Cash',
-                            style: AppTextStyles.helperText.copyWith(
-                              color: AppColors.gray500,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            'Rs. ${formatCashAmount(previousDayCash)}',
+                            'Previous Day Collection',
                             style: AppTextStyles.productItemName.copyWith(
                               color: AppColors.pepsiBlue,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // Today's Collection
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            "Today's Collection",
-                            style: AppTextStyles.helperText.copyWith(
-                              color: AppColors.gray500,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            'Rs. ${formatCashAmount(data.totalCollection)}',
-                            style: AppTextStyles.productItemName.copyWith(
-                              color: Colors.black87,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Divider(height: 1, color: AppColors.gray300),
-                      ),
-                      // Total
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total Cash',
-                            style: AppTextStyles.productItemName.copyWith(
-                              color: Colors.black87,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            'Rs. ${formatCashAmount(totalCash)}',
-                            style: AppTextStyles.billingTotal.copyWith(
-                              color: AppColors.pepsiBlue,
-                              fontSize: 20,
+                              fontSize: 16,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // MT Collection Section (only show if previousDayMt > 0)
-              if (previousDayMt > 0) ...[
-                if (previousDayCash > 0) const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade200, width: 1),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.recycling_outlined,
-                            color: Colors.orange.shade700,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
+                          const SizedBox(height: 2),
                           Text(
-                            'Previous Day MT Collected',
+                            'Cash & crates received today from older bills',
                             style: AppTextStyles.helperText.copyWith(
-                              color: Colors.orange.shade800,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                              color: AppColors.gray500,
+                              fontSize: 11,
                             ),
                           ),
                         ],
                       ),
-                      Text(
-                        '$previousDayMt',
-                        style: AppTextStyles.productItemName.copyWith(
-                          color: Colors.orange.shade800,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Cash Collection Section (only show if previousDayCash > 0)
+                if (previousDayCash > 0) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.pepsiBlue.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.pepsiBlue.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
                         ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // Previous Day Cash
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Previous Day Cash',
+                              style: AppTextStyles.helperText.copyWith(
+                                color: AppColors.gray500,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              'Rs. ${formatCashAmount(previousDayCash)}',
+                              style: AppTextStyles.productItemName.copyWith(
+                                color: AppColors.pepsiBlue,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Today's Collection
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Today's Collection",
+                              style: AppTextStyles.helperText.copyWith(
+                                color: AppColors.gray500,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              'Rs. ${formatCashAmount(data.totalCollection)}',
+                              style: AppTextStyles.productItemName.copyWith(
+                                color: Colors.black87,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Divider(height: 1, color: AppColors.gray300),
+                        ),
+                        // Total
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Total Cash',
+                              style: AppTextStyles.productItemName.copyWith(
+                                color: Colors.black87,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              'Rs. ${formatCashAmount(totalCash)}',
+                              style: AppTextStyles.billingTotal.copyWith(
+                                color: AppColors.pepsiBlue,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // MT Collection Section (only show if previousDayMt > 0)
+                if (previousDayMt > 0) ...[
+                  if (previousDayCash > 0) const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.orange.shade200,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.recycling_outlined,
+                              color: Colors.orange.shade700,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Previous Day MT Collected',
+                              style: AppTextStyles.helperText.copyWith(
+                                color: Colors.orange.shade800,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '$previousDayMt',
+                          style: AppTextStyles.productItemName.copyWith(
+                            color: Colors.orange.shade800,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Tap to view hint
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.pepsiBlue.withValues(alpha: 0.08),
+                        AppColors.pepsiBlue.withValues(alpha: 0.03),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.pepsiBlue.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.receipt_long_outlined,
+                        color: AppColors.pepsiBlue.withValues(alpha: 0.7),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'View Collection Details',
+                        style: AppTextStyles.helperText.copyWith(
+                          color: AppColors.pepsiBlue.withValues(alpha: 0.8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: AppColors.pepsiBlue.withValues(alpha: 0.5),
+                        size: 12,
                       ),
                     ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         );
       },
@@ -1487,6 +1566,13 @@ class _DashboardPageState extends State<DashboardPage>
 
   void _handleNewBill() {
     widget.onNavigateToOrder?.call();
+  }
+
+  /// Navigate to the Cleared Bills page showing previous day bills cleared today
+  void _navigateToClearedBills() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const ClearedBillsPage()));
   }
 
   Future<void> _handleConnectToPrinter(BluetoothInfo printer) async {

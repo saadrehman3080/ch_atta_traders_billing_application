@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.ch_atta_traders_billing_application"
+    namespace = "com.chaudharyatta.traders"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -24,7 +24,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.ch_atta_traders_billing_application"
+        applicationId = "com.chaudharyatta.traders"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion  // Required for Firebase

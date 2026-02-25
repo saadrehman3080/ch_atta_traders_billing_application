@@ -1,6 +1,7 @@
 import 'package:ch_atta_traders_billing_application/app/router.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/app_theme.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/data/database/shop_database_helper.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -21,6 +22,11 @@ void main() async {
 
   // Initialize App Preferences
   await AppPreferences.init();
+
+  // Initialize and seed shop database (non-blocking — errors are handled in-app)
+  ShopDatabaseHelper.instance.seedFromCsv().catchError((e) {
+    debugPrint('Shop seeding failed: $e');
+  });
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

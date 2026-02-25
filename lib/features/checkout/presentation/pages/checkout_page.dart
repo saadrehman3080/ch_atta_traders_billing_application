@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
+import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/shop_selection_page.dart';
 
 class CheckoutPage extends StatefulWidget {
   final List<Product> products;
@@ -517,11 +518,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
           final errorMsg = _shouldSaveToDailySales()
               ? (_saleProvider.errorMessage ?? 'Failed to save bill')
               : (_creditProvider.errorMessage ?? 'Failed to save credit');
-          CustomSnackBar.show(
-            context,
-            message: errorMsg,
-            type: SnackBarType.error,
-          );
+          // Dismiss checkout page first so snackbar is visible
+          widget.onDismiss();
+          // Show error after a short delay so the parent context is active
+          Future.microtask(() {
+            if (mounted) {
+              CustomSnackBar.show(
+                context,
+                message: errorMsg,
+                type: SnackBarType.error,
+              );
+            }
+          });
         }
       }
     } finally {
@@ -587,11 +595,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
           final errorMsg = _shouldSaveToDailySales()
               ? (_saleProvider.errorMessage ?? 'Failed to save bill')
               : (_creditProvider.errorMessage ?? 'Failed to save credit');
-          CustomSnackBar.show(
-            context,
-            message: errorMsg,
-            type: SnackBarType.error,
-          );
+          // Dismiss checkout page first so snackbar is visible
+          widget.onDismiss();
+          // Show error after a short delay so the parent context is active
+          Future.microtask(() {
+            if (mounted) {
+              CustomSnackBar.show(
+                context,
+                message: errorMsg,
+                type: SnackBarType.error,
+              );
+            }
+          });
         }
         return;
       }
@@ -961,6 +976,39 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  /// Opens the shop selection page and fills in customer name on selection.
+  Future<void> _openShopSelection() async {
+    final selectedShop = await Navigator.of(context).push<dynamic>(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const ShopSelectionPage(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+          final tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 350),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+
+    if (selectedShop != null && mounted) {
+      setState(() {
+        _customerNameController.text = selectedShop.outletName;
+        _isAnonymousCustomer = false;
+        _hasCustomerName = true;
+      });
+    }
+  }
+
   Widget _buildCustomerNameField() {
     return Row(
       children: [
@@ -992,8 +1040,40 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
         ),
         const SizedBox(width: 8),
+        _buildShopSelectionButton(),
+        const SizedBox(width: 8),
         _buildAnonymousToggle(),
       ],
+    );
+  }
+
+  Widget _buildShopSelectionButton() {
+    return Tooltip(
+      message: 'Select from shops',
+      child: InkWell(
+        onTap: _isAnonymousCustomer ? null : _openShopSelection,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: _isAnonymousCustomer ? AppColors.gray100 : AppColors.gray50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _isAnonymousCustomer
+                  ? AppColors.gray300.withValues(alpha: 0.5)
+                  : AppColors.pepsiBlue.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Icon(
+            Icons.store_outlined,
+            size: 22,
+            color: _isAnonymousCustomer
+                ? AppColors.gray400
+                : AppColors.pepsiBlue,
+          ),
+        ),
+      ),
     );
   }
 

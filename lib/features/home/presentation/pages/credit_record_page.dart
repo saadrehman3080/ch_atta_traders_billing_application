@@ -12,6 +12,8 @@ import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.d
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/cleared_bill.dart';
+import 'package:ch_atta_traders_billing_application/data/repositories/cleared_bill_repository.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
@@ -285,6 +287,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         cashReceived: deletedBill.isPaid ? null : deletedBill.amountDue,
         cratesReceived: deletedBill.cratesDue,
       );
+
+      // Save cleared bill record for previous day collection details
+      await _saveClearedBillRecord(
+        credit: deletedBill,
+        salesmanName: salesmanIdentifier,
+      );
     }
 
     // Animate removal then delete from credit history
@@ -397,6 +405,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         cashReceived: deletedBill.isPaid ? null : deletedBill.amountDue,
         cratesReceived: deletedBill.cratesDue,
       );
+
+      // Save cleared bill record for previous day collection details
+      await _saveClearedBillRecord(
+        credit: deletedBill,
+        salesmanName: salesmanIdentifier,
+      );
     }
 
     // Animate removal then delete from credit history
@@ -456,6 +470,67 @@ class _CreditRecordPageState extends State<CreditRecordPage>
 
   bool _isValidIndex(int index, List<CreditHistory> billHistory) {
     return index >= 0 && index < billHistory.length;
+  }
+
+  /// Saves a cleared bill record when a previous-day credit bill is fully cleared today.
+  /// This allows viewing cleared bill details from the Previous Day Collection card.
+  Future<void> _saveClearedBillRecord({
+    required CreditHistory credit,
+    required String salesmanName,
+  }) async {
+    try {
+      final clearedBill = ClearedBill.fromCreditHistory(
+        credit: credit,
+        amountPaidToday: credit.isPaid ? 0 : credit.amountDue,
+        cratesReturnedToday: credit.cratesDue,
+      );
+
+      final clearedBillRepo = ClearedBillRepository();
+
+      // Remove any partial payment entries for this bill first
+      await clearedBillRepo.deletePartialEntries(
+        salesmanName: salesmanName,
+        billId: credit.billId,
+      );
+
+      await clearedBillRepo.saveClearedBill(
+        salesmanName: salesmanName,
+        clearedBill: clearedBill,
+      );
+    } catch (e) {
+      debugPrint('Error saving cleared bill record: $e');
+      // Non-critical: don't fail the main operation if this fails
+    }
+  }
+
+  /// Saves a partial payment record for a previous-day bill.
+  /// This shows in the Previous Day Collection list with partial payment indication.
+  Future<void> _savePartialPaymentRecord({
+    required CreditHistory credit,
+    required String salesmanName,
+    required int? amountReceived,
+    required int? cratesReceived,
+    required int? newAmountDue,
+    required int? newCratesDue,
+  }) async {
+    try {
+      final clearedBill = ClearedBill.fromPartialPayment(
+        credit: credit,
+        amountReceived: amountReceived ?? 0,
+        cratesReceived: cratesReceived ?? 0,
+        remainingAmount: newAmountDue ?? 0,
+        remainingCrates: newCratesDue ?? 0,
+      );
+
+      final clearedBillRepo = ClearedBillRepository();
+      await clearedBillRepo.saveClearedBill(
+        salesmanName: salesmanName,
+        clearedBill: clearedBill,
+      );
+    } catch (e) {
+      debugPrint('Error saving partial payment record: $e');
+      // Non-critical: don't fail the main operation if this fails
+    }
   }
 
   Future<void> _deleteBillPermanently(
@@ -756,6 +831,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           cashReceived: bill.isPaid ? null : bill.amountDue,
           cratesReceived: bill.cratesDue,
         );
+
+        // Save cleared bill record for previous day collection details
+        await _saveClearedBillRecord(
+          credit: bill,
+          salesmanName: salesmanIdentifier,
+        );
       }
 
       // Animate removal then delete from credit history
@@ -812,6 +893,16 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           salesmanName: salesmanIdentifier,
           cashReceived: bill.isPaid ? null : amountReceived,
           cratesReceived: cratesReceived,
+        );
+
+        // Save partial payment record for previous day collection details
+        await _savePartialPaymentRecord(
+          credit: bill,
+          salesmanName: salesmanIdentifier,
+          amountReceived: amountReceived,
+          cratesReceived: cratesReceived,
+          newAmountDue: newAmountDue,
+          newCratesDue: newCratesDue,
         );
       }
 
@@ -949,6 +1040,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           cashReceived: bill.isPaid ? null : bill.amountDue,
           cratesReceived: bill.cratesDue,
         );
+
+        // Save cleared bill record for previous day collection details
+        await _saveClearedBillRecord(
+          credit: bill,
+          salesmanName: salesmanIdentifier,
+        );
       }
 
       // Animate removal then delete from credit history
@@ -1042,6 +1139,16 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           salesmanName: salesmanIdentifier,
           cashReceived: bill.isPaid ? null : amountReceived,
           cratesReceived: cratesReceived,
+        );
+
+        // Save partial payment record for previous day collection details
+        await _savePartialPaymentRecord(
+          credit: bill,
+          salesmanName: salesmanIdentifier,
+          amountReceived: amountReceived,
+          cratesReceived: cratesReceived,
+          newAmountDue: newAmountDue,
+          newCratesDue: newCratesDue,
         );
       }
 
@@ -1670,7 +1777,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         bill.date.day == now.day;
     final formattedDate = isToday
         ? DateFormat('d-MMM').format(bill.date)
-        : null;
+        : DateFormat('d-MMM-yy').format(bill.date);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1706,13 +1813,13 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     );
   }
 
-  Widget _buildDateTimeInfo(String? date, String time) {
+  Widget _buildDateTimeInfo(String date, String time) {
     return Row(
       children: [
         Icon(Icons.calendar_today_outlined, size: 12, color: AppColors.gray500),
         const SizedBox(width: 4),
         Text(
-          date != null ? '$time • $date' : time,
+          '$time • $date',
           style: AppTextStyles.helperText.copyWith(
             fontSize: 12,
             color: AppColors.gray500,
