@@ -97,7 +97,7 @@ class ShopDatabaseHelper {
 
     try {
       final csvString = await rootBundle.loadString(
-        'CHAUDHARY_ATTA_TRADERS_Shops.csv',
+        'assets/files/CHAUDHARY_ATTA_TRADERS_Shops.csv',
       );
       final lines = csvString.split('\n');
 

@@ -16,6 +16,8 @@ import 'package:ch_atta_traders_billing_application/data/models/cleared_bill.dar
 import 'package:ch_atta_traders_billing_application/data/repositories/cleared_bill_repository.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
+import 'package:ch_atta_traders_billing_application/data/repositories/customer_bulk_payment_repository.dart';
+import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/customer_bulk_payment_page.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
@@ -51,6 +53,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
   late bool _isPrinterConnected;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   final PrinterService _printerService = PrinterService();
+  final CustomerBulkPaymentRepository _bulkPaymentRepo =
+      CustomerBulkPaymentRepository();
+
+  /// Normalised customer keys (lowercase + underscores) that have an active
+  /// bulk payment record.  Bills for these customers cannot be deleted.
+  Set<String> _customersWithBulkPayments = {};
 
   @override
   void initState() {
@@ -164,16 +172,32 @@ class _CreditRecordPageState extends State<CreditRecordPage>
   Future<void> _loadCredits() async {
     final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
     if (salesmanIdentifier != null && salesmanIdentifier.isNotEmpty) {
-      await _creditProvider.loadAllCreditHistory(salesmanIdentifier);
+      await Future.wait([
+        _creditProvider.loadAllCreditHistory(salesmanIdentifier),
+        _loadCustomersWithBulkPayments(salesmanIdentifier),
+      ]);
     }
   }
 
   Future<void> _refreshCredits() async {
     final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
     if (salesmanIdentifier != null && salesmanIdentifier.isNotEmpty) {
-      await _creditProvider.refreshCreditHistory(salesmanIdentifier);
+      await Future.wait([
+        _creditProvider.refreshCreditHistory(salesmanIdentifier),
+        _loadCustomersWithBulkPayments(salesmanIdentifier),
+      ]);
     }
   }
+
+  Future<void> _loadCustomersWithBulkPayments(String salesmanName) async {
+    final keys = await _bulkPaymentRepo.getCustomersWithBulkPayments(
+      salesmanName,
+    );
+    if (mounted) setState(() => _customersWithBulkPayments = keys);
+  }
+
+  String _normalizeCustomerKey(String name) =>
+      name.toLowerCase().trim().replaceAll(RegExp(r'\s+'), '_');
 
   @override
   Widget build(BuildContext context) {
@@ -717,6 +741,51 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     );
   }
 
+  /// Handles the edit button tap.
+  /// When more than one bill exists for the same customer, navigates to the
+  /// bulk payment page instead of showing the single-bill edit dialog.
+  Future<void> _onEditTapped(int index, List<CreditHistory> billHistory) async {
+    final bill = billHistory[index];
+    final customerNorm = bill.customerName.toLowerCase().trim();
+
+    // Collect all bills belonging to this customer
+    final sameBills = billHistory
+        .where((b) => b.customerName.toLowerCase().trim() == customerNorm)
+        .toList();
+
+    if (sameBills.length >= 2) {
+      final salesmanIdentifier =
+          await AppPreferences.instance.salesmanIdentifier;
+      if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+        if (mounted) {
+          _showErrorSnackBar(
+            'Salesman identifier not found. Please log in again.',
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => CustomerBulkPaymentPage(
+            bills: sameBills,
+            salesmanName: salesmanIdentifier,
+            creditProvider: _creditProvider,
+          ),
+        ),
+      );
+
+      // Refresh list – the provider's local cache was already updated by the
+      // bulk payment page, but a soft reload ensures consistency.
+      if (mounted) _loadCredits();
+      return;
+    }
+
+    // Single bill for this customer – use the existing edit dialog.
+    _showEditDialog(index, billHistory);
+  }
+
   Future<void> _updateBillRecord(
     int index,
     int? amountReceived,
@@ -1237,7 +1306,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,
-      title: Text('Credit History', style: AppTextStyles.pageTitleBlack),
+      title: Text('Credit Records', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
       actions: [
         if (_hasInternetConnection && _creditProvider.credits.isNotEmpty)
@@ -1567,7 +1636,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
 
   Widget _buildBillList(List<CreditHistory> billHistory) {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.of(context).padding.bottom,
+      ),
       itemCount: billHistory.length,
       itemBuilder: (context, index) {
         final bill = billHistory[index];
@@ -1695,10 +1769,15 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         isDeletingLoading ||
         isPrintingLoading;
 
+    final bill = billHistory[index];
+    final hasBulkPayment = _customersWithBulkPayments.contains(
+      _normalizeCustomerKey(bill.customerName),
+    );
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: isAnyLoading || !_isPrinterConnected
+        onTap: isAnyLoading || !_isPrinterConnected || hasBulkPayment
             ? null
             : () => _showFullPaymentConfirmation(index, billHistory),
         borderRadius: BorderRadius.circular(10),
@@ -1708,7 +1787,9 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: Colors.green.withValues(
-              alpha: (isAnyLoading || !_isPrinterConnected) ? 0.05 : 0.1,
+              alpha: (isAnyLoading || !_isPrinterConnected || hasBulkPayment)
+                  ? 0.05
+                  : 0.1,
             ),
             borderRadius: BorderRadius.circular(10),
           ),
@@ -1733,7 +1814,10 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                         style: AppTextStyles.helperText.copyWith(
                           fontSize: 14,
                           color: Colors.green.withValues(
-                            alpha: (isAnyLoading || !_isPrinterConnected)
+                            alpha:
+                                (isAnyLoading ||
+                                    !_isPrinterConnected ||
+                                    hasBulkPayment)
                                 ? 0.4
                                 : 1.0,
                           ),
@@ -1745,9 +1829,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.receipt_long,
+                        hasBulkPayment ? Icons.block : Icons.receipt_long,
                         color: Colors.green.withValues(
-                          alpha: (isAnyLoading || !_isPrinterConnected)
+                          alpha:
+                              (isAnyLoading ||
+                                  !_isPrinterConnected ||
+                                  hasBulkPayment)
                               ? 0.4
                               : 1.0,
                         ),
@@ -1759,7 +1846,10 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                         style: AppTextStyles.helperText.copyWith(
                           fontSize: 14,
                           color: Colors.green.withValues(
-                            alpha: (isAnyLoading || !_isPrinterConnected)
+                            alpha:
+                                (isAnyLoading ||
+                                    !_isPrinterConnected ||
+                                    hasBulkPayment)
                                 ? 0.4
                                 : 1.0,
                           ),
@@ -1959,7 +2049,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
               child: InkWell(
                 onTap: isAnyLoading
                     ? null
-                    : () => _showEditDialog(index, billHistory),
+                    : () => _onEditTapped(index, billHistory),
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
                   padding: const EdgeInsets.all(10),
@@ -1997,7 +2087,10 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                 onTap:
                     isDeletingLoading ||
                         bill.isRecordUpdated ||
-                        bill.partialPayments.isNotEmpty
+                        bill.partialPayments.isNotEmpty ||
+                        _customersWithBulkPayments.contains(
+                          _normalizeCustomerKey(bill.customerName),
+                        )
                     ? null
                     : () {
                         if (_isAnyOperationInProgress) {
@@ -2033,13 +2126,19 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                         )
                       : Icon(
                           (bill.isRecordUpdated ||
-                                  bill.partialPayments.isNotEmpty)
+                                  bill.partialPayments.isNotEmpty ||
+                                  _customersWithBulkPayments.contains(
+                                    _normalizeCustomerKey(bill.customerName),
+                                  ))
                               ? Icons.block
                               : Icons.delete_outline,
                           color: AppColors.pepsiRedLight.withValues(
                             alpha:
                                 (bill.isRecordUpdated ||
                                     bill.partialPayments.isNotEmpty ||
+                                    _customersWithBulkPayments.contains(
+                                      _normalizeCustomerKey(bill.customerName),
+                                    ) ||
                                     isDeletingLoading)
                                 ? 0.4
                                 : 1.0,
@@ -2057,7 +2156,11 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: isAnyLoading
+              onTap:
+                  isAnyLoading ||
+                      _customersWithBulkPayments.contains(
+                        _normalizeCustomerKey(bill.customerName),
+                      )
                   ? null
                   : () => _showCompleteConfirmation(index, billHistory),
               borderRadius: BorderRadius.circular(10),
@@ -2066,7 +2169,13 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.green.withValues(
-                    alpha: isAnyLoading ? 0.05 : 0.1,
+                    alpha:
+                        (isAnyLoading ||
+                            _customersWithBulkPayments.contains(
+                              _normalizeCustomerKey(bill.customerName),
+                            ))
+                        ? 0.05
+                        : 0.1,
                   ),
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -2083,9 +2192,19 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                           ),
                         )
                       : Icon(
-                          Icons.check_circle,
+                          _customersWithBulkPayments.contains(
+                                _normalizeCustomerKey(bill.customerName),
+                              )
+                              ? Icons.block
+                              : Icons.check_circle,
                           color: Colors.green.withValues(
-                            alpha: isAnyLoading ? 0.4 : 1.0,
+                            alpha:
+                                (isAnyLoading ||
+                                    _customersWithBulkPayments.contains(
+                                      _normalizeCustomerKey(bill.customerName),
+                                    ))
+                                ? 0.4
+                                : 1.0,
                           ),
                           size: 22,
                         ),

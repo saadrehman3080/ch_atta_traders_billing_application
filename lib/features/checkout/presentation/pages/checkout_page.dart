@@ -133,26 +133,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
         ChangeNotifierProvider.value(value: _saleProvider),
         ChangeNotifierProvider.value(value: _creditProvider),
       ],
-      child: SafeArea(
-        top: false,
-        child: Container(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            12,
-            16,
-            16 + MediaQuery.of(context).padding.bottom,
-          ),
-          decoration: _buildContainerDecoration(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDragHandle(),
-              _buildSummaryInfo(),
-              const SizedBox(height: 12),
-              _buildScrollableContent(),
-            ],
-          ),
+      child: Container(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          16 + MediaQuery.of(context).padding.bottom,
+        ),
+        decoration: _buildContainerDecoration(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDragHandle(),
+            _buildSummaryInfo(),
+            const SizedBox(height: 12),
+            _buildScrollableContent(),
+          ],
         ),
       ),
     );

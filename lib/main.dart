@@ -23,10 +23,12 @@ void main() async {
   // Initialize App Preferences
   await AppPreferences.init();
 
-  // Initialize and seed shop database (non-blocking — errors are handled in-app)
-  ShopDatabaseHelper.instance.seedFromCsv().catchError((e) {
+  // Initialize and seed shop database
+  try {
+    await ShopDatabaseHelper.instance.seedFromCsv();
+  } catch (e) {
     debugPrint('Shop seeding failed: $e');
-  });
+  }
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

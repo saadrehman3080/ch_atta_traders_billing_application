@@ -27,7 +27,7 @@ class DailyProgressDetailDialog extends StatelessWidget {
             _buildEmptyCratesSection(),
             _buildCashReceivedSection(),
             _buildFinalResultSection(),
-            const SizedBox(height: 32),
+            SizedBox(height: 32 + MediaQuery.of(context).padding.bottom),
           ],
         ),
       ),

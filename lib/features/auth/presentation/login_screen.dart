@@ -781,7 +781,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Text('Authorized Personnel Only', style: AppTextStyles.footerText),
         const SizedBox(height: 5),
         Text('Powered by Atta Tech', style: AppTextStyles.footerText),
-        const SizedBox(height: 10),
+        SizedBox(height: 10 + MediaQuery.of(context).padding.bottom),
       ],
     );
   }
