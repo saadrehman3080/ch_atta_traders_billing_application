@@ -23,9 +23,9 @@ class DailyProgressDetailDialog extends StatelessWidget {
           children: [
             _buildHeaderCard(),
             _buildProductsSection(),
-            _buildCashReceivedSection(),
             _buildExpensesSection(),
             _buildEmptyCratesSection(),
+            _buildCashReceivedSection(),
             _buildFinalResultSection(),
             const SizedBox(height: 32),
           ],
@@ -455,7 +455,7 @@ class DailyProgressDetailDialog extends StatelessWidget {
     final crates = record.emptyCrates;
     return _buildSection(
       title: 'Empty Crates (MT)',
-      icon: Icons.all_inbox_outlined,
+      icon: Icons.wine_bar_outlined,
       child: Column(
         children: [
           _buildDetailRow('Issued', '${crates.issued}'),

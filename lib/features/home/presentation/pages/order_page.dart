@@ -13,7 +13,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
+import 'package:flutter/scheduler.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/core/notifiers/nav_visibility_notifier.dart';
 
 class OrderPage extends StatefulWidget {
   const OrderPage({super.key});
@@ -30,11 +32,13 @@ class _OrderPageState extends State<OrderPage> {
   bool _hasInternetConnection = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   final Map<String, int> _originalPrices = {};
+  double _lastScrollOffset = 0;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_filterProducts);
+    _productListScrollController.addListener(_handleScrollDirection);
     _initConnectivity();
     _setupConnectivityListener();
     // Load products from Firebase
@@ -48,9 +52,12 @@ class _OrderPageState extends State<OrderPage> {
   @override
   void dispose() {
     _searchController.removeListener(_filterProducts);
+    _productListScrollController.removeListener(_handleScrollDirection);
     _searchController.dispose();
     _productListScrollController.dispose();
     _connectivitySubscription?.cancel();
+    // Restore nav visibility when leaving the page
+    NavVisibilityNotifier.isVisible.value = true;
     super.dispose();
   }
 
@@ -58,6 +65,27 @@ class _OrderPageState extends State<OrderPage> {
     setState(() {
       // Trigger rebuild to apply filter
     });
+  }
+
+  /// Hides the bottom nav bar when scrolling down, shows when scrolling up.
+  void _handleScrollDirection() {
+    final current = _productListScrollController.offset;
+    const threshold = 10.0;
+    bool? nextVisible;
+    if (current > _lastScrollOffset + threshold) {
+      // Scrolling down
+      if (NavVisibilityNotifier.isVisible.value) nextVisible = false;
+    } else if (current < _lastScrollOffset - threshold) {
+      // Scrolling up
+      if (!NavVisibilityNotifier.isVisible.value) nextVisible = true;
+    }
+    _lastScrollOffset = current;
+    if (nextVisible != null) {
+      // Defer the notifier update to avoid triggering a build during a frame.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        NavVisibilityNotifier.isVisible.value = nextVisible!;
+      });
+    }
   }
 
   /// Initialize connectivity check on app start

@@ -5,6 +5,7 @@ import 'package:ch_atta_traders_billing_application/data/models/daily_progress.d
 import 'package:ch_atta_traders_billing_application/features/home/providers/daily_progress_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/daily_progress_detail_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -340,7 +341,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
-                    Icons.account_balance_wallet_outlined,
+                    Icons.payments_outlined,
                     color: Colors.white,
                     size: 20,
                   ),
@@ -354,25 +355,25 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                     color: Colors.white,
                   ),
                 ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${provider.totalRecordCount} records',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ),
+                // const Spacer(),
+                // Container(
+                //   padding: const EdgeInsets.symmetric(
+                //     horizontal: 10,
+                //     vertical: 4,
+                //   ),
+                //   decoration: BoxDecoration(
+                //     color: Colors.white.withValues(alpha: 0.12),
+                //     borderRadius: BorderRadius.circular(20),
+                //   ),
+                //   child: Text(
+                //     '${provider.totalRecordCount} records',
+                //     style: GoogleFonts.poppins(
+                //       fontSize: 11,
+                //       fontWeight: FontWeight.w500,
+                //       color: Colors.white70,
+                //     ),
+                //   ),
+                // ),
               ],
             ),
 
@@ -410,7 +411,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -464,14 +465,14 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.all_inbox_outlined,
+                  FaIcon(
+                    FontAwesomeIcons.bottleWater,
                     color: Colors.white60,
-                    size: 18,
+                    size: 16,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'MT (Crates)',
+                    'Empty Crates',
                     style: GoogleFonts.poppins(
                       fontSize: 13,
                       color: Colors.white70,
@@ -495,14 +496,14 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       isMtShort
                           ? 'Short'
                           : netMt > 0
                           ? 'Excess'
-                          : 'OK',
+                          : 'Balanced',
                       style: GoogleFonts.poppins(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,

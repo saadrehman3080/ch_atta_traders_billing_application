@@ -181,30 +181,34 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       value: _creditProvider,
       child: Scaffold(
         backgroundColor: AppColors.gray100,
-        appBar: _buildAppBar(),
-        body: !_hasInternetConnection
-            ? _buildNoInternetState()
-            : Consumer<CreditHistoryProvider>(
-                builder: (context, provider, child) {
-                  if (provider.isLoading && provider.credits.isEmpty) {
-                    return _buildLoadingState();
-                  }
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            _buildSliverAppBar(),
+          ],
+          body: !_hasInternetConnection
+              ? _buildNoInternetState()
+              : Consumer<CreditHistoryProvider>(
+                  builder: (context, provider, child) {
+                    if (provider.isLoading && provider.credits.isEmpty) {
+                      return _buildLoadingState();
+                    }
 
-                  if (provider.hasError) {
-                    return _buildErrorState(provider.errorMessage);
-                  }
+                    if (provider.hasError) {
+                      return _buildErrorState(provider.errorMessage);
+                    }
 
-                  if (provider.credits.isEmpty && !provider.isLoading) {
-                    return _buildEmptyState();
-                  }
+                    if (provider.credits.isEmpty && !provider.isLoading) {
+                      return _buildEmptyState();
+                    }
 
-                  return RefreshIndicator(
-                    onRefresh: _refreshCredits,
-                    color: AppColors.pepsiBlue,
-                    child: _buildBillList(provider.credits),
-                  );
-                },
-              ),
+                    return RefreshIndicator(
+                      onRefresh: _refreshCredits,
+                      color: AppColors.pepsiBlue,
+                      child: _buildBillList(provider.credits),
+                    );
+                  },
+                ),
+        ),
       ),
     );
   }
@@ -1226,8 +1230,10 @@ class _CreditRecordPageState extends State<CreditRecordPage>
 
   // ========== Main UI Building Methods ==========
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
+  SliverAppBar _buildSliverAppBar() {
+    return SliverAppBar(
+      floating: true,
+      snap: true,
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -1661,7 +1667,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(child: _buildCardContent(bill)),
+                  Expanded(child: _buildCardContent(bill, index)),
                   const SizedBox(width: 12),
                   _buildActionButtons(bill, index, billHistory),
                 ],
@@ -1768,7 +1774,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
     );
   }
 
-  Widget _buildCardContent(CreditHistory bill) {
+  Widget _buildCardContent(CreditHistory bill, int index) {
     final totalItems = BillingCalculations.calculateTotalItems(bill.products);
     final now = DateTime.now();
     final isToday =
@@ -1784,8 +1790,15 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildCustomerName(bill.customerName),
-        const SizedBox(height: 6),
-        _buildDateTimeInfo(formattedDate, bill.formattedTime),
+        // Show date/time for today's bills or first item in list
+        if (isToday || index == 0) ...[
+          const SizedBox(height: 6),
+          _buildDateTimeInfo(formattedDate, bill.formattedTime),
+        ] else ...[
+          const SizedBox(height: 6),
+          _buildTimeInfo(bill.formattedTime),
+        ],
+
         const SizedBox(height: 8),
         Row(
           children: [
@@ -1820,6 +1833,22 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         const SizedBox(width: 4),
         Text(
           '$time • $date',
+          style: AppTextStyles.helperText.copyWith(
+            fontSize: 12,
+            color: AppColors.gray500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeInfo(String time) {
+    return Row(
+      children: [
+        Icon(Icons.calendar_today_outlined, size: 12, color: AppColors.gray500),
+        const SizedBox(width: 4),
+        Text(
+          time,
           style: AppTextStyles.helperText.copyWith(
             fontSize: 12,
             color: AppColors.gray500,

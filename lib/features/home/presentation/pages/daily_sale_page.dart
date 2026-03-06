@@ -116,34 +116,40 @@ class _DailySalePageState extends State<DailySalePage>
       value: _salesProvider,
       child: Scaffold(
         backgroundColor: AppColors.gray100,
-        appBar: _buildAppBar(),
-        body: !_hasInternetConnection
-            ? _buildNoInternetState()
-            : Consumer<DailySalesProvider>(
-                builder: (context, provider, child) {
-                  if (provider.isLoading) {
-                    return _buildLoadingState();
-                  }
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            _buildSliverAppBar(),
+          ],
+          body: !_hasInternetConnection
+              ? _buildNoInternetState()
+              : Consumer<DailySalesProvider>(
+                  builder: (context, provider, child) {
+                    if (provider.isLoading) {
+                      return _buildLoadingState();
+                    }
 
-                  if (provider.hasError) {
-                    return _buildErrorState(provider.errorMessage);
-                  }
+                    if (provider.hasError) {
+                      return _buildErrorState(provider.errorMessage);
+                    }
 
-                  if (provider.sales.isEmpty) {
-                    return _buildEmptyState();
-                  }
+                    if (provider.sales.isEmpty) {
+                      return _buildEmptyState();
+                    }
 
-                  return _buildSaleList(provider.sales);
-                },
-              ),
+                    return _buildSaleList(provider.sales);
+                  },
+                ),
+        ),
       ),
     );
   }
 
   // ========== Main UI Building Methods ==========
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
+  SliverAppBar _buildSliverAppBar() {
+    return SliverAppBar(
+      floating: true,
+      snap: true,
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,

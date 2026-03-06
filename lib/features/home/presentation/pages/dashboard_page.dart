@@ -6,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.d
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/cleared_bills_page.dart';
+import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/discounted_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
@@ -21,8 +22,13 @@ import 'dart:async';
 
 class DashboardPage extends StatefulWidget {
   final VoidCallback? onNavigateToOrder;
+  final VoidCallback? onNavigateToCredit;
 
-  const DashboardPage({super.key, this.onNavigateToOrder});
+  const DashboardPage({
+    super.key,
+    this.onNavigateToOrder,
+    this.onNavigateToCredit,
+  });
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -482,6 +488,7 @@ class _DashboardPageState extends State<DashboardPage>
                 'Credit',
                 'Rs. ${formatCashAmount(data.totalCredit)}',
                 Icons.credit_card_outlined,
+                onTap: () => widget.onNavigateToCredit?.call(),
               ),
             ),
             const SizedBox(width: 10),
@@ -490,6 +497,7 @@ class _DashboardPageState extends State<DashboardPage>
                 'Discount',
                 'Rs. ${formatCashAmount(data.totalDiscount)}',
                 Icons.discount_outlined,
+                onTap: () => _navigateToDiscountedBills(),
               ),
             ),
           ],
@@ -535,8 +543,13 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon) {
-    return Container(
+  Widget _buildStatItem(
+    String label,
+    String value,
+    IconData icon, {
+    VoidCallback? onTap,
+  }) {
+    final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.1),
@@ -579,6 +592,11 @@ class _DashboardPageState extends State<DashboardPage>
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: child);
+    }
+    return child;
   }
 
   /// Builds the previous day collection card showing cash and MT collected
@@ -1573,6 +1591,13 @@ class _DashboardPageState extends State<DashboardPage>
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (context) => const ClearedBillsPage()));
+  }
+
+  /// Navigate to the Discounted Bills page showing today's bills with discount
+  void _navigateToDiscountedBills() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const DiscountedBillsPage()),
+    );
   }
 
   Future<void> _handleConnectToPrinter(BluetoothInfo printer) async {
