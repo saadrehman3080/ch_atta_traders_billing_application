@@ -417,6 +417,8 @@ class _OrderPageState extends State<OrderPage> {
         curve: Curves.easeOut,
       );
     }
+    // Bring back the bottom navigation bar if hidden by scroll
+    NavVisibilityNotifier.isVisible.value = true;
   }
 
   void _showResetConfirmation() {

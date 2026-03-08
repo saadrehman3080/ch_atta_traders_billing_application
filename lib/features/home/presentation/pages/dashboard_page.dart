@@ -7,6 +7,7 @@ import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.d
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/cleared_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/discounted_bills_page.dart';
+import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/mt_remaining_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
@@ -476,6 +477,7 @@ class _DashboardPageState extends State<DashboardPage>
                 'MT Remaining',
                 '${data.totalMtRemaining}',
                 Icons.recycling_outlined,
+                onTap: () => _navigateToMtRemainingBills(),
               ),
             ),
           ],
@@ -1591,6 +1593,13 @@ class _DashboardPageState extends State<DashboardPage>
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (context) => const ClearedBillsPage()));
+  }
+
+  /// Navigate to the MT Remaining Bills page showing today's credit bills with crates due
+  void _navigateToMtRemainingBills() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const MtRemainingBillsPage()),
+    );
   }
 
   /// Navigate to the Discounted Bills page showing today's bills with discount

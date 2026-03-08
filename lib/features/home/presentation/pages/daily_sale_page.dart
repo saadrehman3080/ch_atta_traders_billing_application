@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:intl/intl.dart';
 import 'dart:async';
 
 class DailySalePage extends StatefulWidget {
@@ -33,6 +34,7 @@ class _DailySalePageState extends State<DailySalePage>
   String? _removingBillId;
   AnimationController? _removeAnimController;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -103,10 +105,129 @@ class _DailySalePageState extends State<DailySalePage>
     if (mounted) setState(() {});
   }
 
+  bool get _isToday {
+    final now = DateTime.now();
+    return _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
+  }
+
   Future<void> _loadSales() async {
     final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
     if (salesmanIdentifier != null && salesmanIdentifier.isNotEmpty) {
-      await _salesProvider.loadDailySales(salesmanIdentifier, DateTime.now());
+      await _salesProvider.loadDailySales(salesmanIdentifier, _selectedDate);
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: now,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.pepsiBlue,
+              onPrimary: AppColors.pepsiWhite,
+              secondary: AppColors.pepsiBlue.withValues(alpha: 0.12),
+              onSecondary: AppColors.pepsiBlue,
+              surface: AppColors.pepsiWhite,
+              onSurface: Colors.black87,
+              surfaceContainerHighest: AppColors.gray100,
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: AppColors.pepsiWhite,
+              headerBackgroundColor: AppColors.pepsiBlue,
+              headerForegroundColor: AppColors.pepsiWhite,
+              dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.pepsiWhite;
+                }
+                if (states.contains(WidgetState.disabled)) {
+                  return AppColors.gray400;
+                }
+                return Colors.black87;
+              }),
+              dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.pepsiBlue;
+                }
+                return null;
+              }),
+              todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.pepsiWhite;
+                }
+                return AppColors.pepsiBlue;
+              }),
+              todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.pepsiBlue;
+                }
+                return Colors.transparent;
+              }),
+              todayBorder: const BorderSide(
+                color: AppColors.pepsiBlue,
+                width: 1.5,
+              ),
+              yearForegroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.pepsiWhite;
+                }
+                return Colors.black87;
+              }),
+              yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.pepsiBlue;
+                }
+                return null;
+              }),
+              dayOverlayColor: WidgetStatePropertyAll(
+                AppColors.pepsiBlue.withValues(alpha: 0.08),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              dayShape: const WidgetStatePropertyAll(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                ),
+              ),
+              yearOverlayColor: WidgetStatePropertyAll(
+                AppColors.pepsiBlue.withValues(alpha: 0.08),
+              ),
+              rangeSelectionBackgroundColor: AppColors.pepsiBlue.withValues(
+                alpha: 0.12,
+              ),
+              dividerColor: AppColors.gray300,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.pepsiBlue,
+                textStyle: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && mounted) {
+      setState(() => _selectedDate = picked);
+      _loadSales();
+    }
+  }
+
+  void _resetToToday() {
+    if (!_isToday) {
+      setState(() => _selectedDate = DateTime.now());
+      _loadSales();
     }
   }
 
@@ -147,6 +268,10 @@ class _DailySalePageState extends State<DailySalePage>
   // ========== Main UI Building Methods ==========
 
   SliverAppBar _buildSliverAppBar() {
+    final dateLabel = _isToday
+        ? 'Today'
+        : DateFormat('dd MMM yyyy').format(_selectedDate);
+
     return SliverAppBar(
       floating: true,
       snap: true,
@@ -156,6 +281,77 @@ class _DailySalePageState extends State<DailySalePage>
       title: Text('Daily Sales', style: AppTextStyles.pageTitleBlack),
       centerTitle: false,
       actions: [
+        // Date picker button
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _pickDate,
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _isToday
+                        ? AppColors.pepsiBlue.withValues(alpha: 0.06)
+                        : AppColors.pepsiBlue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: _isToday
+                          ? AppColors.pepsiBlue.withValues(alpha: 0.15)
+                          : AppColors.pepsiBlue.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.calendar_month_outlined,
+                        size: 15,
+                        color: AppColors.pepsiBlue,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        dateLabel,
+                        style: GoogleFonts.poppins(
+                          color: AppColors.pepsiBlue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (!_isToday) ...[
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: _resetToToday,
+                          child: Container(
+                            width: 18,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: AppColors.pepsiBlue.withValues(
+                                alpha: 0.15,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 12,
+                              color: AppColors.pepsiBlue,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Bill count badge
         if (_hasInternetConnection && _salesProvider.sales.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -207,7 +403,9 @@ class _DailySalePageState extends State<DailySalePage>
                 ),
               ),
             ),
-          ),
+          )
+        else
+          const SizedBox(width: 12),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -406,8 +604,11 @@ class _DailySalePageState extends State<DailySalePage>
   }
 
   Widget _buildEmptyStateSubtitle() {
+    final message = _isToday
+        ? 'Sales transactions will appear here'
+        : 'No sales found for ${DateFormat('dd MMM yyyy').format(_selectedDate)}';
     return Text(
-      'Sales transactions will appear here',
+      message,
       style: AppTextStyles.helperText.copyWith(
         color: AppColors.gray500,
         fontSize: 14,

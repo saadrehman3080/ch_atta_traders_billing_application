@@ -1299,6 +1299,144 @@ class _CreditRecordPageState extends State<CreditRecordPage>
 
   // ========== Main UI Building Methods ==========
 
+  Widget _buildTotalCreditHeader(List<CreditHistory> credits) {
+    final totalCredit = credits.fold<int>(0, (sum, c) => sum + c.amountDue);
+    final totalCratesDue = credits.fold<int>(0, (sum, c) => sum + c.cratesDue);
+    final totalBills = credits.length;
+
+    // Calculate the age of the oldest bill
+    final now = DateTime.now();
+    final oldestDate = credits
+        .map((c) => c.date)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final oldestDays = now.difference(oldestDate).inDays;
+
+    String subtitle;
+    if (oldestDays == 0) {
+      subtitle = '$totalBills ${totalBills == 1 ? 'bill' : 'bills'} from today';
+    } else if (oldestDays <= 7) {
+      subtitle =
+          'Oldest from $oldestDays ${oldestDays == 1 ? 'day' : 'days'} ago';
+    } else if (oldestDays <= 30) {
+      final weeks = (oldestDays / 7).floor();
+      subtitle = 'Oldest from $weeks ${weeks == 1 ? 'week' : 'weeks'} ago';
+    } else {
+      final months = (oldestDays / 30).floor();
+      subtitle = 'Oldest from $months ${months == 1 ? 'month' : 'months'} ago';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.pepsiWhite,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.gray300.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Amount row
+          Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Total Credit',
+                    style: GoogleFonts.poppins(
+                      color: AppColors.gray500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      color: AppColors.gray500,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.pepsiRedLight.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppColors.pepsiRed.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Text(
+                  'Rs. ${formatCashAmount(totalCredit)}',
+                  style: GoogleFonts.poppins(
+                    color: AppColors.pepsiRed,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // MT Crates row (only if crates are pending)
+          if (totalCratesDue > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange[300]!, width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.inventory_2_outlined,
+                    size: 15,
+                    color: Colors.orange[700],
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'MT Crates Due',
+                    style: GoogleFonts.poppins(
+                      color: Colors.orange[800],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '$totalCratesDue ${totalCratesDue == 1 ? 'crate' : 'crates'}',
+                    style: GoogleFonts.poppins(
+                      color: Colors.orange[800],
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   SliverAppBar _buildSliverAppBar() {
     return SliverAppBar(
       floating: true,
@@ -1642,14 +1780,21 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         16,
         16 + MediaQuery.of(context).padding.bottom,
       ),
-      itemCount: billHistory.length,
+      itemCount: billHistory.length + 1,
       itemBuilder: (context, index) {
-        final bill = billHistory[index];
+        // First item is the total credit header
+        if (index == 0) {
+          return _buildTotalCreditHeader(billHistory);
+        }
+
+        final billIndex = index - 1;
+        final bill = billHistory[billIndex];
         final isRemoving = _removingBillId == bill.billId;
 
         // Determine if we need a date divider before this item
         final bool showDivider =
-            index > 0 && !_isSameDay(bill.date, billHistory[index - 1].date);
+            billIndex > 0 &&
+            !_isSameDay(bill.date, billHistory[billIndex - 1].date);
 
         Widget cardWidget;
 
@@ -1679,12 +1824,12 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                         curve: Curves.easeInOut,
                       ),
                     ),
-                child: _buildCreditCard(bill, index, billHistory),
+                child: _buildCreditCard(bill, billIndex, billHistory),
               ),
             ),
           );
         } else {
-          cardWidget = _buildCreditCard(bill, index, billHistory);
+          cardWidget = _buildCreditCard(bill, billIndex, billHistory);
         }
 
         if (showDivider) {

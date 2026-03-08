@@ -21,17 +21,18 @@ class ProductRepository {
     // Frequently Used Products
     'Pepsi 1500ml',
     'Pepsi 250ml RB',
-    'Pepsi NR 300ml',
+    'Pepsi NR 345ml',
     'Sting 250ml RB',
     'Sting 500ml',
     'Sting NR 300ml',
     'Slice 200ml TP',
     'Aquafina 1500ml',
-    'Tops Tangy 250ml',
-    'Shezan 250ml TP',
-    'Aquafina 500ml',
+    'Pepsi 500ml',
+    'Pepsi 1000ml',
+    'Pepsi 2250ml',
+    'Pepsi Can 250ml',
     'Revive NR 300ml',
-    'Slice 1000ml TP',
+    'Slice 1 Liter TP',
   ];
 
   /// Fetches all products from Firestore.
