@@ -108,4 +108,25 @@ class CustomerBulkPaymentRepository {
       return {};
     }
   }
+
+  /// Returns a map of normalised customer key → total amount already paid
+  /// via bulk payments.  Used to adjust the total credit calculation.
+  Future<Map<String, int>> getBulkPaymentTotals(String salesmanName) async {
+    try {
+      final snapshot = await _firestore
+          .collection('Bulk Payments')
+          .doc(salesmanName)
+          .collection('customers')
+          .get();
+      final totals = <String, int>{};
+      for (final doc in snapshot.docs) {
+        final payment = CustomerBulkPayment.fromJson(doc.data());
+        totals[doc.id] = payment.totalPaid;
+      }
+      return totals;
+    } catch (e) {
+      debugPrint('Error fetching bulk payment totals: $e');
+      return {};
+    }
+  }
 }

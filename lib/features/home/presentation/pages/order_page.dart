@@ -6,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/common/utils/billing_calcula
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/features/checkout/presentation/pages/checkout_page.dart';
+import 'package:ch_atta_traders_billing_application/features/checkout/providers/checkout_form_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
@@ -33,6 +34,7 @@ class _OrderPageState extends State<OrderPage> {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   final Map<String, int> _originalPrices = {};
   double _lastScrollOffset = 0;
+  final CheckoutFormProvider _checkoutFormProvider = CheckoutFormProvider();
 
   @override
   void initState() {
@@ -56,6 +58,7 @@ class _OrderPageState extends State<OrderPage> {
     _searchController.dispose();
     _productListScrollController.dispose();
     _connectivitySubscription?.cancel();
+    _checkoutFormProvider.dispose();
     // Restore nav visibility when leaving the page
     NavVisibilityNotifier.isVisible.value = true;
     super.dispose();
@@ -273,7 +276,9 @@ class _OrderPageState extends State<OrderPage> {
           ),
           child: CheckoutPage(
             products: products,
+            formProvider: _checkoutFormProvider,
             onPrint: () {
+              _checkoutFormProvider.reset();
               _handlePrintBill();
               Navigator.pop(context);
             },

@@ -7,6 +7,7 @@ import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
+import 'package:ch_atta_traders_billing_application/features/checkout/providers/checkout_form_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
@@ -20,12 +21,14 @@ import 'package:ch_atta_traders_billing_application/features/checkout/presentati
 
 class CheckoutPage extends StatefulWidget {
   final List<Product> products;
+  final CheckoutFormProvider formProvider;
   final VoidCallback onPrint;
   final VoidCallback onDismiss;
 
   const CheckoutPage({
     super.key,
     required this.products,
+    required this.formProvider,
     required this.onPrint,
     required this.onDismiss,
   });
@@ -54,12 +57,32 @@ class _CheckoutPageState extends State<CheckoutPage> {
   bool _isSaving = false;
   bool _isPrinting = false;
   bool _isAnonymousCustomer = false; // When true, skip customer name on bill
+  bool _completedSuccessfully =
+      false; // Prevents dispose from overwriting reset
 
   @override
   void initState() {
     super.initState();
     _saleProvider = SaleProvider();
     _creditProvider = CreditProvider();
+
+    // Restore state from provider if it was previously opened
+    final fp = widget.formProvider;
+    if (fp.hasBeenOpened) {
+      _customerNameController.text = fp.customerName;
+      _hasCustomerName = fp.customerName.isNotEmpty;
+      _paymentType = fp.paymentType;
+      _discount = fp.discount;
+      _mt = fp.mt;
+      _partialPayment = fp.partialPayment;
+      _isAnonymousCustomer = fp.isAnonymousCustomer;
+      if (fp.discount > 0) _discountController.text = '${fp.discount}';
+      if (fp.mt > 0) _mtController.text = '${fp.mt}';
+      if (fp.partialPayment > 0) {
+        _partialPaymentController.text = '${fp.partialPayment}';
+      }
+    }
+
     _customerNameController.addListener(_updateButtonState);
     _discountController.addListener(_updateDiscount);
     _mtController.addListener(_updateMt);
@@ -67,7 +90,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
     _checkPrinterConnection();
-    _loadSkipCustomerNamePreference();
+    if (!fp.hasBeenOpened) {
+      _loadSkipCustomerNamePreference();
+    }
+    fp.markOpened();
     // Listen to printer connection changes
     PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
   }
@@ -108,6 +134,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   void dispose() {
+    // Sync current form values back to the provider so they survive dismiss,
+    // but skip if the sale completed successfully (provider was already reset).
+    if (!_completedSuccessfully) {
+      widget.formProvider.saveState(
+        customerName: _customerNameController.text.trim(),
+        paymentType: _paymentType,
+        discount: _discount,
+        mt: _mt,
+        partialPayment: _partialPayment,
+        isAnonymousCustomer: _isAnonymousCustomer,
+      );
+    }
+
     _customerNameController.removeListener(_updateButtonState);
     _discountController.removeListener(_updateDiscount);
     _mtController.removeListener(_updateMt);
@@ -510,6 +549,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             message: '$billType saved successfully',
             type: SnackBarType.success,
           );
+          _completedSuccessfully = true;
           widget.onPrint();
         } else {
           final errorMsg = _shouldSaveToDailySales()
@@ -630,6 +670,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       // Call the original onPrint callback
       if (mounted) {
+        _completedSuccessfully = true;
         widget.onPrint();
       }
     } finally {

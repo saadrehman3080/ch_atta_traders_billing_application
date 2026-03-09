@@ -237,29 +237,32 @@ class _DailySalePageState extends State<DailySalePage>
       value: _salesProvider,
       child: Scaffold(
         backgroundColor: AppColors.gray100,
-        body: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) => [
-            _buildSliverAppBar(),
-          ],
-          body: !_hasInternetConnection
-              ? _buildNoInternetState()
-              : Consumer<DailySalesProvider>(
-                  builder: (context, provider, child) {
-                    if (provider.isLoading) {
-                      return _buildLoadingState();
-                    }
+        body: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+          child: NestedScrollView(
+            headerSliverBuilder: (context, innerBoxIsScrolled) => [
+              _buildSliverAppBar(),
+            ],
+            body: !_hasInternetConnection
+                ? _buildNoInternetState()
+                : Consumer<DailySalesProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading) {
+                        return _buildLoadingState();
+                      }
 
-                    if (provider.hasError) {
-                      return _buildErrorState(provider.errorMessage);
-                    }
+                      if (provider.hasError) {
+                        return _buildErrorState(provider.errorMessage);
+                      }
 
-                    if (provider.sales.isEmpty) {
-                      return _buildEmptyState();
-                    }
+                      if (provider.sales.isEmpty) {
+                        return _buildEmptyState();
+                      }
 
-                    return _buildSaleList(provider.sales);
-                  },
-                ),
+                      return _buildSaleList(provider.sales);
+                    },
+                  ),
+          ),
         ),
       ),
     );

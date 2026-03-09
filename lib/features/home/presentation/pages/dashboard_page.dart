@@ -4,12 +4,14 @@ import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
+import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/cleared_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/discounted_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/mt_remaining_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -1143,6 +1145,7 @@ class _DashboardPageState extends State<DashboardPage>
           _buildScanningPrinters(),
           _buildAnonymousPrintToggle(),
           _buildSkipCustomerNameToggle(),
+          _buildPrintRateListButton(),
         ],
       );
     }
@@ -1156,6 +1159,7 @@ class _DashboardPageState extends State<DashboardPage>
           _buildPrinterError(),
           _buildAnonymousPrintToggle(),
           _buildSkipCustomerNameToggle(),
+          _buildPrintRateListButton(),
         ],
       );
     }
@@ -1169,6 +1173,7 @@ class _DashboardPageState extends State<DashboardPage>
           _buildNoPrintersFound(),
           _buildAnonymousPrintToggle(),
           _buildSkipCustomerNameToggle(),
+          _buildPrintRateListButton(),
         ],
       );
     }
@@ -1186,6 +1191,7 @@ class _DashboardPageState extends State<DashboardPage>
         ),
         _buildAnonymousPrintToggle(),
         _buildSkipCustomerNameToggle(),
+        _buildPrintRateListButton(),
       ],
     );
   }
@@ -1391,6 +1397,413 @@ class _DashboardPageState extends State<DashboardPage>
         ),
       ),
     );
+  }
+
+  /// Builds the print rate list button
+  Widget _buildPrintRateListButton() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showRateTypeSelectionDialog(),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.pepsiBlue.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.pepsiBlue.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.receipt_long_outlined,
+                    color: AppColors.pepsiBlue,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Print Rate List',
+                        style: AppTextStyles.productItemName.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.pepsiBlue,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Print today\'s product rates',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 11,
+                          color: AppColors.pepsiBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: AppColors.pepsiBlue.withValues(alpha: 0.5),
+                  size: 14,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Shows a dialog to select which product types to include in rate list
+  void _showRateTypeSelectionDialog() {
+    final productProvider = context.read<ProductProvider>();
+    final products = productProvider.products;
+
+    if (products.isEmpty) {
+      CustomSnackBar.show(
+        context,
+        message: 'No products available. Please load products first.',
+        type: SnackBarType.error,
+      );
+      return;
+    }
+
+    // Check which types actually exist in products
+    final hasPepsi = products.any((p) => p.type == 'pepsi' && p.isAvailable);
+    final hasMasterCola =
+        products.any((p) => p.type == 'masterCola' && p.isAvailable);
+    final hasOthers = products.any((p) => p.type == 'others' && p.isAvailable);
+
+    // Count how many types exist
+    final typeCount =
+        [hasPepsi, hasMasterCola, hasOthers].where((v) => v).length;
+
+    // Selection state
+    bool allSelected = false;
+    bool pepsiSelected = false;
+    bool masterColaSelected = false;
+    bool othersSelected = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final canPrint = allSelected ||
+                pepsiSelected ||
+                masterColaSelected ||
+                othersSelected;
+            return Dialog(
+              backgroundColor: AppColors.pepsiWhite,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Icon
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.receipt_long_outlined,
+                        color: AppColors.pepsiBlue,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Title
+                    Text(
+                      'Print Rate List',
+                      style: AppTextStyles.pageTitleBlack.copyWith(
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Select which product categories to include in the printed rate list.',
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.helperText.copyWith(
+                        color: AppColors.gray500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // "All Products" option (only if more than 1 type exists)
+                    if (typeCount > 1)
+                      _buildTypeCheckbox(
+                        label: 'All Products',
+                        subtitle: 'Single receipt without business name',
+                        value: allSelected,
+                        icon: Icons.select_all_outlined,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            allSelected = val ?? false;
+                            if (allSelected) {
+                              pepsiSelected = false;
+                              masterColaSelected = false;
+                              othersSelected = false;
+                            }
+                          });
+                        },
+                      ),
+                    // Individual type checkboxes
+                    if (hasPepsi)
+                      _buildTypeCheckbox(
+                        label: 'Pepsi Products',
+                        subtitle: 'CH. Atta Traders',
+                        value: pepsiSelected,
+                        icon: Icons.local_drink_outlined,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            pepsiSelected = val ?? false;
+                            if (pepsiSelected) allSelected = false;
+                          });
+                        },
+                      ),
+                    if (hasMasterCola)
+                      _buildTypeCheckbox(
+                        label: 'Master Cola Products',
+                        subtitle: 'CH. Saad Traders',
+                        value: masterColaSelected,
+                        icon: Icons.local_cafe_outlined,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            masterColaSelected = val ?? false;
+                            if (masterColaSelected) allSelected = false;
+                          });
+                        },
+                      ),
+                    if (hasOthers)
+                      _buildTypeCheckbox(
+                        label: 'Other Products',
+                        subtitle: 'Without business name',
+                        value: othersSelected,
+                        icon: Icons.inventory_2_outlined,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            othersSelected = val ?? false;
+                            if (othersSelected) allSelected = false;
+                          });
+                        },
+                      ),
+                    const SizedBox(height: 24),
+                    // Action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: OutlinedButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: AppColors.gray300.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: AppTextStyles.smallButton.copyWith(
+                                  color: AppColors.gray500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              onPressed: canPrint
+                                  ? () {
+                                      Navigator.of(dialogContext).pop();
+                                      final selectedTypes = <String>[];
+                                      if (allSelected) {
+                                        selectedTypes.add('all');
+                                      } else {
+                                        if (pepsiSelected) {
+                                          selectedTypes.add('pepsi');
+                                        }
+                                        if (masterColaSelected) {
+                                          selectedTypes.add('masterCola');
+                                        }
+                                        if (othersSelected) {
+                                          selectedTypes.add('others');
+                                        }
+                                      }
+                                      _handlePrintRateList(
+                                        products,
+                                        selectedTypes,
+                                      );
+                                    }
+                                  : null,
+                              icon: Icon(Icons.print, size: 18),
+                              label: Text(
+                                'Print',
+                                style: AppTextStyles.smallButton.copyWith(
+                                  color: AppColors.pepsiWhite,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.pepsiBlue,
+                                foregroundColor: AppColors.pepsiWhite,
+                                disabledBackgroundColor: AppColors.gray300,
+                                disabledForegroundColor: AppColors.gray500,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildTypeCheckbox({
+    required String label,
+    required bool value,
+    required IconData icon,
+    required ValueChanged<bool?> onChanged,
+    String? subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onChanged(!value),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: value
+                  ? AppColors.pepsiBlue.withValues(alpha: 0.05)
+                  : AppColors.gray50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: value
+                    ? AppColors.pepsiBlue.withValues(alpha: 0.3)
+                    : AppColors.gray300.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: value ? AppColors.pepsiBlue : AppColors.gray400,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: AppTextStyles.productItemName.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: value ? AppColors.pepsiBlue : Colors.black87,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          subtitle,
+                          style: AppTextStyles.helperText.copyWith(
+                            fontSize: 11,
+                            color: value
+                                ? AppColors.pepsiBlue.withValues(alpha: 0.7)
+                                : AppColors.gray500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: Checkbox(
+                    value: value,
+                    onChanged: onChanged,
+                    activeColor: AppColors.pepsiBlue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePrintRateList(
+    List<Product> products,
+    List<String> selectedTypes,
+  ) async {
+    final result = await BillPrinter.printRateList(
+      products: products,
+      selectedTypes: selectedTypes,
+    );
+
+    if (mounted) {
+      CustomSnackBar.show(
+        context,
+        message: result.success
+            ? 'Rate list printed successfully'
+            : (result.errorMessage ?? 'Failed to print rate list'),
+        type: result.success ? SnackBarType.success : SnackBarType.error,
+      );
+    }
   }
 
   Widget _buildNoPrintersFound() {

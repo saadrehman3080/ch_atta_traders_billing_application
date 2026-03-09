@@ -63,7 +63,8 @@ class BillPrinter {
     int? cratesReceived, // Crates returned with this payment
     int?
     previouslyReturnedCrates, // Crates already returned before this payment
-    bool isCashAlreadyPaid = false, // True if cash was already paid (only crates were pending)
+    bool isCashAlreadyPaid =
+        false, // True if cash was already paid (only crates were pending)
   }) async {
     try {
       // Check if printer is connected
@@ -430,6 +431,240 @@ class BillPrinter {
     }
   }
 
+  /// Prints a compact receipt for a bulk payment (cash received against
+  /// multiple credit bills for one customer).
+  static Future<PrintResult> printBulkPaymentReceipt({
+    required String customerName,
+    required int amountReceived,
+    required int totalBills,
+    required int totalAmountDue,
+    required int previouslyPaid,
+    required int remainingAfter,
+    List<({String billId, int amount, DateTime date})> billDetails = const [],
+  }) async {
+    try {
+      final isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (!isConnected) {
+        return PrintResult.error(
+          'No printer connected. Please connect a printer first.',
+        );
+      }
+
+      List<int> bytes = [];
+
+      final isAnonymousPrint =
+          await AppPreferences.instance.isAnonymousPrintEnabled;
+
+      // Header
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+      bytes.addAll('\x1D\x21\x01'.codeUnits); // Double height
+      bytes.addAll('PAYMENT RECEIVED\n'.codeUnits);
+      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+      bytes.addAll('(Bulk Payment)\n'.codeUnits);
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Date
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
+      if (isAnonymousPrint) {
+        bytes.addAll(
+          'Date: ${DateFormat('dd MMM yyyy').format(DateTime.now())}\n'
+              .codeUnits,
+        );
+      } else {
+        bytes.addAll(
+          'Date: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}\n'
+              .codeUnits,
+        );
+      }
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Customer
+      final customerDisplay = customerName.isEmpty
+          ? 'Walk-In'
+          : toTitleCase(customerName);
+      bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
+
+      // Salesman
+      if (isAnonymousPrint) {
+        final id = await AppPreferences.instance.salesmanId;
+        bytes.addAll('Received By: ${id ?? ''}\n'.codeUnits);
+      } else {
+        final name = await AppPreferences.instance.salesmanName;
+        if (name != null && name.isNotEmpty) {
+          bytes.addAll('Received By: ${toTitleCase(name)}\n'.codeUnits);
+        }
+      }
+
+      bytes.addAll('Bills:    $totalBills\n'.codeUnits);
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Bill details
+      if (billDetails.isNotEmpty) {
+        bytes.addAll('BILLS:\n'.codeUnits);
+        final dateFmt = DateFormat('dd MMM');
+        for (final bill in billDetails) {
+          final shortId = truncateBillId(bill.billId);
+          bytes.addAll(
+            '#$shortId ${dateFmt.format(bill.date)} Rs.${formatCashAmount(bill.amount)}\n'
+                .codeUnits,
+          );
+        }
+        bytes.addAll('--------------------------------\n'.codeUnits);
+      }
+
+      // Amount details
+      bytes.addAll('AMOUNT DETAILS:\n'.codeUnits);
+      bytes.addAll(
+        'Total Due:       Rs.${formatCashAmount(totalAmountDue)}\n'.codeUnits,
+      );
+      if (previouslyPaid > 0) {
+        bytes.addAll(
+          'Previously Paid: Rs.${formatCashAmount(previouslyPaid)}\n'.codeUnits,
+        );
+      }
+      bytes.addAll(
+        'Received Now:    Rs.${formatCashAmount(amountReceived)}\n'.codeUnits,
+      );
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      if (remainingAfter == 0) {
+        bytes.addAll('\x1B\x61\x01'.codeUnits); // Center
+        bytes.addAll('** FULLY PAID **\n'.codeUnits);
+        bytes.addAll('\x1B\x61\x00'.codeUnits); // Left
+      } else {
+        bytes.addAll(
+          'Remaining:       Rs.${formatCashAmount(remainingAfter)}\n'.codeUnits,
+        );
+      }
+
+      // Footer
+      bytes.addAll('\n'.codeUnits);
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center
+      bytes.addAll('Payment Confirmed\n'.codeUnits);
+      bytes.addAll('Thank you!\n'.codeUnits);
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left
+      bytes.addAll('\n\n\n'.codeUnits);
+
+      final result = await PrintBluetoothThermal.writeBytes(bytes);
+      return result
+          ? PrintResult.success()
+          : PrintResult.error('Failed to print receipt');
+    } catch (e) {
+      debugPrint('Error printing bulk payment receipt: $e');
+      return PrintResult.error('Error printing receipt: ${e.toString()}');
+    }
+  }
+
+  /// Prints a compact receipt for an MT (empty crate) return recorded via
+  /// bulk payment.
+  static Future<PrintResult> printBulkCrateReturnReceipt({
+    required String customerName,
+    required int cratesReturned,
+    required int totalCratesBefore,
+    required int cratesRemainingAfter,
+    List<({String billId, int crates, DateTime date})> billDetails = const [],
+  }) async {
+    try {
+      final isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (!isConnected) {
+        return PrintResult.error(
+          'No printer connected. Please connect a printer first.',
+        );
+      }
+
+      List<int> bytes = [];
+
+      final isAnonymousPrint =
+          await AppPreferences.instance.isAnonymousPrintEnabled;
+
+      // Header
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+      bytes.addAll('\x1D\x21\x01'.codeUnits); // Double height
+      bytes.addAll('MT RECEIVED\n'.codeUnits);
+      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+      bytes.addAll('(Crate Return)\n'.codeUnits);
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Date
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
+      if (isAnonymousPrint) {
+        bytes.addAll(
+          'Date: ${DateFormat('dd MMM yyyy').format(DateTime.now())}\n'
+              .codeUnits,
+        );
+      } else {
+        bytes.addAll(
+          'Date: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}\n'
+              .codeUnits,
+        );
+      }
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Customer
+      final customerDisplay = customerName.isEmpty
+          ? 'Walk-In'
+          : toTitleCase(customerName);
+      bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
+
+      // Salesman
+      if (isAnonymousPrint) {
+        final id = await AppPreferences.instance.salesmanId;
+        bytes.addAll('Received By: ${id ?? ''}\n'.codeUnits);
+      } else {
+        final name = await AppPreferences.instance.salesmanName;
+        if (name != null && name.isNotEmpty) {
+          bytes.addAll('Received By: ${toTitleCase(name)}\n'.codeUnits);
+        }
+      }
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Bill details (only bills that had/have crates)
+      final billsWithCrates = billDetails.where((b) => b.crates > 0).toList();
+      if (billsWithCrates.isNotEmpty) {
+        bytes.addAll('BILLS WITH PENDING CRATES:\n'.codeUnits);
+        final dateFmt = DateFormat('dd MMM');
+        for (final bill in billsWithCrates) {
+          final shortId = truncateBillId(bill.billId);
+          bytes.addAll(
+            '#$shortId ${dateFmt.format(bill.date)} x${bill.crates} crates\n'
+                .codeUnits,
+          );
+        }
+        bytes.addAll('--------------------------------\n'.codeUnits);
+      }
+
+      // Crate details
+      bytes.addAll('EMPTY/CRATES DETAILS:\n'.codeUnits);
+      bytes.addAll('Total Due:       $totalCratesBefore\n'.codeUnits);
+      bytes.addAll('Returned Now:    $cratesReturned\n'.codeUnits);
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      if (cratesRemainingAfter == 0) {
+        bytes.addAll('\x1B\x61\x01'.codeUnits); // Center
+        bytes.addAll('** ALL CRATES RETURNED **\n'.codeUnits);
+        bytes.addAll('\x1B\x61\x00'.codeUnits); // Left
+      } else {
+        bytes.addAll('Still Pending:   $cratesRemainingAfter\n'.codeUnits);
+      }
+
+      // Footer
+      bytes.addAll('\n'.codeUnits);
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center
+      bytes.addAll('MT Return Confirmed\n'.codeUnits);
+      bytes.addAll('Thank you!\n'.codeUnits);
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left
+      bytes.addAll('\n\n\n'.codeUnits);
+
+      final result = await PrintBluetoothThermal.writeBytes(bytes);
+      return result
+          ? PrintResult.success()
+          : PrintResult.error('Failed to print receipt');
+    } catch (e) {
+      debugPrint('Error printing bulk crate return receipt: $e');
+      return PrintResult.error('Error printing receipt: ${e.toString()}');
+    }
+  }
+
   /// Prints a bill with the given details
   ///
   /// Returns a [PrintResult] indicating success or failure with error message
@@ -613,13 +848,13 @@ class BillPrinter {
         for (final payment in paymentHistory) {
           final dateStr = paymentDateFmt.format(payment.date);
           final amtStr = 'Rs.${formatCashAmount(payment.amount)}';
-          bytes.addAll(
-            'Paid $amtStr on $dateStr\n'.codeUnits,
-          );
+          bytes.addAll('Paid $amtStr on $dateStr\n'.codeUnits);
         }
 
         final totalPaid = paymentHistory.fold<int>(
-          0, (sum, p) => sum + p.amount);
+          0,
+          (sum, p) => sum + p.amount,
+        );
         final remaining = netAmount - totalPaid;
         if (remaining > 0) {
           bytes.addAll(
@@ -664,6 +899,197 @@ class BillPrinter {
     } catch (e) {
       debugPrint('Error printing bill: $e');
       return PrintResult.error('Error printing bill: ${e.toString()}');
+    }
+  }
+
+  /// Prints a rate list for selected product types
+  ///
+  /// [products] - All available products
+  /// [selectedTypes] - Which types to include ('pepsi', 'masterCola', 'others', 'all')
+  static Future<PrintResult> printRateList({
+    required List<Product> products,
+    required List<String> selectedTypes,
+  }) async {
+    try {
+      final isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (!isConnected) {
+        return PrintResult.error(
+          'No printer connected. Please connect a printer first.',
+        );
+      }
+
+      List<int> bytes = [];
+
+      final dateFormatter = DateFormat('dd MMM yyyy');
+      final todayStr = dateFormatter.format(DateTime.now());
+
+      // "All Products" mode — single receipt, no business name
+      final isAllMode = selectedTypes.contains('all');
+
+      if (isAllMode) {
+        // Centered title
+        bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
+        bytes.addAll('RATE LIST\n'.codeUnits);
+        bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll('\n'.codeUnits);
+
+        // Date - bold
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('\x1D\x21\x01'.codeUnits); // Double height
+        bytes.addAll('Date: $todayStr\n'.codeUnits);
+        bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll('\n'.codeUnits);
+
+        // Print all available products grouped by type
+        for (final type in ['pepsi', 'masterCola', 'others']) {
+          final typeProducts = products
+              .where((p) => p.type == type && p.isAvailable)
+              .toList();
+          if (typeProducts.isEmpty) continue;
+
+          bytes.addAll('--------------------------------\n'.codeUnits);
+          bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+          bytes.addAll('${_typeDisplayName(type)}\n'.codeUnits);
+          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+          bytes.addAll('--------------------------------\n'.codeUnits);
+
+          bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
+          _addProductRows(bytes, typeProducts);
+          bytes.addAll('\n'.codeUnits);
+        }
+      } else {
+        // Per-type mode — each type gets its own header
+        for (final type in selectedTypes) {
+          final typeProducts = products
+              .where((p) => p.type == type && p.isAvailable)
+              .toList();
+          if (typeProducts.isEmpty) continue;
+
+          // Business name header (matches checkout logic)
+          final storeName = _getStoreNameForType(type);
+          final storePhone = _getStorePhoneForType(type);
+
+          bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+          if (storeName != null) {
+            bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
+            bytes.addAll('$storeName\n'.codeUnits);
+            bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+            if (storePhone != null) {
+              bytes.addAll('$storePhone\n'.codeUnits);
+            }
+            bytes.addAll('\n'.codeUnits);
+          } else {
+            // Others — no business name, just a title
+            bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+            bytes.addAll('\x1D\x21\x11'.codeUnits); // Double size
+            bytes.addAll('RATE LIST\n'.codeUnits);
+            bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+            bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+            bytes.addAll('\n'.codeUnits);
+          }
+
+          // Date - bold
+          bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+          bytes.addAll('\x1D\x21\x01'.codeUnits); // Double height
+          bytes.addAll('Date: $todayStr\n'.codeUnits);
+          bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+          bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+          bytes.addAll('\n'.codeUnits);
+
+          // Section header (skip for 'others' — no category header needed)
+          if (type != 'others') {
+            bytes.addAll('--------------------------------\n'.codeUnits);
+            bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+            bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+            bytes.addAll('${_typeDisplayName(type)}\n'.codeUnits);
+            bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+            bytes.addAll('--------------------------------\n'.codeUnits);
+          }
+
+          // Product rows
+          bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
+          _addProductRows(bytes, typeProducts);
+          bytes.addAll('\n'.codeUnits);
+        }
+      }
+
+      // Disclaimer at the end
+      bytes.addAll('--------------------------------\n'.codeUnits);
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+      bytes.addAll('These are today\'s rates and\n'.codeUnits);
+      bytes.addAll('are subject to change.\n'.codeUnits);
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
+      bytes.addAll('\n\n\n'.codeUnits);
+
+      final result = await PrintBluetoothThermal.writeBytes(bytes);
+
+      if (result) {
+        return PrintResult.success();
+      } else {
+        return PrintResult.error('Failed to print rate list');
+      }
+    } catch (e) {
+      debugPrint('Error printing rate list: $e');
+      return PrintResult.error('Error printing rate list: ${e.toString()}');
+    }
+  }
+
+  /// Returns store name for a single product type
+  static String? _getStoreNameForType(String type) {
+    switch (type) {
+      case 'pepsi':
+        return 'CH. ATTA TRADERS';
+      case 'masterCola':
+        return 'CH. SAAD TRADERS';
+      default:
+        return null;
+    }
+  }
+
+  /// Returns store phone for a single product type
+  static String? _getStorePhoneForType(String type) {
+    switch (type) {
+      case 'pepsi':
+        return '0309 2000948';
+      case 'masterCola':
+        return '0331 5348202';
+      default:
+        return null;
+    }
+  }
+
+  /// Maps type key to display name
+  static String _typeDisplayName(String type) {
+    switch (type) {
+      case 'pepsi':
+        return 'PEPSI PRODUCTS';
+      case 'masterCola':
+        return 'MASTER COLA PRODUCTS';
+      case 'others':
+        return 'OTHER PRODUCTS';
+      default:
+        return type.toUpperCase();
+    }
+  }
+
+  /// Adds formatted product rows to byte list
+  static void _addProductRows(List<int> bytes, List<Product> typeProducts) {
+    for (final product in typeProducts) {
+      String productName = product.name;
+      if (productName.length > 22) {
+        productName = '${productName.substring(0, 19)}...';
+      }
+      final priceStr = 'Rs.${formatCashAmount(product.price)}';
+      final spacing = 32 - productName.length - priceStr.length;
+      final line = productName + (' ' * (spacing > 0 ? spacing : 1)) + priceStr;
+      bytes.addAll('$line\n'.codeUnits);
     }
   }
 }

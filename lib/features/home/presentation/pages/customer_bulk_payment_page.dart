@@ -14,6 +14,9 @@ import 'package:ch_atta_traders_billing_application/data/repositories/customer_b
 import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_history_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
+import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -45,6 +48,8 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
   final _amountController = TextEditingController();
   final _cratesReturnController = TextEditingController();
   final _bulkRepo = CustomerBulkPaymentRepository();
+  final PrinterService _printerService = PrinterService();
+  late bool _isPrinterConnected;
 
   List<CreditHistory>? _localBills;
   List<CreditHistory> get _bills => _localBills ?? widget.bills;
@@ -52,6 +57,8 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
   bool _isLoading = true;
   bool _isSubmittingPayment = false;
   bool _isSubmittingCrates = false;
+  bool _isPrintingPayment = false;
+  bool _isPrintingCrates = false;
   bool _isCompletingBills = false;
 
   // ── derived values ────────────────────────────────────────────────────────
@@ -81,6 +88,17 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
 
   bool get _isFullyPaid =>
       _remaining == 0 && _totalAmountDue > 0 && _totalCratesDue == 0;
+
+  /// Partial payments already recorded against individual bills.
+  List<({DateTime date, int amount, String billId})> get _existingBillPayments {
+    final entries = <({DateTime date, int amount, String billId})>[];
+    for (final bill in _bills) {
+      for (final pp in bill.partialPayments) {
+        entries.add((date: pp.date, amount: pp.amount, billId: bill.billId));
+      }
+    }
+    return entries;
+  }
 
   /// Splits bills into completed (fully covered by accumulated payment AND
   /// crates returned) and pending.  Bills are sorted by amountDue ascending so
@@ -118,14 +136,36 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
   void initState() {
     super.initState();
     _localBills = List<CreditHistory>.from(widget.bills);
+    _isPrinterConnected = _printerService.state.isConnected;
+    _printerService.addListener(_onPrinterStateChanged);
+    PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
     _loadBulkPayment();
   }
 
   @override
   void dispose() {
+    _printerService.removeListener(_onPrinterStateChanged);
+    PrinterConnectionService.instance.removeListener(
+      _onPrinterConnectionChanged,
+    );
     _amountController.dispose();
     _cratesReturnController.dispose();
     super.dispose();
+  }
+
+  void _onPrinterStateChanged() {
+    if (mounted) {
+      setState(() => _isPrinterConnected = _printerService.state.isConnected);
+    }
+  }
+
+  void _onPrinterConnectionChanged() {
+    if (mounted) {
+      setState(
+        () =>
+            _isPrinterConnected = PrinterConnectionService.instance.isConnected,
+      );
+    }
   }
 
   // ── data methods ──────────────────────────────────────────────────────────
@@ -144,16 +184,16 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
     }
   }
 
-  Future<void> _submitPayment() async {
+  Future<int?> _submitPayment() async {
     final amountText = _amountController.text.trim();
     if (amountText.isEmpty) {
       _showError('Please enter an amount.');
-      return;
+      return null;
     }
     final amount = int.tryParse(amountText);
     if (amount == null || amount <= 0) {
       _showError('Please enter a valid positive amount.');
-      return;
+      return null;
     }
 
     // Cap at remaining
@@ -181,7 +221,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
         _showError('Failed to record payment. Please try again.');
         setState(() => _isSubmittingPayment = false);
       }
-      return;
+      return null;
     }
 
     // Reload updated record from Firebase
@@ -221,27 +261,69 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
         );
       }
     }
+
+    return cappedAmount;
+  }
+
+  Future<void> _submitPaymentAndPrint() async {
+    setState(() => _isPrintingPayment = true);
+    final cappedAmount = await _submitPayment();
+    if (cappedAmount == null || cappedAmount <= 0) {
+      if (mounted) setState(() => _isPrintingPayment = false);
+      return;
+    }
+
+    final totalPaid = _bulkPayment?.totalPaid ?? 0;
+    final previouslyPaid = totalPaid - cappedAmount;
+    final remaining = (_totalAmountDue - totalPaid).clamp(0, _totalAmountDue);
+
+    final billDetails = _bills
+        .map((b) => (billId: b.billId, amount: b.amountDue, date: b.date))
+        .toList();
+
+    final printResult = await BillPrinter.printBulkPaymentReceipt(
+      customerName: _customerName,
+      amountReceived: cappedAmount,
+      totalBills: _bills.length,
+      totalAmountDue: _totalAmountDue,
+      previouslyPaid: previouslyPaid > 0 ? previouslyPaid : 0,
+      remainingAfter: remaining,
+      billDetails: billDetails,
+    );
+
+    if (mounted) {
+      setState(() => _isPrintingPayment = false);
+      if (!printResult.success) {
+        CustomSnackBar.show(
+          context,
+          message: 'Print failed: ${printResult.errorMessage}',
+          type: SnackBarType.warning,
+        );
+      }
+    }
   }
 
   /// Records returned empty crates, distributing them across bills that have
   /// pending crates (smallest cratesDue first).  Updates each bill in Firebase
   /// and the dashboard.  If all cash AND crates are then settled, triggers
   /// the full-completion flow.
-  Future<void> _submitCrateReturn() async {
+  Future<({int capped, int cratesDueBefore})?> _submitCrateReturn() async {
     final text = _cratesReturnController.text.trim();
     if (text.isEmpty) {
       _showError('Please enter the number of crates returned.');
-      return;
+      return null;
     }
     final cratesReturned = int.tryParse(text);
     if (cratesReturned == null || cratesReturned <= 0) {
       _showError('Please enter a valid number.');
-      return;
+      return null;
     }
 
     final capped = cratesReturned > _totalCratesDue
         ? _totalCratesDue
         : cratesReturned;
+
+    final cratesDueBefore = _totalCratesDue;
 
     setState(() => _isSubmittingCrates = true);
 
@@ -251,7 +333,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
         setState(() => _isSubmittingCrates = false);
         _showError('Salesman identifier not found. Please log in again.');
       }
-      return;
+      return null;
     }
 
     final dashboardRepo = DashboardRepository();
@@ -324,6 +406,42 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
       }
       await Future.delayed(const Duration(milliseconds: 800));
       await _markAllBillsPaid();
+    }
+
+    return (capped: capped, cratesDueBefore: cratesDueBefore);
+  }
+
+  Future<void> _submitCrateReturnAndPrint() async {
+    setState(() => _isPrintingCrates = true);
+    final result = await _submitCrateReturn();
+    if (result == null) {
+      if (mounted) setState(() => _isPrintingCrates = false);
+      return;
+    }
+
+    final cratesRemainingAfter = _totalCratesDue;
+
+    final billDetails = _bills
+        .map((b) => (billId: b.billId, crates: b.cratesDue, date: b.date))
+        .toList();
+
+    final printResult = await BillPrinter.printBulkCrateReturnReceipt(
+      customerName: _customerName,
+      cratesReturned: result.capped,
+      totalCratesBefore: result.cratesDueBefore,
+      cratesRemainingAfter: cratesRemainingAfter,
+      billDetails: billDetails,
+    );
+
+    if (mounted) {
+      setState(() => _isPrintingCrates = false);
+      if (!printResult.success) {
+        CustomSnackBar.show(
+          context,
+          message: 'Print failed: ${printResult.errorMessage}',
+          type: SnackBarType.warning,
+        );
+      }
     }
   }
 
@@ -490,6 +608,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
 
   Widget _buildBody() {
     final history = _bulkPayment?.paymentHistory ?? [];
+    final billPayments = _existingBillPayments;
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
@@ -513,7 +632,8 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
               const SizedBox(height: 14),
             ],
           ],
-          if (history.isNotEmpty) _buildPaymentHistorySection(history),
+          if (history.isNotEmpty || billPayments.isNotEmpty)
+            _buildPaymentHistorySection(history, billPayments: billPayments),
           const SizedBox(height: 14),
           _buildBillsSection(),
         ],
@@ -1404,9 +1524,15 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: (_isSubmittingPayment || _isSubmittingCrates)
+                    onPressed:
+                        (_isSubmittingPayment ||
+                            _isSubmittingCrates ||
+                            _isPrintingPayment ||
+                            _isPrintingCrates)
                         ? null
-                        : _submitPayment,
+                        : () async {
+                            await _submitPayment();
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.pepsiBlue,
                       foregroundColor: Colors.white,
@@ -1418,7 +1544,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                       ),
                       elevation: 0,
                     ),
-                    child: _isSubmittingPayment
+                    child: (_isSubmittingPayment && !_isPrintingPayment)
                         ? const SizedBox(
                             width: 22,
                             height: 22,
@@ -1436,6 +1562,76 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Record & Print button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        (_isSubmittingPayment ||
+                            _isSubmittingCrates ||
+                            _isPrintingPayment ||
+                            _isPrintingCrates ||
+                            !_isPrinterConnected)
+                        ? null
+                        : _submitPaymentAndPrint,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: (_isPrinterConnected)
+                          ? AppColors.pepsiBlue
+                          : AppColors.gray300,
+                      foregroundColor: (_isPrinterConnected)
+                          ? Colors.white
+                          : AppColors.gray500,
+                      disabledBackgroundColor: _isPrintingPayment
+                          ? AppColors.pepsiBlue.withValues(alpha: 0.5)
+                          : AppColors.gray300,
+                      disabledForegroundColor: _isPrintingPayment
+                          ? Colors.white
+                          : AppColors.gray500,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: _isPrintingPayment
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.receipt_long,
+                            size: 20,
+                            color:
+                                (_isPrinterConnected &&
+                                    !_isSubmittingPayment &&
+                                    !_isSubmittingCrates)
+                                ? Colors.white
+                                : AppColors.gray500,
+                          ),
+                    label: Text(
+                      _isPrinterConnected
+                          ? 'Record & Print Receipt'
+                          : 'Printer Not Connected',
+                      style: AppTextStyles.smallButton.copyWith(
+                        color: _isPrintingPayment
+                            ? Colors.white
+                            : (_isPrinterConnected &&
+                                  !_isSubmittingPayment &&
+                                  !_isSubmittingCrates)
+                            ? Colors.white
+                            : AppColors.gray500,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1657,9 +1853,15 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: (_isSubmittingCrates || _isSubmittingPayment)
+                    onPressed:
+                        (_isSubmittingCrates ||
+                            _isSubmittingPayment ||
+                            _isPrintingPayment ||
+                            _isPrintingCrates)
                         ? null
-                        : _submitCrateReturn,
+                        : () async {
+                            await _submitCrateReturn();
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange[700],
                       foregroundColor: Colors.white,
@@ -1671,7 +1873,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                       ),
                       elevation: 0,
                     ),
-                    child: _isSubmittingCrates
+                    child: (_isSubmittingCrates && !_isPrintingCrates)
                         ? const SizedBox(
                             width: 22,
                             height: 22,
@@ -1689,6 +1891,76 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Record & Print button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        (_isSubmittingCrates ||
+                            _isSubmittingPayment ||
+                            _isPrintingPayment ||
+                            _isPrintingCrates ||
+                            !_isPrinterConnected)
+                        ? null
+                        : _submitCrateReturnAndPrint,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: (_isPrinterConnected)
+                          ? Colors.orange[700]
+                          : AppColors.gray300,
+                      foregroundColor: (_isPrinterConnected)
+                          ? Colors.white
+                          : AppColors.gray500,
+                      disabledBackgroundColor: _isPrintingCrates
+                          ? Colors.orange.withValues(alpha: 0.5)
+                          : AppColors.gray300,
+                      disabledForegroundColor: _isPrintingCrates
+                          ? Colors.white
+                          : AppColors.gray500,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: _isPrintingCrates
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.receipt_long,
+                            size: 20,
+                            color:
+                                (_isPrinterConnected &&
+                                    !_isSubmittingCrates &&
+                                    !_isSubmittingPayment)
+                                ? Colors.white
+                                : AppColors.gray500,
+                          ),
+                    label: Text(
+                      _isPrinterConnected
+                          ? 'Record & Print Receipt'
+                          : 'Printer Not Connected',
+                      style: AppTextStyles.smallButton.copyWith(
+                        color: _isPrintingCrates
+                            ? Colors.white
+                            : (_isPrinterConnected &&
+                                  !_isSubmittingCrates &&
+                                  !_isSubmittingPayment)
+                            ? Colors.white
+                            : AppColors.gray500,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1737,15 +2009,52 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
     return result;
   }
 
-  Widget _buildPaymentHistorySection(List<BulkPaymentEntry> history) {
-    // Chronological order for computing completions
+  Widget _buildPaymentHistorySection(
+    List<BulkPaymentEntry> history, {
+    List<({DateTime date, int amount, String billId})> billPayments = const [],
+  }) {
+    // Chronological order for computing completions (bulk entries only)
     final chronological = List<BulkPaymentEntry>.from(history)
       ..sort((a, b) => a.date.compareTo(b.date));
     final completionsPerEntry = _computeBillCompletionsPerEntry(chronological);
 
-    // Display newest first – reverse both lists
-    final displayEntries = chronological.reversed.toList();
-    final displayCompletions = completionsPerEntry.reversed.toList();
+    // Build a unified display list combining bulk entries and bill partials
+    // Each item: (date, amount, isBulk, billId?, completedBillIds)
+    final allItems =
+        <
+          ({
+            DateTime date,
+            int amount,
+            bool isBulk,
+            String? billId,
+            List<String> completedBillIds,
+          })
+        >[];
+
+    for (int i = 0; i < chronological.length; i++) {
+      allItems.add((
+        date: chronological[i].date,
+        amount: chronological[i].amount,
+        isBulk: true,
+        billId: chronological[i].billId,
+        completedBillIds: completionsPerEntry[i],
+      ));
+    }
+
+    for (final bp in billPayments) {
+      allItems.add((
+        date: bp.date,
+        amount: bp.amount,
+        isBulk: false,
+        billId: bp.billId,
+        completedBillIds: <String>[],
+      ));
+    }
+
+    // Display newest first
+    allItems.sort((a, b) => b.date.compareTo(a.date));
+
+    final totalCollected = allItems.fold(0, (sum, e) => sum + e.amount);
 
     return _card(
       child: Column(
@@ -1776,7 +2085,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${displayEntries.length} ${displayEntries.length == 1 ? 'entry' : 'entries'}',
+                    '${allItems.length} ${allItems.length == 1 ? 'entry' : 'entries'}',
                     style: GoogleFonts.poppins(
                       color: AppColors.pepsiBlue,
                       fontSize: 11,
@@ -1788,16 +2097,26 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
             ),
           ),
           _divider(),
-          ...displayEntries.asMap().entries.map((e) {
-            final completedBillIds = displayCompletions[e.key];
-            return _buildHistoryRow(
-              e.value,
-              completedBillIds: completedBillIds,
-              isLast: e.key == displayEntries.length - 1,
-            );
+          ...allItems.asMap().entries.map((e) {
+            final item = e.value;
+            final isLast = e.key == allItems.length - 1;
+            if (item.isBulk) {
+              return _buildHistoryRow(
+                BulkPaymentEntry(date: item.date, amount: item.amount),
+                completedBillIds: item.completedBillIds,
+                isLast: isLast,
+              );
+            } else {
+              return _buildBillPaymentRow(
+                date: item.date,
+                amount: item.amount,
+                billId: item.billId!,
+                isLast: isLast,
+              );
+            }
           }),
-          // Total paid footer – only shown when there are multiple entries
-          if (displayEntries.length > 1) ...[
+          // Total footer – only shown when there are multiple entries
+          if (allItems.length > 1) ...[
             _divider(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1813,7 +2132,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                   ),
                   const Spacer(),
                   Text(
-                    'Rs. ${formatCashAmount(_totalPaid)}',
+                    'Rs. ${formatCashAmount(totalCollected)}',
                     style: AppTextStyles.productItemTotal.copyWith(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -1915,6 +2234,80 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Colors.green[700],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!isLast)
+          Divider(
+            height: 1,
+            indent: 58,
+            endIndent: 16,
+            color: AppColors.gray300.withValues(alpha: 0.5),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBillPaymentRow({
+    required DateTime date,
+    required int amount,
+    required String billId,
+    required bool isLast,
+  }) {
+    final formattedDate = DateFormat('d MMM yyyy,  h:mm a').format(date);
+    final shortId = billId.length > 6 ? billId.substring(0, 6) : billId;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.receipt_outlined,
+                  size: 16,
+                  color: AppColors.pepsiBlue,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bill #$shortId Payment',
+                      style: AppTextStyles.helperText.copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      formattedDate,
+                      style: AppTextStyles.helperText.copyWith(
+                        fontSize: 11,
+                        color: AppColors.gray500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'Rs. ${formatCashAmount(amount)}',
+                style: AppTextStyles.productItemTotal.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.pepsiBlue,
                 ),
               ),
             ],

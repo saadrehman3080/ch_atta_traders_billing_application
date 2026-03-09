@@ -60,6 +60,9 @@ class _CreditRecordPageState extends State<CreditRecordPage>
   /// bulk payment record.  Bills for these customers cannot be deleted.
   Set<String> _customersWithBulkPayments = {};
 
+  /// Normalised customer key → total amount already collected via bulk payments.
+  Map<String, int> _bulkPaymentTotals = {};
+
   @override
   void initState() {
     super.initState();
@@ -190,10 +193,16 @@ class _CreditRecordPageState extends State<CreditRecordPage>
   }
 
   Future<void> _loadCustomersWithBulkPayments(String salesmanName) async {
-    final keys = await _bulkPaymentRepo.getCustomersWithBulkPayments(
-      salesmanName,
-    );
-    if (mounted) setState(() => _customersWithBulkPayments = keys);
+    final results = await Future.wait([
+      _bulkPaymentRepo.getCustomersWithBulkPayments(salesmanName),
+      _bulkPaymentRepo.getBulkPaymentTotals(salesmanName),
+    ]);
+    if (mounted) {
+      setState(() {
+        _customersWithBulkPayments = results[0] as Set<String>;
+        _bulkPaymentTotals = results[1] as Map<String, int>;
+      });
+    }
   }
 
   String _normalizeCustomerKey(String name) =>
@@ -205,33 +214,36 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       value: _creditProvider,
       child: Scaffold(
         backgroundColor: AppColors.gray100,
-        body: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) => [
-            _buildSliverAppBar(),
-          ],
-          body: !_hasInternetConnection
-              ? _buildNoInternetState()
-              : Consumer<CreditHistoryProvider>(
-                  builder: (context, provider, child) {
-                    if (provider.isLoading && provider.credits.isEmpty) {
-                      return _buildLoadingState();
-                    }
+        body: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+          child: NestedScrollView(
+            headerSliverBuilder: (context, innerBoxIsScrolled) => [
+              _buildSliverAppBar(),
+            ],
+            body: !_hasInternetConnection
+                ? _buildNoInternetState()
+                : Consumer<CreditHistoryProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading && provider.credits.isEmpty) {
+                        return _buildLoadingState();
+                      }
 
-                    if (provider.hasError) {
-                      return _buildErrorState(provider.errorMessage);
-                    }
+                      if (provider.hasError) {
+                        return _buildErrorState(provider.errorMessage);
+                      }
 
-                    if (provider.credits.isEmpty && !provider.isLoading) {
-                      return _buildEmptyState();
-                    }
+                      if (provider.credits.isEmpty && !provider.isLoading) {
+                        return _buildEmptyState();
+                      }
 
-                    return RefreshIndicator(
-                      onRefresh: _refreshCredits,
-                      color: AppColors.pepsiBlue,
-                      child: _buildBillList(provider.credits),
-                    );
-                  },
-                ),
+                      return RefreshIndicator(
+                        onRefresh: _refreshCredits,
+                        color: AppColors.pepsiBlue,
+                        child: _buildBillList(provider.credits),
+                      );
+                    },
+                  ),
+          ),
         ),
       ),
     );
@@ -1300,7 +1312,26 @@ class _CreditRecordPageState extends State<CreditRecordPage>
   // ========== Main UI Building Methods ==========
 
   Widget _buildTotalCreditHeader(List<CreditHistory> credits) {
-    final totalCredit = credits.fold<int>(0, (sum, c) => sum + c.amountDue);
+    // Sum of amountDue across all bills
+    final rawTotal = credits.fold<int>(0, (sum, c) => sum + c.amountDue);
+
+    // Subtract bulk payments already collected (stored separately per customer)
+    int totalBulkPaid = 0;
+    if (_bulkPaymentTotals.isNotEmpty) {
+      // Group bills by normalised customer key to cap deduction per customer
+      final customerTotals = <String, int>{};
+      for (final c in credits) {
+        final key = _normalizeCustomerKey(c.customerName);
+        customerTotals[key] = (customerTotals[key] ?? 0) + c.amountDue;
+      }
+      for (final entry in _bulkPaymentTotals.entries) {
+        final customerDue = customerTotals[entry.key] ?? 0;
+        // Don't subtract more than the customer owes
+        totalBulkPaid += entry.value.clamp(0, customerDue);
+      }
+    }
+
+    final totalCredit = rawTotal - totalBulkPaid;
     final totalCratesDue = credits.fold<int>(0, (sum, c) => sum + c.cratesDue);
     final totalBills = credits.length;
 
