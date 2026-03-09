@@ -1486,13 +1486,17 @@ class _DashboardPageState extends State<DashboardPage>
 
     // Check which types actually exist in products
     final hasPepsi = products.any((p) => p.type == 'pepsi' && p.isAvailable);
-    final hasMasterCola =
-        products.any((p) => p.type == 'masterCola' && p.isAvailable);
+    final hasMasterCola = products.any(
+      (p) => p.type == 'masterCola' && p.isAvailable,
+    );
     final hasOthers = products.any((p) => p.type == 'others' && p.isAvailable);
 
     // Count how many types exist
-    final typeCount =
-        [hasPepsi, hasMasterCola, hasOthers].where((v) => v).length;
+    final typeCount = [
+      hasPepsi,
+      hasMasterCola,
+      hasOthers,
+    ].where((v) => v).length;
 
     // Selection state
     bool allSelected = false;
@@ -1505,7 +1509,8 @@ class _DashboardPageState extends State<DashboardPage>
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final canPrint = allSelected ||
+            final canPrint =
+                allSelected ||
                 pepsiSelected ||
                 masterColaSelected ||
                 othersSelected;
