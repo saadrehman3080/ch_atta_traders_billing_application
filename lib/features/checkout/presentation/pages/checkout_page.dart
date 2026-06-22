@@ -368,6 +368,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
             price: p.price,
             quantity: p.quantity,
             type: p.type,
+            subtypes: p.subtypes,
+            subtypeQuantities: Map.from(p.subtypeQuantities),
           ),
         )
         .toList();
@@ -474,6 +476,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     int? mtCollected,
     int? mtRemaining,
     int? partialPayment,
+    bool includeSubtypeDetails = false,
   }) async {
     final result = await BillPrinter.printBill(
       billId: billId,
@@ -486,6 +489,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       mtCollected: mtCollected,
       mtRemaining: mtRemaining,
       partialPayment: partialPayment,
+      includeSubtypeDetails: includeSubtypeDetails,
     );
 
     if (mounted) {
@@ -623,6 +627,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
+      // Ask user whether to include subtype details on the receipt
+      bool includeSubtypeDetails = false;
+      // Only show the dialog if there are selected products that actually have
+      // subtype quantities entered (not just products that *can* have subtypes).
+      final hasSubtypeProducts = _selectedProducts.any(
+        (p) => p.hasSubtypes && p.subtypeQuantities.values.any((q) => q > 0),
+      );
+      if (hasSubtypeProducts && mounted) {
+        final result = await _showSubtypeDetailDialog();
+        if (result == null) {
+          // User dismissed dialog – cancel print
+          return;
+        }
+        includeSubtypeDetails = result;
+      }
+
       // Generate bill ID and save to Firebase
       final billId = _uuid.v4();
       final success = await _saveBillToFirebase(billId, salesmanIdentifier);
@@ -666,6 +686,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         partialPayment: _paymentType == 'credit' && _partialPayment > 0
             ? _partialPayment
             : null,
+        includeSubtypeDetails: includeSubtypeDetails,
       );
 
       // Call the original onPrint callback
@@ -681,6 +702,92 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ========== Main Container Building Methods ==========
+
+  /// Shows a dialog asking the user whether to include subtype/variant details
+  /// on the printed receipt. Returns true/false, or null if dismissed.
+  Future<bool?> _showSubtypeDetailDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.pepsiWhite,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.receipt_long, color: AppColors.pepsiBlue, size: 40),
+              const SizedBox(height: 16),
+              Text(
+                'Print Details',
+                style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 18),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Include product variant details\n(e.g. Pepsi, 7UP, Dew) on the receipt?',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.helperText.copyWith(
+                  color: AppColors.gray500,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: AppColors.gray300.withValues(alpha: 0.5),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'No',
+                          style: AppTextStyles.smallButton.copyWith(
+                            color: AppColors.gray500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.pepsiBlue,
+                          foregroundColor: AppColors.pepsiWhite,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          'Yes',
+                          style: AppTextStyles.smallButton.copyWith(
+                            color: AppColors.pepsiWhite,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   BoxDecoration _buildContainerDecoration() {
     return BoxDecoration(
@@ -876,17 +983,37 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   Widget _buildProductListItem(Product product) {
     final itemTotal = product.price * product.quantity;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          _buildProductName(product.name),
-          const SizedBox(width: 8),
-          _buildQuantityBadge(product.quantity),
-          const SizedBox(width: 8),
-          _buildItemTotal(itemTotal),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              _buildProductName(product.name),
+              const SizedBox(width: 8),
+              _buildQuantityBadge(product.quantity),
+              const SizedBox(width: 8),
+              _buildItemTotal(itemTotal),
+            ],
+          ),
+        ),
+        if (product.hasSubtypes &&
+            product.subtypeQuantities.values.any((q) => q > 0))
+          Padding(
+            padding: const EdgeInsets.only(left: 12, bottom: 4),
+            child: Text(
+              product.subtypeQuantities.entries
+                  .where((e) => e.value > 0)
+                  .map((e) => '${e.key}(${e.value})')
+                  .join(', '),
+              style: AppTextStyles.billingItems.copyWith(
+                fontSize: 11,
+                color: AppColors.gray500,
+              ),
+            ),
+          ),
+      ],
     );
   }
 

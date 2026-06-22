@@ -35,6 +35,7 @@ class _OrderPageState extends State<OrderPage> {
   final Map<String, int> _originalPrices = {};
   double _lastScrollOffset = 0;
   final CheckoutFormProvider _checkoutFormProvider = CheckoutFormProvider();
+  final Set<String> _expandedProducts = {};
 
   @override
   void initState() {
@@ -245,6 +246,24 @@ class _OrderPageState extends State<OrderPage> {
     context.read<ProductProvider>().decrementQuantity(index);
   }
 
+  void _incrementSubtypeQuantity(int index, String subtype) {
+    context.read<ProductProvider>().incrementSubtypeQuantity(index, subtype);
+  }
+
+  void _decrementSubtypeQuantity(int index, String subtype) {
+    context.read<ProductProvider>().decrementSubtypeQuantity(index, subtype);
+  }
+
+  void _toggleExpansion(String productName) {
+    setState(() {
+      if (_expandedProducts.contains(productName)) {
+        _expandedProducts.remove(productName);
+      } else {
+        _expandedProducts.add(productName);
+      }
+    });
+  }
+
   int get _grandTotal {
     final products = context.read<ProductProvider>().products;
     return BillingCalculations.calculateGrandTotal(products);
@@ -308,6 +327,7 @@ class _OrderPageState extends State<OrderPage> {
     }
 
     productProvider.resetAllQuantities();
+    _expandedProducts.clear();
     _searchController.clear();
     if (_productListScrollController.hasClients) {
       _productListScrollController.animateTo(
@@ -414,6 +434,7 @@ class _OrderPageState extends State<OrderPage> {
     }
     productProvider.resetAllQuantities();
     productProvider.refreshProducts();
+    _expandedProducts.clear();
     _searchController.clear();
     if (_productListScrollController.hasClients) {
       _productListScrollController.animateTo(
@@ -534,9 +555,9 @@ class _OrderPageState extends State<OrderPage> {
           decoration: BoxDecoration(
             color: AppColors.pepsiRedLight.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: AppColors.pepsiRedLight.withValues(alpha: 0.2),
-            ),
+            // border: Border.all(
+            //   color: AppColors.pepsiRedLight.withValues(alpha: 0.2),
+            // ),
           ),
           child: Material(
             color: Colors.transparent,
@@ -551,7 +572,7 @@ class _OrderPageState extends State<OrderPage> {
                 child: Icon(
                   Icons.refresh,
                   color: AppColors.pepsiRedLight,
-                  size: 22,
+                  size: 24,
                 ),
               ),
             ),
@@ -985,6 +1006,7 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildProductItem(Product product, int index) {
     final isUnavailable = !product.isAvailable;
     final isSelected = product.quantity > 0;
+    final isExpanded = _expandedProducts.contains(product.name);
 
     return TapScaleWrapper(
       onTap: isUnavailable
@@ -1001,7 +1023,19 @@ class _OrderPageState extends State<OrderPage> {
             children: [
               _buildProductHeader(product, index, isUnavailable),
               const SizedBox(height: 8),
-              _buildProductFooter(product, isUnavailable, isSelected, index),
+              _buildProductFooter(
+                product,
+                isUnavailable,
+                isSelected,
+                index,
+                isExpanded,
+              ),
+              if (product.hasSubtypes && isExpanded && !isUnavailable) ...[
+                const SizedBox(height: 8),
+
+                const SizedBox(height: 12),
+                _buildSubtypesList(product, index),
+              ],
             ],
           ),
         ),
@@ -1139,11 +1173,16 @@ class _OrderPageState extends State<OrderPage> {
     bool isUnavailable,
     bool isSelected,
     int index,
+    bool isExpanded,
   ) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _buildUnitPrice(product, isUnavailable, index),
+        if (product.hasSubtypes && !isUnavailable) ...[
+          const SizedBox(width: 8),
+          _buildExpandIndicator(isExpanded, product.name),
+        ],
+        const Spacer(),
         if (isSelected && !isUnavailable)
           _buildTotalPrice(product.price * product.quantity),
       ],
@@ -1385,6 +1424,426 @@ class _OrderPageState extends State<OrderPage> {
         fontSize: 16,
         fontWeight: FontWeight.w600,
       ),
+    );
+  }
+
+  // ========== Subtype Building Methods ==========
+
+  Widget _buildExpandIndicator(bool isExpanded, String productName) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _toggleExpansion(productName),
+      child: Container(
+        width: 36,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.pepsiBlue.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.pepsiBlue.withValues(alpha: 0.18),
+          ),
+        ),
+        child: AnimatedRotation(
+          turns: isExpanded ? 0.5 : 0.0,
+          duration: const Duration(milliseconds: 200),
+          child: Icon(
+            Icons.keyboard_arrow_down,
+            color: AppColors.pepsiBlue,
+            size: 22,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubtypesList(Product product, int productIndex) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.pepsiBlue.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.pepsiBlue.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        children: [
+          // Header showing parent product name
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.pepsiBlue.withValues(alpha: 0.08),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(11),
+              ),
+            ),
+            child: Text(
+              product.name,
+              style: AppTextStyles.productItemName.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.pepsiBlue,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          for (int i = 0; i < product.subtypes.length; i++) ...[
+            _buildSubtypeRow(
+              product.subtypes[i],
+              product.subtypeQuantities[product.subtypes[i]] ?? 0,
+              productIndex,
+              product.name,
+            ),
+            if (i < product.subtypes.length - 1)
+              Divider(
+                height: 1,
+                indent: 14,
+                endIndent: 14,
+                color: AppColors.gray300.withValues(alpha: 0.4),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubtypeRow(
+    String subtype,
+    int quantity,
+    int productIndex,
+    String productName,
+  ) {
+    final bool isSelected = quantity > 0;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showSubtypeQuantityDialog(
+        subtype,
+        quantity,
+        productIndex,
+        productName,
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        color: isSelected
+            ? AppColors.pepsiBlue.withValues(alpha: 0.05)
+            : Colors.transparent,
+        child: Row(
+          children: [
+            // Animated dot indicator
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: isSelected ? 8 : 6,
+              height: isSelected ? 8 : 6,
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.pepsiBlue : AppColors.gray300,
+                shape: BoxShape.circle,
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: AppColors.pepsiBlue.withValues(alpha: 0.3),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                subtype,
+                style: AppTextStyles.productItemName.copyWith(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: isSelected
+                      ? Colors.black87
+                      : Colors.black.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.pepsiBlue.withValues(alpha: 0.08)
+                    : AppColors.gray100,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isSelected
+                      ? AppColors.pepsiBlue.withValues(alpha: 0.3)
+                      : AppColors.gray300.withValues(alpha: 0.6),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildSubtypeButton(
+                    icon: Icons.remove_rounded,
+                    color: quantity > 0
+                        ? AppColors.pepsiRed
+                        : AppColors.gray300,
+                    tooltip: 'Decrease $subtype',
+                    onPressed: () =>
+                        _decrementSubtypeQuantity(productIndex, subtype),
+                  ),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 150),
+                    transitionBuilder: (child, animation) =>
+                        ScaleTransition(scale: animation, child: child),
+                    child: SizedBox(
+                      key: ValueKey<int>(quantity),
+                      width: 32,
+                      child: Text(
+                        '$quantity',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? AppColors.pepsiBlue
+                              : Colors.black.withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                  ),
+                  _buildSubtypeButton(
+                    icon: Icons.add_rounded,
+                    color: AppColors.pepsiBlue,
+                    tooltip: 'Increase $subtype',
+                    onPressed: () =>
+                        _incrementSubtypeQuantity(productIndex, subtype),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSubtypeQuantityDialog(
+    String subtype,
+    int currentQuantity,
+    int productIndex,
+    String productName,
+  ) {
+    final quantityController = TextEditingController(
+      text: currentQuantity > 0 ? currentQuantity.toString() : '',
+    );
+
+    showModal<void>(
+      context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        transitionDuration: Duration(milliseconds: 300),
+        reverseTransitionDuration: Duration(milliseconds: 200),
+      ),
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.pepsiWhite,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildQuantityDialogTitle(),
+                const SizedBox(height: 4),
+                Text(
+                  productName,
+                  style: AppTextStyles.productItemName.copyWith(
+                    fontSize: 12,
+                    color: AppColors.pepsiBlue,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 2),
+                _buildQuantityDialogProductName(subtype),
+                const SizedBox(height: 24),
+                _buildSubtypeQuickButtons(
+                  productIndex,
+                  subtype,
+                  quantityController,
+                ),
+                const SizedBox(height: 16),
+                _buildQuantityTextField(quantityController),
+                const SizedBox(height: 24),
+                _buildSubtypeDialogActions(
+                  productIndex,
+                  subtype,
+                  quantityController,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).whenComplete(() {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        quantityController.dispose();
+      });
+    });
+  }
+
+  Widget _buildSubtypeQuickButtons(
+    int productIndex,
+    String subtype,
+    TextEditingController controller,
+  ) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildSubtypeQuickButton(
+                5,
+                productIndex,
+                subtype,
+                controller,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSubtypeQuickButton(
+                10,
+                productIndex,
+                subtype,
+                controller,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSubtypeQuickButton(
+                20,
+                productIndex,
+                subtype,
+                controller,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSubtypeQuickButton(
+                50,
+                productIndex,
+                subtype,
+                controller,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildSubtypeQuickButton(100, productIndex, subtype, controller),
+      ],
+    );
+  }
+
+  Widget _buildSubtypeQuickButton(
+    int quantity,
+    int productIndex,
+    String subtype,
+    TextEditingController controller,
+  ) {
+    return ElevatedButton(
+      onPressed: () {
+        context.read<ProductProvider>().updateSubtypeQuantity(
+          productIndex,
+          subtype,
+          quantity,
+        );
+        Navigator.pop(context);
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.pepsiBlue.withValues(alpha: 0.1),
+        foregroundColor: AppColors.pepsiBlue,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppColors.pepsiBlue, width: 1),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: Text(
+        quantity.toString(),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _buildSubtypeDialogActions(
+    int productIndex,
+    String subtype,
+    TextEditingController controller,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.gray500,
+              side: const BorderSide(color: AppColors.gray300, width: 1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () {
+              final quantity = int.tryParse(controller.text) ?? 0;
+              context.read<ProductProvider>().updateSubtypeQuantity(
+                productIndex,
+                subtype,
+                quantity.clamp(0, 999999),
+              );
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.pepsiBlue,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            child: const Text(
+              'Set Quantity',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubtypeButton({
+    required IconData icon,
+    required Color color,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+      padding: EdgeInsets.zero,
+      iconSize: 22,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(icon),
+      color: color,
     );
   }
 }

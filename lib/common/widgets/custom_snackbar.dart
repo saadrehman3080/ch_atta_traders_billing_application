@@ -67,7 +67,7 @@ class CustomSnackBar {
         );
       case SnackBarType.info:
         return _SnackBarConfig(
-          backgroundColor: AppColors.pepsiBlueLight, // Using Pepsi Blue Light
+          backgroundColor: AppColors.pepsiBlue, // Using Pepsi Blue Light
           icon: Icons.info,
         );
     }

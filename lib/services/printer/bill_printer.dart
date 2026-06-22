@@ -681,6 +681,7 @@ class BillPrinter {
     int? partialPayment,
     bool isReferenceOnly = false,
     List<PartialPayment>? paymentHistory,
+    bool includeSubtypeDetails = false,
   }) async {
     try {
       // Check if printer is connected
@@ -759,12 +760,11 @@ class BillPrinter {
       for (final product in products) {
         final itemTotal = product.price * product.quantity;
 
-        // Product name (truncate if too long)
-        String productName = product.name;
-        if (productName.length > 20) {
-          productName = '${productName.substring(0, 17)}...';
+        // Product name (wrap if too long)
+        final productNameLines = _wrapText(product.name, 32, indent: '  ');
+        for (final line in productNameLines) {
+          bytes.addAll('$line\n'.codeUnits);
         }
-        bytes.addAll('$productName\n'.codeUnits);
 
         // Quantity and price details
         final qtyPrice =
@@ -773,6 +773,36 @@ class BillPrinter {
         final spacing = 32 - qtyPrice.length - totalStr.length;
         final line = qtyPrice + (' ' * (spacing > 0 ? spacing : 1)) + totalStr;
         bytes.addAll('$line\n'.codeUnits);
+
+        // Print subtype/variant breakdown if requested
+        if (includeSubtypeDetails && product.hasSubtypes) {
+          final subtypeEntries = product.subtypeQuantities.entries
+              .where((e) => e.value > 0)
+              .map((e) => '${e.key}(${e.value})')
+              .toList();
+
+          if (subtypeEntries.isNotEmpty) {
+            // Wrap variants into a few compact lines so receipt isn't too tall.
+            // Aim for ~26 chars per line (58mm printer width).
+            const maxLineLength = 26;
+            var line = '  Variants: ';
+
+            for (final part in subtypeEntries) {
+              final candidate = line.endsWith(' ')
+                  ? '$line$part'
+                  : '$line, $part';
+              if (candidate.length > maxLineLength &&
+                  line.trim() != 'Variants:') {
+                bytes.addAll('$line\n'.codeUnits);
+                line = '    $part';
+              } else {
+                line = candidate;
+              }
+            }
+
+            bytes.addAll('$line\n'.codeUnits);
+          }
+        }
       }
 
       bytes.addAll('--------------------------------\n'.codeUnits);
@@ -1077,6 +1107,68 @@ class BillPrinter {
       default:
         return type.toUpperCase();
     }
+  }
+
+  /// Wraps a text string to multiple lines for thermal receipts.
+  ///
+  /// - [maxLineLength]: max characters per line (printer width).
+  /// - [indent]: string to prefix lines after the first for readability.
+  static List<String> _wrapText(
+    String text,
+    int maxLineLength, {
+    String indent = '',
+  }) {
+    if (maxLineLength <= 0) return [text];
+
+    final List<String> lines = [];
+    final words = text.split(RegExp(r'\s+'));
+
+    String current = '';
+    var allowedLength = maxLineLength;
+
+    for (final word in words) {
+      if (current.isEmpty) {
+        if (word.length > allowedLength) {
+          // Break long words
+          var remaining = word;
+          while (remaining.length > allowedLength) {
+            lines.add(remaining.substring(0, allowedLength));
+            remaining = remaining.substring(allowedLength);
+            // Subsequent lines should account for indent
+            allowedLength = maxLineLength - indent.length;
+          }
+          current = remaining;
+        } else {
+          current = word;
+        }
+      } else if (current.length + 1 + word.length <= allowedLength) {
+        current = '$current $word';
+      } else {
+        lines.add(current);
+        // After first line, apply indent (affects allowed width)
+        allowedLength = maxLineLength - indent.length;
+        if (word.length > allowedLength) {
+          var remaining = word;
+          while (remaining.length > allowedLength) {
+            lines.add('$indent${remaining.substring(0, allowedLength)}');
+            remaining = remaining.substring(allowedLength);
+          }
+          current = remaining;
+        } else {
+          current = word;
+        }
+      }
+    }
+
+    if (current.isNotEmpty) {
+      if (lines.isEmpty) {
+        lines.add(current);
+      } else {
+        lines.add('$indent$current');
+      }
+    }
+
+    return lines;
   }
 
   /// Adds formatted product rows to byte list

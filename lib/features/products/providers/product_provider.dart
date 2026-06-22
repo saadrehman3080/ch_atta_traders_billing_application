@@ -78,7 +78,17 @@ class ProductProvider extends ChangeNotifier {
   /// [quantity] - The new quantity value
   void updateProductQuantity(int index, int quantity) {
     if (index >= 0 && index < _products.length) {
-      _products[index] = _products[index].copyWith(quantity: quantity);
+      final product = _products[index];
+      // When the main counter is used directly on a subtype product,
+      // clear the subtype breakdown so the totals stay consistent.
+      if (product.hasSubtypes) {
+        _products[index] = product.copyWith(
+          quantity: quantity,
+          subtypeQuantities: {},
+        );
+      } else {
+        _products[index] = product.copyWith(quantity: quantity);
+      }
       notifyListeners();
     }
   }
@@ -105,6 +115,67 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
+  /// Increments the quantity of a subtype within a product.
+  ///
+  /// Also updates the main product quantity to the sum of all subtype quantities.
+  void incrementSubtypeQuantity(int index, String subtype) {
+    if (index >= 0 && index < _products.length) {
+      final product = _products[index];
+      if (!product.hasSubtypes) return;
+
+      final newSubtypeQty = Map<String, int>.from(product.subtypeQuantities);
+      newSubtypeQty[subtype] = (newSubtypeQty[subtype] ?? 0) + 1;
+      final newTotal = newSubtypeQty.values.fold(0, (sum, q) => sum + q);
+
+      _products[index] = product.copyWith(
+        subtypeQuantities: newSubtypeQty,
+        quantity: newTotal,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Decrements the quantity of a subtype within a product.
+  ///
+  /// Also updates the main product quantity to the sum of all subtype quantities.
+  void decrementSubtypeQuantity(int index, String subtype) {
+    if (index >= 0 && index < _products.length) {
+      final product = _products[index];
+      if (!product.hasSubtypes) return;
+
+      final current = product.subtypeQuantities[subtype] ?? 0;
+      if (current <= 0) return;
+
+      final newSubtypeQty = Map<String, int>.from(product.subtypeQuantities);
+      newSubtypeQty[subtype] = current - 1;
+      final newTotal = newSubtypeQty.values.fold(0, (sum, q) => sum + q);
+
+      _products[index] = product.copyWith(
+        subtypeQuantities: newSubtypeQty,
+        quantity: newTotal,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Sets a specific subtype quantity and recalculates the main quantity.
+  void updateSubtypeQuantity(int index, String subtype, int quantity) {
+    if (index >= 0 && index < _products.length) {
+      final product = _products[index];
+      if (!product.hasSubtypes) return;
+
+      final newSubtypeQty = Map<String, int>.from(product.subtypeQuantities);
+      newSubtypeQty[subtype] = quantity.clamp(0, 999999);
+      final newTotal = newSubtypeQty.values.fold(0, (sum, q) => sum + q);
+
+      _products[index] = product.copyWith(
+        subtypeQuantities: newSubtypeQty,
+        quantity: newTotal,
+      );
+      notifyListeners();
+    }
+  }
+
   /// Updates the price of a product.
   ///
   /// [index] - index of the product in the list
@@ -119,7 +190,7 @@ class ProductProvider extends ChangeNotifier {
   /// Resets all product quantities to zero.
   void resetAllQuantities() {
     for (int i = 0; i < _products.length; i++) {
-      _products[i] = _products[i].copyWith(quantity: 0);
+      _products[i] = _products[i].copyWith(quantity: 0, subtypeQuantities: {});
     }
     notifyListeners();
     debugPrint('All product quantities reset');

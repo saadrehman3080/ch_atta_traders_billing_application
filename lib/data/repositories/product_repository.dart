@@ -53,12 +53,19 @@ class ProductRepository {
         final data = doc.data();
         debugPrint('Product document: ${doc.id} -> $data');
 
+        final subtypes =
+            (data['subtypes'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [];
+
         return Product(
           name: doc.id, // Document ID is the product name
           price: (data['price'] as num?)?.toInt() ?? 0,
           quantity: 0, // Default quantity is 0 for ordering
           isAvailable: data['isAvailable'] as bool? ?? true,
           type: data['type'] as String? ?? 'others',
+          subtypes: subtypes,
         );
       }).toList();
 

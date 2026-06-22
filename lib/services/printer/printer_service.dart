@@ -202,6 +202,7 @@ class PrinterService extends ChangeNotifier {
             ),
           );
           debugPrint('[PrinterService] Updated state with existing connection');
+          await _refreshBatteryLevel();
         }
       } else {
         debugPrint('[PrinterService] No active connection found');
@@ -219,6 +220,22 @@ class PrinterService extends ChangeNotifier {
     final hasPermissions = await requestBluetoothPermissions();
     if (!hasPermissions) {
       return false;
+    }
+
+    // If another printer is already connected, disconnect it first.
+    if (_state.isConnected &&
+        _state.connectedPrinterAddress != printer.macAdress) {
+      debugPrint(
+        '[PrinterService] Disconnecting previous printer before connecting ${printer.name}',
+      );
+      await disconnect();
+    }
+
+    // If already connected to the selected printer, no need to reconnect.
+    if (_state.isConnected &&
+        _state.connectedPrinterAddress == printer.macAdress) {
+      debugPrint('[PrinterService] Already connected to ${printer.name}');
+      return true;
     }
 
     _updateState(
@@ -252,6 +269,7 @@ class PrinterService extends ChangeNotifier {
           ),
         );
 
+        await _refreshBatteryLevel();
         return true;
       } else {
         throw Exception('Connection failed');
@@ -283,7 +301,9 @@ class PrinterService extends ChangeNotifier {
     try {
       await PrintBluetoothThermal.disconnect;
 
-      _updateState(_state.copyWith(clearConnectedAddress: true));
+      _updateState(
+        _state.copyWith(clearConnectedAddress: true, clearBatteryLevel: true),
+      );
 
       debugPrint('[PrinterService] Disconnected successfully');
       return true;
@@ -371,7 +391,9 @@ class PrinterService extends ChangeNotifier {
 
       if (!isConnected && _state.isConnected) {
         debugPrint('[PrinterService] Connection lost');
-        _updateState(_state.copyWith(clearConnectedAddress: true));
+        _updateState(
+          _state.copyWith(clearConnectedAddress: true, clearBatteryLevel: true),
+        );
       } else if (isConnected) {
         // Ensure we have the correct address
         if (!_state.isConnected) {
@@ -383,9 +405,24 @@ class PrinterService extends ChangeNotifier {
             );
           }
         }
+        await _refreshBatteryLevel();
       }
     } catch (e) {
       debugPrint('[PrinterService] Error verifying connection: $e');
+    }
+  }
+
+  /// Refresh connected printer battery level.
+  Future<void> _refreshBatteryLevel() async {
+    if (!_state.isConnected) return;
+
+    try {
+      final batteryLevel = await PrintBluetoothThermal.batteryLevel;
+      if (batteryLevel >= 0) {
+        _updateState(_state.copyWith(batteryLevel: batteryLevel));
+      }
+    } catch (e) {
+      debugPrint('[PrinterService] Error refreshing battery level: $e');
     }
   }
 

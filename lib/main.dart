@@ -48,7 +48,7 @@ class ChAttaBillingApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ProductProvider()),
       ],
       child: MaterialApp.router(
-        debugShowCheckedModeBanner: false,
+        debugShowCheckedModeBanner: true,
         routerConfig: appRouter,
         theme: AppTheme.light,
       ),

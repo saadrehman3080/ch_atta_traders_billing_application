@@ -6,6 +6,7 @@ class PrinterState {
   final bool isScanning;
   final String? connectingPrinterAddress;
   final String? connectedPrinterAddress;
+  final int? batteryLevel;
   final String? errorMessage;
 
   const PrinterState({
@@ -13,6 +14,7 @@ class PrinterState {
     this.isScanning = false,
     this.connectingPrinterAddress,
     this.connectedPrinterAddress,
+    this.batteryLevel,
     this.errorMessage,
   });
 
@@ -31,9 +33,11 @@ class PrinterState {
     bool? isScanning,
     String? connectingPrinterAddress,
     String? connectedPrinterAddress,
+    int? batteryLevel,
     String? errorMessage,
     bool clearConnectingAddress = false,
     bool clearConnectedAddress = false,
+    bool clearBatteryLevel = false,
     bool clearError = false,
   }) {
     return PrinterState(
@@ -45,6 +49,9 @@ class PrinterState {
       connectedPrinterAddress: clearConnectedAddress
           ? null
           : connectedPrinterAddress ?? this.connectedPrinterAddress,
+      batteryLevel: clearBatteryLevel
+          ? null
+          : batteryLevel ?? this.batteryLevel,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }

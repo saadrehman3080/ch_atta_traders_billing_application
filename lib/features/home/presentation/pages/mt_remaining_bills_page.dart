@@ -72,10 +72,6 @@ class _MtRemainingBillsPageState extends State<MtRemainingBillsPage> {
               return _buildErrorState(provider.errorMessage);
             }
 
-            if (provider.mtRemainingBills.isEmpty && _hasLoaded) {
-              return _buildEmptyState();
-            }
-
             return RefreshIndicator(
               onRefresh: _refreshData,
               color: AppColors.pepsiRedLight,
@@ -402,50 +398,6 @@ class _MtRemainingBillsPageState extends State<MtRemainingBillsPage> {
                   vertical: 10,
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.pepsiRedLight.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.recycling_outlined,
-                color: AppColors.pepsiRedLight,
-                size: 40,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'No MT Remaining',
-              style: AppTextStyles.productItemName.copyWith(
-                color: Colors.black87,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'No credit bills with remaining crates found for today.',
-              style: AppTextStyles.helperText.copyWith(
-                color: AppColors.gray500,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),

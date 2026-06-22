@@ -48,3 +48,11 @@ Redesign the credit/sale no data page only retry button.
 In the detail dialog when more then 4 items are present show shroll down lcon.
 If product is not available   show it's price and make it unselectable.
 In the database name is not the unique identifier. Change it to ID_name.
+
+
+
+
+changes after 22 june 2026
+1. Added the battery percentage of connected printer.
+2. If another printer is already connected, disconnect it first before connecting to a new one.
+3. 

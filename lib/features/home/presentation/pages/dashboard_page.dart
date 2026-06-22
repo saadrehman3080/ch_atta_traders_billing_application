@@ -345,7 +345,7 @@ class _DashboardPageState extends State<DashboardPage>
         onTap: () => _handleLogout(context),
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          width: 38,
+          width: 48,
           height: 38,
           decoration: BoxDecoration(
             color: AppColors.pepsiRed.withValues(alpha: 0.06),
@@ -354,7 +354,7 @@ class _DashboardPageState extends State<DashboardPage>
           child: const Icon(
             Icons.logout_rounded,
             color: AppColors.pepsiRed,
-            size: 18,
+            size: 20,
           ),
         ),
       ),
@@ -492,7 +492,17 @@ class _DashboardPageState extends State<DashboardPage>
                 'Credit',
                 'Rs. ${formatCashAmount(data.totalCredit)}',
                 Icons.credit_card_outlined,
-                onTap: () => widget.onNavigateToCredit?.call(),
+                onTap: () {
+                  if (data.totalCredit == 0) {
+                    CustomSnackBar.show(
+                      context,
+                      message: 'No credit bills to show',
+                      type: SnackBarType.info,
+                    );
+                  } else {
+                    widget.onNavigateToCredit?.call();
+                  }
+                },
               ),
             ),
             const SizedBox(width: 10),
@@ -2210,6 +2220,27 @@ class _DashboardPageState extends State<DashboardPage>
                         : AppColors.gray500,
                   ),
                 ),
+                if (isConnected &&
+                    _printerService.state.batteryLevel != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.battery_charging_full,
+                        size: 12,
+                        color: AppColors.pepsiBlue,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_printerService.state.batteryLevel}% battery',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 11,
+                          color: AppColors.pepsiBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

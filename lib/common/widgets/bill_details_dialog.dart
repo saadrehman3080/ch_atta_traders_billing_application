@@ -96,6 +96,10 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
         }
       }
 
+      final hasSubtypeProducts = widget.bill.products.any(
+        (p) => p.hasSubtypes && p.subtypeQuantities.values.any((q) => q > 0),
+      );
+
       final result = await BillPrinter.printBill(
         billId: widget.bill.billId,
         customerName: widget.bill.customerName,
@@ -106,6 +110,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
         paymentType: paymentType,
         isReferenceOnly: true,
         paymentHistory: paymentHistory,
+        includeSubtypeDetails: hasSubtypeProducts,
       );
 
       if (mounted) {
@@ -252,6 +257,15 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                             itemCount: widget.bill.products.length,
                             itemBuilder: (context, index) {
                               final product = widget.bill.products[index];
+
+                              // Build list of selected subtype variants (if any)
+                              final variantDetails = product
+                                  .subtypeQuantities
+                                  .entries
+                                  .where((e) => e.value > 0)
+                                  .map((e) => '${e.key} ${e.value}')
+                                  .toList();
+
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 16),
                                 child: _buildBillItem(
@@ -259,6 +273,9 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                                   product.name,
                                   '@${formatCashAmount(product.price)}',
                                   'Rs. ${formatCashAmount(product.price * product.quantity)}',
+                                  variantDetails: variantDetails.isEmpty
+                                      ? null
+                                      : variantDetails,
                                 ),
                               );
                             },
@@ -650,8 +667,9 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
     String quantity,
     String name,
     String price,
-    String total,
-  ) {
+    String total, {
+    List<String>? variantDetails,
+  }) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -659,6 +677,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 40,
@@ -689,6 +708,19 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                     color: AppColors.gray500,
                   ),
                 ),
+                if (variantDetails != null && variantDetails.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    variantDetails.join(', '),
+                    style: AppTextStyles.helperText.copyWith(
+                      fontSize: 11,
+                      color: AppColors.gray400,
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
