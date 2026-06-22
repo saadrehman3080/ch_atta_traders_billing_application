@@ -37,8 +37,8 @@ class Product {
 
     final subtypeQuantities = <String, int>{};
     if (json['subtypeQuantities'] != null) {
-      (json['subtypeQuantities'] as Map<String, dynamic>).forEach((key, value) {
-        subtypeQuantities[key] = (value as num).toInt();
+      (json['subtypeQuantities'] as Map).forEach((key, value) {
+        subtypeQuantities[key.toString()] = (value as num).toInt();
       });
     }
 

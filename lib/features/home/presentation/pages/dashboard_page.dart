@@ -1,16 +1,23 @@
 import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
+import 'package:ch_atta_traders_billing_application/common/widgets/bill_details_dialog.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
+import 'package:ch_atta_traders_billing_application/common/widgets/pending_bills_sync_widget.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
+import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
+import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.dart';
+import 'package:ch_atta_traders_billing_application/data/models/pending_bill.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
+import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/cleared_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/discounted_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/presentation/pages/mt_remaining_bills_page.dart';
 import 'package:ch_atta_traders_billing_application/features/home/providers/dashboard_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_service.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
@@ -190,6 +197,7 @@ class _DashboardPageState extends State<DashboardPage>
                 _buildTodayCollectionCard(),
                 _buildPreviousDayCollectionCard(),
                 _buildPrintersCard(),
+                _buildPendingSyncCard(),
               ],
             ),
           ),
@@ -1116,6 +1124,341 @@ class _DashboardPageState extends State<DashboardPage>
             const SizedBox(height: 24),
             _buildNewBillButton(),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ========== Pending Sync Card ==========
+
+  /// Converts a [PendingBill] back to a [BillBase] for display in the
+  /// existing [BillDetailsDialog].
+  BillBase _pendingBillToBillBase(PendingBill bill) {
+    final products = bill.productsJson.map((j) => Product.fromJson(j)).toList();
+
+    if (bill.billType == 'sale') {
+      return SaleHistory(
+        billId: bill.billId,
+        customerName: bill.customerName,
+        date: bill.date,
+        products: products,
+        discount: bill.discount,
+        billType: BillType.fromJson(bill.paymentType),
+      );
+    } else {
+      return CreditHistory(
+        billId: bill.billId,
+        customerName: bill.customerName,
+        date: bill.date,
+        products: products,
+        discount: bill.discount,
+        isPaid: bill.isPaid,
+        amountDue: bill.amountDue,
+        cratesDue: bill.cratesDue,
+        billType: BillType.credit,
+        partialPayments: bill.partialPaymentsJson
+            .map((j) => PartialPayment.fromJson(j))
+            .toList(),
+      );
+    }
+  }
+
+  void _showPendingBillDetails(PendingBill bill) {
+    final billBase = _pendingBillToBillBase(bill);
+    showDialog(
+      context: context,
+      builder: (_) => BillDetailsDialog(
+        bill: billBase,
+        accentColor: bill.status == PendingBillStatus.failed
+            ? AppColors.pepsiRed
+            : Colors.orange.shade700,
+      ),
+    );
+  }
+
+  Widget _buildPendingSyncCard() {
+    return ValueListenableBuilder(
+      valueListenable: OfflineBillService.boxListenable,
+      builder: (context, box, _) {
+        final pendingBills =
+            box.values
+                .where(
+                  (b) =>
+                      b.status == PendingBillStatus.pending ||
+                      b.status == PendingBillStatus.failed,
+                )
+                .toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        if (pendingBills.isEmpty) return const SizedBox.shrink();
+
+        final failedCount = pendingBills
+            .where((b) => b.status == PendingBillStatus.failed)
+            .length;
+
+        final accentColor = failedCount > 0
+            ? AppColors.pepsiRed
+            : Colors.orange.shade700;
+
+        return Container(
+          margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: accentColor.withValues(alpha: 0.25)),
+            boxShadow: [
+              BoxShadow(
+                color: accentColor.withValues(alpha: 0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ──────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        failedCount > 0
+                            ? Icons.sync_problem_rounded
+                            : Icons.cloud_upload_outlined,
+                        color: accentColor,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            failedCount > 0
+                                ? '$failedCount Bill${failedCount > 1 ? 's' : ''} Failed to Sync'
+                                : '${pendingBills.length} Bill${pendingBills.length > 1 ? 's' : ''} Pending Sync',
+                            style: AppTextStyles.productItemName.copyWith(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: accentColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Saved locally — tap a bill to view details',
+                            style: AppTextStyles.helperText.copyWith(
+                              color: AppColors.gray500,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${pendingBills.length}',
+                        style: AppTextStyles.productItemName.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: accentColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Divider(
+                height: 1,
+                color: AppColors.gray300.withValues(alpha: 0.5),
+              ),
+
+              // ── Bill List ────────────────────────────────────────────────
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pendingBills.length,
+                separatorBuilder: (_, _) => Divider(
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                  color: AppColors.gray300.withValues(alpha: 0.4),
+                ),
+                itemBuilder: (context, index) =>
+                    _buildPendingBillRow(pendingBills[index]),
+              ),
+
+              // ── Sync Footer ───────────────────────────────────────────────
+              Divider(
+                height: 1,
+                color: AppColors.gray300.withValues(alpha: 0.5),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: PendingBillsSyncWidget(
+                  accentColor: accentColor,
+                  onSyncComplete: (result) {
+                    final synced = result['synced'] ?? 0;
+                    final failed = result['failed'] ?? 0;
+                    if (!context.mounted) return;
+                    if (synced > 0 || failed > 0) {
+                      CustomSnackBar.show(
+                        context,
+                        message: failed > 0
+                            ? '$synced synced, $failed failed'
+                            : '$synced bill${synced > 1 ? 's' : ''} synced',
+                        type: failed > 0
+                            ? SnackBarType.warning
+                            : SnackBarType.success,
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPendingBillRow(PendingBill bill) {
+    final isFailed = bill.status == PendingBillStatus.failed;
+    final isSale = bill.billType == 'sale';
+    final statusColor = isFailed ? AppColors.pepsiRed : Colors.orange.shade600;
+    final statusLabel = isFailed ? 'Failed' : 'Pending';
+
+    final total =
+        bill.productsJson.fold<int>(
+          0,
+          (sum, p) =>
+              sum + ((p['price'] as int? ?? 0) * (p['quantity'] as int? ?? 0)),
+        ) -
+        bill.discount;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showPendingBillDetails(bill),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              // Bill type icon
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: (isSale ? AppColors.pepsiBlue : Colors.deepPurple)
+                      .withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isSale ? Icons.receipt_outlined : Icons.credit_card_outlined,
+                  size: 18,
+                  color: isSale ? AppColors.pepsiBlue : Colors.deepPurple,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Customer name + date
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      toTitleCase(bill.customerName),
+                      style: AppTextStyles.productItemName.copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${bill.date.day}/${bill.date.month}/${bill.date.year}  •  ${isSale ? 'Sale' : 'Credit'}',
+                      style: AppTextStyles.helperText.copyWith(
+                        fontSize: 11,
+                        color: AppColors.gray500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Amount + status badge
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Rs. ${formatCashAmount(total)}',
+                    style: AppTextStyles.productItemName.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          statusLabel,
+                          style: AppTextStyles.helperText.copyWith(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: AppColors.gray400,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -30,7 +30,6 @@ class _OrderPageState extends State<OrderPage> {
   final ScrollController _productListScrollController = ScrollController();
   bool _isCheckoutVisible = false;
   List<Product> _filteredProducts = [];
-  bool _hasInternetConnection = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   final Map<String, int> _originalPrices = {};
   double _lastScrollOffset = 0;
@@ -42,7 +41,6 @@ class _OrderPageState extends State<OrderPage> {
     super.initState();
     _searchController.addListener(_filterProducts);
     _productListScrollController.addListener(_handleScrollDirection);
-    _initConnectivity();
     _setupConnectivityListener();
     // Load products from Firebase
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -92,40 +90,19 @@ class _OrderPageState extends State<OrderPage> {
     }
   }
 
-  /// Initialize connectivity check on app start
-  Future<void> _initConnectivity() async {
-    try {
-      final result = await Connectivity().checkConnectivity();
-      _updateConnectionStatus(result);
-    } catch (e) {
-      debugPrint('Error checking connectivity: $e');
-      setState(() => _hasInternetConnection = false);
-    }
-  }
-
-  /// Setup listener for connectivity changes
+  /// Listens for connectivity changes and auto-reloads products when
+  /// the connection is restored after being offline.
   void _setupConnectivityListener() {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       List<ConnectivityResult> results,
     ) {
-      _updateConnectionStatus(results);
-    });
-  }
-
-  /// Update connection status based on connectivity results
-  void _updateConnectionStatus(List<ConnectivityResult> results) {
-    final hasConnection =
-        results.isNotEmpty &&
-        !results.every((result) => result == ConnectivityResult.none);
-
-    if (mounted && _hasInternetConnection != hasConnection) {
-      setState(() => _hasInternetConnection = hasConnection);
-
-      // Reload data when connection is restored
-      if (hasConnection) {
+      final hasConnection =
+          results.isNotEmpty &&
+          !results.every((r) => r == ConnectivityResult.none);
+      if (hasConnection && mounted) {
         context.read<ProductProvider>().loadProducts();
       }
-    }
+    });
   }
 
   List<Product> _getFilteredProducts(List<Product> allProducts) {
@@ -156,15 +133,6 @@ class _OrderPageState extends State<OrderPage> {
         final int selectedCount = BillingCalculations.countSelectedProducts(
           productProvider.products,
         );
-
-        // Show no internet state
-        if (!_hasInternetConnection) {
-          return Scaffold(
-            backgroundColor: AppColors.gray100,
-            appBar: _buildAppBar(selectedCount),
-            body: _buildNoInternetState(),
-          );
-        }
 
         // Show loading indicator
         if (productProvider.isLoading) {
@@ -394,13 +362,7 @@ class _OrderPageState extends State<OrderPage> {
   PreferredSizeWidget _buildAppBar(int selectedCount) {
     return AppBar(
       title: _buildAppBarTitle(selectedCount),
-      actions: [
-        if (_hasInternetConnection) ...[
-          _buildResetButton(),
-          SizedBox(width: 8),
-          _buildPrintButton(),
-        ],
-      ],
+      actions: [_buildResetButton(), SizedBox(width: 8), _buildPrintButton()],
       backgroundColor: AppColors.pepsiWhite,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -415,7 +377,7 @@ class _OrderPageState extends State<OrderPage> {
     return Text(
       _isCheckoutVisible
           ? 'CHECKOUT'
-          : (!_hasInternetConnection || selectedCount == 0
+          : (selectedCount == 0
                 ? 'New Order'
                 : 'GT Rs. ${formatCashAmount(_grandTotal)}'),
       style: AppTextStyles.pageTitleBlack,
@@ -697,46 +659,6 @@ class _OrderPageState extends State<OrderPage> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildNoInternetState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: AppColors.pepsiBlue.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.wifi_off_outlined,
-                size: 48,
-                color: AppColors.pepsiBlue,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Internet Connection',
-              style: AppTextStyles.pageTitleBlack.copyWith(fontSize: 20),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Waiting for connection. Will update automatically when restored.',
-              style: AppTextStyles.helperText.copyWith(
-                color: AppColors.gray500,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }

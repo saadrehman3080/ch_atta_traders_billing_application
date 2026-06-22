@@ -680,6 +680,7 @@ class BillPrinter {
     int? mtRemaining,
     int? partialPayment,
     bool isReferenceOnly = false,
+    bool isPendingSync = false,
     List<PartialPayment>? paymentHistory,
     bool includeSubtypeDetails = false,
   }) async {
@@ -900,6 +901,16 @@ class BillPrinter {
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
 
       bytes.addAll('Thank you for your business!\n'.codeUnits);
+
+      // Show sync-pending banner so the printed copy is auditable.
+      if (isPendingSync) {
+        bytes.addAll('\n'.codeUnits);
+        bytes.addAll('--------------------------------\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('*** OFFLINE BILL ***\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
+        bytes.addAll('Sync pending\n'.codeUnits);
+      }
 
       if (isReferenceOnly) {
         bytes.addAll('\n'.codeUnits);

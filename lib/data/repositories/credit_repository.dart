@@ -37,8 +37,8 @@ class CreditRepository {
             .collection('bills')
             .doc(credit.billId);
 
-        // Save the credit document
-        transaction.set(creditRef, credit.toJson());
+        // Save the credit document — idempotent: safe to retry.
+        transaction.set(creditRef, credit.toJson(), SetOptions(merge: true));
 
         // Update dashboard summary using centralized service
         await _dashboardService.onCreditCreated(

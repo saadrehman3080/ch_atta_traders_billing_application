@@ -60,8 +60,8 @@ class SaleRepository {
             .collection(formattedDate)
             .doc(sale.billId);
 
-        // Save the sale document
-        transaction.set(saleRef, sale.toJson());
+        // Save the sale document — idempotent: safe to retry.
+        transaction.set(saleRef, sale.toJson(), SetOptions(merge: true));
 
         // Update dashboard summary using centralized service
         await _dashboardService.onSaleCreated(
@@ -113,9 +113,9 @@ class SaleRepository {
           .collection(formattedDate)
           .doc(sale.billId);
 
-      // Save only the sale document, no dashboard update
-      // Dashboard updates are handled separately by updateSummaryOnCreditToSale
-      await saleRef.set(sale.toJson());
+      // Save only the sale document, no dashboard update.
+      // Dashboard updates are handled separately by updateSummaryOnCreditToSale.
+      await saleRef.set(sale.toJson(), SetOptions(merge: true));
 
       debugPrint(
         'Sale saved from credit conversion successfully: ${sale.billId}',

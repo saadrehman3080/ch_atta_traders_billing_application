@@ -2,11 +2,15 @@ import 'package:ch_atta_traders_billing_application/app/router.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/app_theme.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/database/shop_database_helper.dart';
+import 'package:ch_atta_traders_billing_application/data/models/pending_bill.dart';
 import 'package:ch_atta_traders_billing_application/features/auth/providers/auth_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_service.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_sync_manager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
@@ -22,6 +26,15 @@ void main() async {
 
   // Initialize App Preferences
   await AppPreferences.init();
+
+  // Initialize Hive for offline-first bill storage.
+  await Hive.initFlutter();
+  Hive.registerAdapter(PendingBillStatusAdapter());
+  Hive.registerAdapter(PendingBillAdapter());
+  await OfflineBillService.openBox();
+
+  // Start connectivity listener for background sync.
+  OfflineBillSyncManager.instance.startConnectivityListener();
 
   // Initialize and seed shop database
   try {

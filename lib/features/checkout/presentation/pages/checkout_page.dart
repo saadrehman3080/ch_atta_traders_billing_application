@@ -1,15 +1,19 @@
-import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
+import 'dart:async';
 
+import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/pending_bill.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/features/checkout/providers/checkout_form_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_service.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_sync_manager.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
 import 'package:flutter/material.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
@@ -90,9 +94,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
     _checkPrinterConnection();
-    if (!fp.hasBeenOpened) {
-      _loadSkipCustomerNamePreference();
-    }
+    _loadSkipCustomerNamePreference(isFirstOpen: !fp.hasBeenOpened);
     fp.markOpened();
     // Listen to printer connection changes
     PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
@@ -116,14 +118,21 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
   }
 
-  /// Load skip customer name preference and apply it
-  Future<void> _loadSkipCustomerNamePreference() async {
+  /// Load skip customer name preference and apply it.
+  ///
+  /// [isFirstOpen] controls whether the MT auto-fill runs; it should only
+  /// run on a genuinely fresh checkout, not when restoring a dismissed one.
+  /// The anonymous-customer toggle is always applied so the dashboard
+  /// preference is consistently respected every time checkout opens.
+  Future<void> _loadSkipCustomerNamePreference({
+    bool isFirstOpen = true,
+  }) async {
     final skipByDefault =
         await AppPreferences.instance.isSkipCustomerNameDefault;
     if (skipByDefault && _paymentType != 'credit' && mounted) {
       setState(() {
         _isAnonymousCustomer = true;
-        if (_hasRbProducts) {
+        if (isFirstOpen && _hasRbProducts) {
           final totalRb = _getTotalRbQuantity();
           _mtController.text = '$totalRb';
           _mt = totalRb;
@@ -450,19 +459,31 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return null; // All valid
   }
 
-  /// Saves bill to appropriate collection (Daily Sales or Credit History)
-  Future<bool> _saveBillToFirebase(
-    String billId,
-    String salesmanIdentifier,
-  ) async {
+  /// Saves bill to local Hive store first (offline-first).
+  /// Returns the [PendingBill] so the caller can trigger a background sync
+  /// after printing.
+  Future<PendingBill> _saveBillOfflineFirst({
+    required String billId,
+    required String salesmanIdentifier,
+  }) async {
     final billData = _prepareBillData(billId);
+    final PendingBill pendingBill;
 
     if (billData is SaleHistory) {
-      return await _saleProvider.saveSale(billData, salesmanIdentifier);
-    } else if (billData is CreditHistory) {
-      return await _creditProvider.saveCredit(billData, salesmanIdentifier);
+      pendingBill = PendingBill.fromSaleHistory(
+        bill: billData,
+        salesmanIdentifier: salesmanIdentifier,
+      );
+    } else {
+      pendingBill = PendingBill.fromCreditHistory(
+        bill: billData as CreditHistory,
+        salesmanIdentifier: salesmanIdentifier,
+        paymentType: _paymentType,
+      );
     }
-    return false;
+
+    await OfflineBillService().savePendingBill(pendingBill);
+    return pendingBill;
   }
 
   Future<void> _printBill({
@@ -477,6 +498,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     int? mtRemaining,
     int? partialPayment,
     bool includeSubtypeDetails = false,
+    bool isPendingSync = false,
   }) async {
     final result = await BillPrinter.printBill(
       billId: billId,
@@ -490,6 +512,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       mtRemaining: mtRemaining,
       partialPayment: partialPayment,
       includeSubtypeDetails: includeSubtypeDetails,
+      isPendingSync: isPendingSync,
     );
 
     if (mounted) {
@@ -511,7 +534,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _handleSaveBill() async {
-    // Validate inputs
     final validationError = _validateCheckout();
     if (validationError != null) {
       if (mounted) {
@@ -527,7 +549,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
     setState(() => _isSaving = true);
 
     try {
-      // Get salesman identifier from SharedPreferences
       final salesmanIdentifier =
           await AppPreferences.instance.salesmanIdentifier;
       if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
@@ -541,37 +562,34 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
-      // Generate bill ID and save to Firebase
       final billId = _uuid.v4();
-      final success = await _saveBillToFirebase(billId, salesmanIdentifier);
+
+      // Save locally first — instant, no network wait.
+      final pendingBill = await _saveBillOfflineFirst(
+        billId: billId,
+        salesmanIdentifier: salesmanIdentifier,
+      );
+
+      // Fire background sync — do not await.
+      unawaited(OfflineBillSyncManager.syncBill(pendingBill));
 
       if (mounted) {
-        if (success) {
-          final billType = _shouldSaveToDailySales() ? 'Bill' : 'Credit';
-          CustomSnackBar.show(
-            context,
-            message: '$billType saved successfully',
-            type: SnackBarType.success,
-          );
-          _completedSuccessfully = true;
-          widget.onPrint();
-        } else {
-          final errorMsg = _shouldSaveToDailySales()
-              ? (_saleProvider.errorMessage ?? 'Failed to save bill')
-              : (_creditProvider.errorMessage ?? 'Failed to save credit');
-          // Dismiss checkout page first so snackbar is visible
-          widget.onDismiss();
-          // Show error after a short delay so the parent context is active
-          Future.microtask(() {
-            if (mounted) {
-              CustomSnackBar.show(
-                context,
-                message: errorMsg,
-                type: SnackBarType.error,
-              );
-            }
-          });
-        }
+        final billType = _shouldSaveToDailySales() ? 'Bill' : 'Credit';
+        CustomSnackBar.show(
+          context,
+          message: '$billType saved successfully',
+          type: SnackBarType.success,
+        );
+        _completedSuccessfully = true;
+        widget.onPrint();
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: e.toString().replaceFirst('Exception: ', ''),
+          type: SnackBarType.error,
+        );
       }
     } finally {
       if (mounted) {
@@ -581,7 +599,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _handlePrintBill() async {
-    // Validate inputs
     final validationError = _validateCheckout();
     if (validationError != null) {
       if (mounted) {
@@ -594,7 +611,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
       return;
     }
 
-    // Check printer connection
     if (!_isPrinterConnected) {
       if (mounted) {
         CustomSnackBar.show(
@@ -609,7 +625,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
     setState(() => _isPrinting = true);
 
     try {
-      // Get salesman info from SharedPreferences
       final salesmanName = await AppPreferences.instance.salesmanName;
       final salesmanIdentifier =
           await AppPreferences.instance.salesmanIdentifier;
@@ -627,52 +642,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
-      // Ask user whether to include subtype details on the receipt
       bool includeSubtypeDetails = false;
-      // Only show the dialog if there are selected products that actually have
-      // subtype quantities entered (not just products that *can* have subtypes).
       final hasSubtypeProducts = _selectedProducts.any(
         (p) => p.hasSubtypes && p.subtypeQuantities.values.any((q) => q > 0),
       );
       if (hasSubtypeProducts && mounted) {
         final result = await _showSubtypeDetailDialog();
-        if (result == null) {
-          // User dismissed dialog – cancel print
-          return;
-        }
+        if (result == null) return; // user cancelled
         includeSubtypeDetails = result;
       }
 
-      // Generate bill ID and save to Firebase
       final billId = _uuid.v4();
-      final success = await _saveBillToFirebase(billId, salesmanIdentifier);
 
-      if (!success) {
-        if (mounted) {
-          final errorMsg = _shouldSaveToDailySales()
-              ? (_saleProvider.errorMessage ?? 'Failed to save bill')
-              : (_creditProvider.errorMessage ?? 'Failed to save credit');
-          // Dismiss checkout page first so snackbar is visible
-          widget.onDismiss();
-          // Show error after a short delay so the parent context is active
-          Future.microtask(() {
-            if (mounted) {
-              CustomSnackBar.show(
-                context,
-                message: errorMsg,
-                type: SnackBarType.error,
-              );
-            }
-          });
-        }
-        return;
-      }
+      // Save locally first — instant, no network wait.
+      final pendingBill = await _saveBillOfflineFirst(
+        billId: billId,
+        salesmanIdentifier: salesmanIdentifier,
+      );
 
-      // Print the bill
-      final hasMt = _mtController.text.trim().isNotEmpty;
-      final totalRbQuantity = _getTotalRbQuantity();
-      final cratesDue = hasMt ? (totalRbQuantity - _mt) : 0;
-
+      // Print immediately after local save.
       await _printBill(
         billId: billId,
         customerName: _getCustomerName(),
@@ -681,18 +669,31 @@ class _CheckoutPageState extends State<CheckoutPage> {
         discount: _discount,
         salesmanName: salesmanName,
         paymentType: _paymentType,
-        mtCollected: hasMt ? _mt : null,
-        mtRemaining: hasMt ? cratesDue : null,
+        mtCollected: _mtController.text.trim().isNotEmpty ? _mt : null,
+        mtRemaining: _mtController.text.trim().isNotEmpty
+            ? (_getTotalRbQuantity() - _mt)
+            : null,
         partialPayment: _paymentType == 'credit' && _partialPayment > 0
             ? _partialPayment
             : null,
         includeSubtypeDetails: includeSubtypeDetails,
+        isPendingSync: true,
       );
 
-      // Call the original onPrint callback
+      // Fire background sync — do not await.
+      unawaited(OfflineBillSyncManager.syncBill(pendingBill));
+
       if (mounted) {
         _completedSuccessfully = true;
         widget.onPrint();
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: e.toString().replaceFirst('Exception: ', ''),
+          type: SnackBarType.error,
+        );
       }
     } finally {
       if (mounted) {
