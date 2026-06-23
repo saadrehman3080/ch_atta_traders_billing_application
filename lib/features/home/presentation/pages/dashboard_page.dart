@@ -1262,24 +1262,6 @@ class _DashboardPageState extends State<DashboardPage>
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${pendingBills.length}',
-                        style: AppTextStyles.productItemName.copyWith(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: accentColor,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1365,14 +1347,16 @@ class _DashboardPageState extends State<DashboardPage>
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: (isSale ? AppColors.pepsiBlue : Colors.deepPurple)
+                  color: (isSale ? AppColors.pepsiBlue : AppColors.pepsiRed)
                       .withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  isSale ? Icons.receipt_outlined : Icons.credit_card_outlined,
+                  isSale
+                      ? Icons.receipt_long_outlined
+                      : Icons.credit_card_outlined,
                   size: 18,
-                  color: isSale ? AppColors.pepsiBlue : Colors.deepPurple,
+                  color: isSale ? AppColors.pepsiBlue : AppColors.pepsiRed,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1393,7 +1377,7 @@ class _DashboardPageState extends State<DashboardPage>
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${bill.date.day}/${bill.date.month}/${bill.date.year}  •  ${isSale ? 'Sale' : 'Credit'}',
+                      '${formatDateShort(bill.date)}  •  ${isSale ? 'Sale' : 'Credit'}',
                       style: AppTextStyles.helperText.copyWith(
                         fontSize: 11,
                         color: AppColors.gray500,
@@ -1418,12 +1402,12 @@ class _DashboardPageState extends State<DashboardPage>
                   const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
+                      horizontal: 8,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -2311,6 +2295,21 @@ class _DashboardPageState extends State<DashboardPage>
 
   // ========== Business Logic Methods ==========
 
+  IconData _getBatteryIcon(int level) {
+    if (level >= 90) return Icons.battery_full_rounded;
+    if (level >= 70) return Icons.battery_6_bar_rounded;
+    if (level >= 50) return Icons.battery_4_bar_rounded;
+    if (level >= 25) return Icons.battery_2_bar_rounded;
+    if (level >= 10) return Icons.battery_1_bar_rounded;
+    return Icons.battery_alert_rounded;
+  }
+
+  Color _getBatteryColor(int level) {
+    if (level >= 50) return AppColors.pepsiBlue;
+    if (level >= 25) return const Color(0xFFF59E0B); // amber
+    return AppColors.pepsiRed;
+  }
+
   IconData _getGreetingIcon() {
     final hour = DateTime.now().hour;
     if (hour < 10) {
@@ -2519,9 +2518,15 @@ class _DashboardPageState extends State<DashboardPage>
       printer.macAdress,
     );
     final isAnyPrinterConnecting = printerState.isAnyPrinterConnecting;
+    final batteryLevel = isConnected
+        ? _printerService.state.batteryLevel
+        : null;
+    final batteryColor = batteryLevel != null
+        ? _getBatteryColor(batteryLevel)
+        : null;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
         color: isConnected
             ? AppColors.pepsiBlue.withValues(alpha: 0.05)
@@ -2536,11 +2541,12 @@ class _DashboardPageState extends State<DashboardPage>
       child: Row(
         children: [
           Icon(
-            isConnected ? Icons.print : Icons.print_outlined,
+            isConnected ? Icons.print_rounded : Icons.print_outlined,
             color: isConnected ? AppColors.pepsiBlue : AppColors.gray400,
             size: 20,
           ),
           const SizedBox(width: 10),
+          // Name + status row
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2552,47 +2558,64 @@ class _DashboardPageState extends State<DashboardPage>
                     fontWeight: FontWeight.w600,
                     color: isConnected ? AppColors.pepsiBlue : Colors.black87,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  isConnected ? 'Connected' : printer.macAdress,
-                  style: AppTextStyles.helperText.copyWith(
-                    fontSize: 11,
-                    color: isConnected
-                        ? AppColors.pepsiBlue
-                        : AppColors.gray500,
-                  ),
-                ),
-                if (isConnected &&
-                    _printerService.state.batteryLevel != null) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.battery_charging_full,
-                        size: 12,
-                        color: AppColors.pepsiBlue,
+                const SizedBox(height: 4),
+                // Status + battery inline
+                Row(
+                  children: [
+                    Text(
+                      isConnected ? 'Connected' : printer.macAdress,
+                      style: AppTextStyles.helperText.copyWith(
+                        fontSize: 11,
+                        color: isConnected
+                            ? AppColors.pepsiBlue
+                            : AppColors.gray500,
                       ),
-                      const SizedBox(width: 4),
+                    ),
+                    if (batteryLevel != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        child: Container(
+                          width: 3,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: AppColors.pepsiBlue.withValues(alpha: 0.4),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        _getBatteryIcon(batteryLevel),
+                        size: 12,
+                        color: batteryColor,
+                      ),
+                      const SizedBox(width: 2),
                       Text(
-                        '${_printerService.state.batteryLevel}% battery',
+                        '$batteryLevel%',
                         style: AppTextStyles.helperText.copyWith(
                           fontSize: 11,
-                          color: AppColors.pepsiBlue,
+                          fontWeight: FontWeight.w600,
+                          color: batteryColor,
                         ),
                       ),
                     ],
-                  ),
-                ],
+                  ],
+                ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          // Right side: loading spinner or action button
           if (isCurrentlyConnecting)
             Padding(
-              padding: const EdgeInsets.only(right: 24.0),
-              child: SizedBox(
-                width: 16,
-                height: 16,
+              // dynamic right padding so layout adapts to available space
+              padding: EdgeInsets.only(
+                right: isCurrentlyConnecting ? 24.0 : 0.0,
+              ),
+              child: SizedBox.square(
+                dimension: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: AppColors.pepsiBlue,

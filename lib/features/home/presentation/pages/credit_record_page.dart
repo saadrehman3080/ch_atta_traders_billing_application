@@ -1804,6 +1804,41 @@ class _CreditRecordPageState extends State<CreditRecordPage>
   }
 
   Widget _buildBillList(List<CreditHistory> billHistory) {
+    // ── Partition into single-bill customers vs. 2+ bills customers ──────────
+    final Map<String, List<CreditHistory>> byCustomer = {};
+    for (final bill in billHistory) {
+      final key = bill.customerName.toLowerCase().trim();
+      byCustomer.putIfAbsent(key, () => []).add(bill);
+    }
+
+    final singleBills = billHistory
+        .where(
+          (b) =>
+              (byCustomer[b.customerName.toLowerCase().trim()]?.length ?? 0) <
+              2,
+        )
+        .toList();
+
+    // Preserve insertion order for grouped customers
+    final multiGroups = <List<CreditHistory>>[];
+    final seen = <String>{};
+    for (final bill in billHistory) {
+      final key = bill.customerName.toLowerCase().trim();
+      if (!seen.contains(key) && (byCustomer[key]?.length ?? 0) >= 2) {
+        seen.add(key);
+        multiGroups.add(byCustomer[key]!);
+      }
+    }
+
+    // Indices:
+    // 0              → total credit header
+    // 1..singles     → single-bill cards (with inline date dividers)
+    // singles+1      → "Multiple Bills" section divider  (only if groups exist)
+    // singles+2..    → grouped customer containers
+    final hasGroups = multiGroups.isNotEmpty;
+    final totalCount =
+        1 + singleBills.length + (hasGroups ? 1 + multiGroups.length : 0);
+
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -1811,68 +1846,445 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         16,
         16 + MediaQuery.of(context).padding.bottom,
       ),
-      itemCount: billHistory.length + 1,
+      itemCount: totalCount,
       itemBuilder: (context, index) {
-        // First item is the total credit header
+        // [0] Total credit header
         if (index == 0) {
           return _buildTotalCreditHeader(billHistory);
         }
 
-        final billIndex = index - 1;
-        final bill = billHistory[billIndex];
-        final isRemoving = _removingBillId == bill.billId;
+        // [1..singleBills.length] Single-bill cards
+        if (index <= singleBills.length) {
+          final billIndex = index - 1;
+          final bill = singleBills[billIndex];
+          final isRemoving = _removingBillId == bill.billId;
+          final originalIndex = billHistory.indexOf(bill);
 
-        // Determine if we need a date divider before this item
-        final bool showDivider =
-            billIndex > 0 &&
-            !_isSameDay(bill.date, billHistory[billIndex - 1].date);
+          final bool showDivider =
+              billIndex > 0 &&
+              !_isSameDay(bill.date, singleBills[billIndex - 1].date);
 
-        Widget cardWidget;
-
-        if (isRemoving && _removeAnimController != null) {
-          cardWidget = SizeTransition(
-            sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(
-              CurvedAnimation(
-                parent: _removeAnimController!,
-                curve: Curves.easeInOut,
-              ),
-            ),
-            child: FadeTransition(
-              opacity: Tween<double>(begin: 1.0, end: 0.0).animate(
+          Widget cardWidget;
+          if (isRemoving && _removeAnimController != null) {
+            cardWidget = SizeTransition(
+              sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(
                 CurvedAnimation(
                   parent: _removeAnimController!,
-                  curve: Curves.easeOut,
+                  curve: Curves.easeInOut,
                 ),
               ),
-              child: SlideTransition(
-                position:
-                    Tween<Offset>(
-                      begin: Offset.zero,
-                      end: const Offset(-0.3, 0.0),
-                    ).animate(
-                      CurvedAnimation(
-                        parent: _removeAnimController!,
-                        curve: Curves.easeInOut,
+              child: FadeTransition(
+                opacity: Tween<double>(begin: 1.0, end: 0.0).animate(
+                  CurvedAnimation(
+                    parent: _removeAnimController!,
+                    curve: Curves.easeOut,
+                  ),
+                ),
+                child: SlideTransition(
+                  position:
+                      Tween<Offset>(
+                        begin: Offset.zero,
+                        end: const Offset(-0.3, 0.0),
+                      ).animate(
+                        CurvedAnimation(
+                          parent: _removeAnimController!,
+                          curve: Curves.easeInOut,
+                        ),
                       ),
-                    ),
-                child: _buildCreditCard(bill, billIndex, billHistory),
+                  child: _buildCreditCard(bill, originalIndex, billHistory),
+                ),
               ),
-            ),
-          );
-        } else {
-          cardWidget = _buildCreditCard(bill, billIndex, billHistory);
+            );
+          } else {
+            cardWidget = _buildCreditCard(bill, originalIndex, billHistory);
+          }
+
+          if (showDivider) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [_buildDateDivider(bill.date), cardWidget],
+            );
+          }
+          return cardWidget;
         }
 
-        if (showDivider) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [_buildDateDivider(bill.date), cardWidget],
-          );
+        // [singleBills.length + 1] "Multiple Bills" section divider
+        if (hasGroups && index == singleBills.length + 1) {
+          return _buildMultiBillsSectionHeader();
         }
 
-        return cardWidget;
+        // [singleBills.length + 2..] Grouped customer containers
+        final groupIndex = index - singleBills.length - 2;
+        return _buildGroupedCustomerCard(multiGroups[groupIndex]);
       },
     );
+  }
+
+  /// Section divider shown above the grouped-customer cards.
+  Widget _buildMultiBillsSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Divider(
+              height: 1,
+              color: AppColors.gray300.withValues(alpha: 0.6),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.group_outlined, size: 13, color: AppColors.gray500),
+                const SizedBox(width: 5),
+                Text(
+                  'Multiple Bills',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: AppColors.gray500,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Divider(
+              height: 1,
+              color: AppColors.gray300.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Grouped card shown at the end of the list for a customer with 2+ bills.
+  Widget _buildGroupedCustomerCard(List<CreditHistory> bills) {
+    final customerKey = _normalizeCustomerKey(bills.first.customerName);
+    final totalAmount = bills.fold<int>(0, (s, b) => s + b.amountDue);
+    final totalCrates = bills.fold<int>(0, (s, b) => s + b.cratesDue);
+    final alreadyPaid = _bulkPaymentTotals[customerKey] ?? 0;
+    final remaining = (totalAmount - alreadyPaid).clamp(0, totalAmount);
+    final hasPartialPayment = alreadyPaid > 0;
+
+    return TapScaleWrapper(
+      onTap: () => _openBulkPaymentPage(bills),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: AppColors.pepsiWhite,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasPartialPayment
+                ? AppColors.pepsiBlue.withValues(alpha: 0.35)
+                : AppColors.gray300.withValues(alpha: 0.5),
+            width: hasPartialPayment ? 1.5 : 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Customer header ──────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          toTitleCase(bills.first.customerName),
+                          style: AppTextStyles.productItemName.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _buildGroupBadge(
+                              '${bills.length} bills',
+                              isBlue: true,
+                            ),
+                            if (hasPartialPayment) ...[
+                              const SizedBox(width: 6),
+                              _buildGroupBadge('Partial', isOrange: true),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        hasPartialPayment ? 'Remaining' : 'Total Due',
+                        style: AppTextStyles.helperText.copyWith(
+                          fontSize: 10,
+                          color: AppColors.gray400,
+                        ),
+                      ),
+                      Text(
+                        'Rs. ${formatCashAmount(remaining)}',
+                        style: AppTextStyles.productItemTotal.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: remaining == 0
+                              ? Colors.green[700]
+                              : AppColors.pepsiRed,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppColors.gray300.withValues(alpha: 0.5)),
+            // ── Bill rows ────────────────────────────────────────────────────
+            ...bills.asMap().entries.map((e) {
+              final bill = e.value;
+              final isLast = e.key == bills.length - 1;
+              final formattedDate = DateFormat('d MMM yy').format(bill.date);
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _showBillDetails(bill),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.gray100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '#${bill.billId.length > 6 ? bill.billId.substring(0, 6) : bill.billId}',
+                                style: AppTextStyles.helperText.copyWith(
+                                  fontSize: 10,
+                                  color: AppColors.gray500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              formattedDate,
+                              style: AppTextStyles.helperText.copyWith(
+                                fontSize: 11,
+                                color: AppColors.gray500,
+                              ),
+                            ),
+                            if (bill.cratesDue > 0) ...[
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.inventory_2_outlined,
+                                size: 11,
+                                color: Colors.orange[700],
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${bill.cratesDue}',
+                                style: AppTextStyles.helperText.copyWith(
+                                  fontSize: 11,
+                                  color: Colors.orange[700],
+                                ),
+                              ),
+                            ],
+                            const Spacer(),
+                            Text(
+                              bill.isPaid && bill.amountDue == 0
+                                  ? 'Paid'
+                                  : 'Rs. ${formatCashAmount(bill.amountDue)}',
+                              style: AppTextStyles.helperText.copyWith(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: (bill.isPaid && bill.amountDue == 0)
+                                    ? Colors.green[700]
+                                    : AppColors.pepsiRed,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.chevron_right,
+                              size: 14,
+                              color: AppColors.gray400,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isLast)
+                        Divider(
+                          height: 1,
+                          indent: 12,
+                          endIndent: 12,
+                          color: AppColors.gray300.withValues(alpha: 0.4),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            // ── Crates total row (shown only when pending) ───────────────────
+            if (totalCrates > 0) ...[
+              Divider(
+                height: 1,
+                indent: 12,
+                endIndent: 12,
+                color: AppColors.gray300.withValues(alpha: 0.4),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      size: 13,
+                      color: Colors.orange[700],
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Crates Pending',
+                      style: AppTextStyles.helperText.copyWith(
+                        fontSize: 11,
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '$totalCrates ${totalCrates == 1 ? 'crate' : 'crates'}',
+                      style: AppTextStyles.helperText.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            Divider(height: 1, color: AppColors.gray300.withValues(alpha: 0.5)),
+            // ── Manage Payment footer button ──────────────────────────────────
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _openBulkPaymentPage(bills),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(14),
+                  bottomRight: Radius.circular(14),
+                ),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                  decoration: const BoxDecoration(
+                    color: Color(0x0F006AE6), // pepsiBlue ~6% opacity
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(14),
+                      bottomRight: Radius.circular(14),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.open_in_new,
+                        size: 14,
+                        color: AppColors.pepsiBlue,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Manage Payment',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.pepsiBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Small badge used inside the grouped customer card header.
+  Widget _buildGroupBadge(
+    String label, {
+    bool isBlue = false,
+    bool isOrange = false,
+  }) {
+    final color = isBlue
+        ? AppColors.pepsiBlue
+        : isOrange
+        ? Colors.orange[700]!
+        : AppColors.gray500;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.helperText.copyWith(
+          fontSize: 10,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  /// Navigates to [CustomerBulkPaymentPage] for the given group of bills and
+  /// refreshes the credit list on return.
+  Future<void> _openBulkPaymentPage(List<CreditHistory> bills) async {
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+      if (mounted) {
+        _showErrorSnackBar(
+          'Salesman identifier not found. Please log in again.',
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CustomerBulkPaymentPage(
+          bills: bills,
+          salesmanName: salesmanIdentifier,
+          creditProvider: _creditProvider,
+        ),
+      ),
+    );
+    if (mounted) _loadCredits();
   }
 
   /// Animate a bill out of the list before actual removal
