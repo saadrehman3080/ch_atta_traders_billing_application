@@ -45,7 +45,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   late final SaleProvider _saleProvider;
   late final CreditProvider _creditProvider;
   final _uuid = const Uuid();
-  bool _hasCustomerName = false;
+
   bool _isPrinterConnected = true; // Default to true, will be updated on check
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _customerNameController = TextEditingController();
@@ -74,7 +74,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
     final fp = widget.formProvider;
     if (fp.hasBeenOpened) {
       _customerNameController.text = fp.customerName;
-      _hasCustomerName = fp.customerName.isNotEmpty;
       _paymentType = fp.paymentType;
       _discount = fp.discount;
       _mt = fp.mt;
@@ -206,9 +205,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // ========== Business Logic Methods ==========
 
   void _updateButtonState() {
-    setState(() {
-      _hasCustomerName = _customerNameController.text.trim().isNotEmpty;
-    });
+    setState(() {});
   }
 
   void _updateDiscount() {
@@ -321,6 +318,21 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return total - _discount;
   }
 
+  bool get _hasEnteredCustomerName {
+    return _customerNameController.text.trim().isNotEmpty;
+  }
+
+  bool get _requiresNamedCustomer {
+    return !_shouldSaveToDailySales();
+  }
+
+  bool get _hasValidCustomerForCurrentBill {
+    if (_requiresNamedCustomer) {
+      return _hasEnteredCustomerName;
+    }
+    return _hasEnteredCustomerName || _isAnonymousCustomer;
+  }
+
   bool get _hasRbProducts {
     return _selectedProducts.any(
       (product) => product.name.toUpperCase().endsWith('RB'),
@@ -337,9 +349,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   /// Returns 'Walk-In Customer' if anonymous, otherwise the entered name
   String _getCustomerName() {
     final enteredName = _customerNameController.text.trim();
-    return _isAnonymousCustomer || enteredName.isEmpty
-        ? 'Walk-In Customer'
-        : enteredName;
+    return _isAnonymousCustomer ? 'Walk-In Customer' : enteredName;
   }
 
   /// Determines whether bill should go to Daily Sales (true) or Credit History (false)
@@ -428,14 +438,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
   /// Validates checkout inputs before saving/printing
   /// Returns error message if invalid, null if valid
   String? _validateCheckout() {
-    // Validate customer name (must be entered or anonymous for all bills)
-    if (!_hasCustomerName && !_isAnonymousCustomer) {
+    // Any bill saved to credit history must have a real customer name.
+    // This includes both explicit credit payments and cash bills with MT due.
+    if (_requiresNamedCustomer) {
+      if (_isAnonymousCustomer) {
+        return 'Customer name required for credit and MT remaining bills';
+      }
+      if (!_hasEnteredCustomerName) {
+        return 'Please enter customer name for credit and MT remaining bills';
+      }
+    } else if (!_hasEnteredCustomerName && !_isAnonymousCustomer) {
       return 'Please enter customer name or select anonymous';
-    }
-
-    // For credit payments, customer name is required (can't be anonymous)
-    if (_paymentType == 'credit' && _isAnonymousCustomer) {
-      return 'Customer name required for credit bills';
     }
 
     // Validate products selected
@@ -1170,7 +1183,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
       setState(() {
         _customerNameController.text = selectedShop.outletName;
         _isAnonymousCustomer = false;
-        _hasCustomerName = true;
       });
     }
   }
@@ -1255,14 +1267,21 @@ class _CheckoutPageState extends State<CheckoutPage> {
         onTap: isDisabled
             ? null
             : () {
+                final wasAnonymous = _isAnonymousCustomer;
+                final previousMtText = _mtController.text.trim();
+                final hadPreviousMt = previousMtText.isNotEmpty;
                 setState(() {
                   _isAnonymousCustomer = !_isAnonymousCustomer;
                   // Clear focus and text when toggling anonymous customer ON
                   if (_isAnonymousCustomer) {
                     FocusScope.of(context).unfocus();
                     _customerNameController.clear();
-                    // Auto-fill MT with total RB quantity (all MT returned)
-                    if (_hasRbProducts) {
+                    // Keep already-entered MT so "returned" mode shows previous value.
+                    if (hadPreviousMt) {
+                      _mtController.text = previousMtText;
+                      _mt = int.tryParse(previousMtText) ?? 0;
+                    } else if (_hasRbProducts) {
+                      // Match dashboard default-skip behavior on manual toggle.
                       final totalRb = _getTotalRbQuantity();
                       _mtController.text = '$totalRb';
                       _mtController.selection = TextSelection.fromPosition(
@@ -1270,6 +1289,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       );
                       _mt = totalRb;
                     }
+                  } else if (wasAnonymous) {
+                    // Reset MT when switching back to named customer mode.
+                    _mtController.clear();
+                    _mt = 0;
                   }
                 });
               },
@@ -1561,7 +1584,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         final isSaved =
             saleProvider.state == SaleState.saved ||
             creditProvider.state == CreditState.saved;
-        final hasValidCustomer = _hasCustomerName || _isAnonymousCustomer;
+        final hasValidCustomer = _hasValidCustomerForCurrentBill;
         final canPrint =
             hasValidCustomer &&
             !isLoading &&
@@ -1664,7 +1687,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   ButtonStyle _buildPrintButtonStyle() {
-    final hasValidCustomer = _hasCustomerName || _isAnonymousCustomer;
+    final hasValidCustomer = _hasValidCustomerForCurrentBill;
     final canEnable = hasValidCustomer && _isPrinterConnected;
     return ElevatedButton.styleFrom(
       backgroundColor: canEnable ? AppColors.pepsiBlue : AppColors.gray300,
@@ -1677,7 +1700,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   ButtonStyle _buildSaveButtonStyle() {
-    final hasValidCustomer = _hasCustomerName || _isAnonymousCustomer;
+    final hasValidCustomer = _hasValidCustomerForCurrentBill;
     final canEnable = hasValidCustomer;
     return ElevatedButton.styleFrom(
       backgroundColor: canEnable ? AppColors.pepsiBlue : AppColors.gray300,

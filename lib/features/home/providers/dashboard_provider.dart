@@ -2,6 +2,7 @@ import 'package:ch_atta_traders_billing_application/data/models/dashboard_data.d
 import 'package:ch_atta_traders_billing_application/data/repositories/dashboard_repository.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 /// States for dashboard data loading
 enum DashboardState { initial, loading, loaded, error }
@@ -12,6 +13,8 @@ enum DashboardState { initial, loading, loaded, error }
 /// Uses Provider for state management and reactive UI updates.
 class DashboardProvider extends ChangeNotifier {
   final DashboardRepository _repository;
+  StreamSubscription<DashboardData>? _dashboardSubscription;
+  String? _salesmanIdentifier;
 
   DashboardProvider({DashboardRepository? repository})
     : _repository = repository ?? DashboardRepository();
@@ -43,21 +46,16 @@ class DashboardProvider extends ChangeNotifier {
       notifyListeners();
 
       // Get salesman identifier from SharedPreferences
-      final salesmanIdentifier =
-          await AppPreferences.instance.salesmanIdentifier;
+      _salesmanIdentifier ??= await AppPreferences.instance.salesmanIdentifier;
 
-      if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) {
+      if (_salesmanIdentifier == null || _salesmanIdentifier!.isEmpty) {
         throw Exception('Salesman identifier not found. Please login again.');
       }
 
-      // Fetch dashboard data from repository
-      _dashboardData = await _repository.fetchDashboardData(
-        salesmanName: salesmanIdentifier,
+      await _startDashboardStream(
+        salesmanName: _salesmanIdentifier!,
         date: _selectedDate,
       );
-
-      _state = DashboardState.loaded;
-      notifyListeners();
     } catch (e, stackTrace) {
       debugPrint('Error loading dashboard data: $e');
       debugPrint('StackTrace: $stackTrace');
@@ -71,7 +69,19 @@ class DashboardProvider extends ChangeNotifier {
 
   /// Refreshes dashboard data (pulls latest from Firebase)
   Future<void> refreshDashboardData() async {
-    await loadDashboardData(date: _selectedDate);
+    if (_salesmanIdentifier == null || _salesmanIdentifier!.isEmpty) {
+      await loadDashboardData(date: _selectedDate);
+      return;
+    }
+
+    _state = DashboardState.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    await _startDashboardStream(
+      salesmanName: _salesmanIdentifier!,
+      date: _selectedDate,
+    );
   }
 
   /// Changes the selected date and reloads data
@@ -84,5 +94,38 @@ class DashboardProvider extends ChangeNotifier {
   Future<void> resetToToday() async {
     _selectedDate = DateTime.now();
     await loadDashboardData(date: _selectedDate);
+  }
+
+  Future<void> _startDashboardStream({
+    required String salesmanName,
+    required DateTime date,
+  }) async {
+    await _dashboardSubscription?.cancel();
+
+    _dashboardSubscription = _repository
+        .watchDashboardData(salesmanName: salesmanName, date: date)
+        .listen(
+          (data) {
+            _dashboardData = data;
+            _state = DashboardState.loaded;
+            _errorMessage = null;
+            notifyListeners();
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            debugPrint('Dashboard stream error: $error');
+            debugPrint('StackTrace: $stackTrace');
+
+            _state = DashboardState.error;
+            _errorMessage = error.toString();
+            _dashboardData = null;
+            notifyListeners();
+          },
+        );
+  }
+
+  @override
+  void dispose() {
+    _dashboardSubscription?.cancel();
+    super.dispose();
   }
 }

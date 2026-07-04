@@ -7,6 +7,7 @@ class DashboardData {
   final int totalCredit;
   final int totalDiscount;
   final int customersServed;
+  final int isReceiptGenerated;
 
   /// Cash collected from previous day credit bills (nullable - null means no previous day data)
   final int? previousDayCash;
@@ -21,6 +22,7 @@ class DashboardData {
     required this.totalCredit,
     required this.totalDiscount,
     required this.customersServed,
+    required this.isReceiptGenerated,
     this.previousDayCash,
     this.previousDayMt,
   });
@@ -29,28 +31,6 @@ class DashboardData {
   bool get hasPreviousDayData =>
       (previousDayCash != null && previousDayCash! > 0) ||
       (previousDayMt != null && previousDayMt! > 0);
-
-  /// Convert to JSON for Firebase storage
-  Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{
-      'totalCollection': totalCollection,
-      'totalItemsSold': totalItemsSold,
-      'totalMtRemaining': totalMtRemaining,
-      'totalCredit': totalCredit,
-      'totalDiscount': totalDiscount,
-      'customersServed': customersServed,
-    };
-
-    // Only include previous day fields if they have values
-    if (previousDayCash != null) {
-      json['previousDayCash'] = previousDayCash;
-    }
-    if (previousDayMt != null) {
-      json['previousDayMt'] = previousDayMt;
-    }
-
-    return json;
-  }
 
   /// Create from JSON (Firebase document)
   factory DashboardData.fromJson(Map<String, dynamic> json) {
@@ -61,6 +41,7 @@ class DashboardData {
       totalCredit: json['totalCredit'] as int? ?? 0,
       totalDiscount: json['totalDiscount'] as int? ?? 0,
       customersServed: json['customersServed'] as int? ?? 0,
+      isReceiptGenerated: json['isReceiptGenerated'] as int? ?? 0,
       previousDayCash: json['previousDayCash'] as int?,
       previousDayMt: json['previousDayMt'] as int?,
     );

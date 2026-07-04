@@ -64,6 +64,33 @@ class DashboardRepository {
     }
   }
 
+  /// Watches dashboard data in real time for a specific date.
+  ///
+  /// Listens to single summary document snapshots:
+  /// Dashboard Summary/{salesmanName}/{formattedDate}/summary
+  Stream<DashboardData> watchDashboardData({
+    required String salesmanName,
+    DateTime? date,
+  }) {
+    final targetDate = date ?? DateTime.now();
+    final formattedDate = DateFormatters.formatForFirebase(targetDate);
+
+    debugPrint('Watching dashboard data stream for $formattedDate...');
+
+    return _firestore
+        .collection('Dashboard Summary')
+        .doc(salesmanName)
+        .collection(formattedDate)
+        .doc('summary')
+        .snapshots()
+        .map((docSnapshot) {
+          if (!docSnapshot.exists || docSnapshot.data() == null) {
+            return _emptyDashboardData();
+          }
+          return DashboardData.fromJson(docSnapshot.data()!);
+        });
+  }
+
   /// Returns empty dashboard data (all zeros)
   DashboardData _emptyDashboardData() {
     return DashboardData(
@@ -73,6 +100,7 @@ class DashboardRepository {
       totalCredit: 0,
       totalDiscount: 0,
       customersServed: 0,
+      isReceiptGenerated: 0,
     );
   }
 

@@ -55,4 +55,13 @@ In the database name is not the unique identifier. Change it to ID_name.
 changes after 22 june 2026
 1. Added the battery percentage of connected printer.
 2. If another printer is already connected, disconnect it first before connecting to a new one.
+
+Changes after 03 june 2026
+1. Add a white space when varients are present in the print recipt.
+2. Remove the delete button from the older bills for cash sale.
 3. 
+
+
+Planned Features
+1. print Business card.
+2. print recipt status.

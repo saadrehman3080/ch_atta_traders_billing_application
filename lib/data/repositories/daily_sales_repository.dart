@@ -46,6 +46,28 @@ class DailySalesRepository {
     }
   }
 
+  /// Watches all sales for a specific salesman and date in real time.
+  /// Path: Daily Sales/{salesmanName}/{dd-MMM-yyyy}
+  Stream<List<SaleHistory>> watchDailySales(
+    String salesmanName,
+    DateTime date,
+  ) {
+    final formattedDate = DateFormatters.formatForFirebase(date);
+
+    return _firestore
+        .collection('Daily Sales')
+        .doc(salesmanName)
+        .collection(formattedDate)
+        .snapshots()
+        .map((snapshot) {
+          final sales = snapshot.docs
+              .map((doc) => SaleHistory.fromJson(doc.data()))
+              .toList();
+          sales.sort((a, b) => b.date.compareTo(a.date));
+          return sales;
+        });
+  }
+
   /// Deletes a sale from sales history, updates dashboard, and moves to deleted history
   /// Path: Daily Sales/{salesmanName}/{dd-MMM-yyyy}/{billId}
   /// Deleted Path: Deleted History/{salesmanName}/{d-MMM-yyyy}/{billId}

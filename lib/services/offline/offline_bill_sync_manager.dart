@@ -47,9 +47,7 @@ class OfflineBillSyncManager {
       final hasConnection = results.any((r) => r != ConnectivityResult.none);
       if (!hasConnection) return;
 
-      // Delay to avoid sync storms on flaky connections.
       await Future<void>.delayed(const Duration(seconds: 5));
-
       await syncPendingBills();
     });
   }
@@ -62,32 +60,14 @@ class OfflineBillSyncManager {
   // ─── Public API ───────────────────────────────────────────────────────────
 
   /// Fires a background sync for a single [bill].
-  /// Silently skips if the device is offline — the connectivity listener
-  /// will pick up all pending bills once the connection is restored.
+  /// Always attempts — the 10-second timeout handles weak/no connectivity.
   static Future<void> syncBill(PendingBill bill) async {
-    unawaited(instance._attemptSyncIfOnline(bill));
-  }
-
-  Future<void> _attemptSyncIfOnline(PendingBill bill) async {
-    if (!(await _isOnline())) {
-      debugPrint(
-        '[OfflineBillSyncManager] Offline — ${bill.billId} queued for later.',
-      );
-      return; // bill stays as pending in Hive; connectivity listener retries
-    }
-    await _syncSingleBill(bill);
+    unawaited(instance._syncSingleBill(bill));
   }
 
   /// Syncs ALL pending bills, respecting exponential backoff.
   /// Returns a map with 'synced' and 'failed' counts.
-  /// Returns immediately with zeros if the device is offline.
   static Future<Map<String, int>> syncPendingBills() async {
-    // Don't waste time on Firebase calls if we know we're offline.
-    if (!(await _isOnline())) {
-      debugPrint('[OfflineBillSyncManager] Offline — skipping batch sync.');
-      return {'synced': 0, 'failed': 0};
-    }
-
     if (instance._isSyncing) return {'synced': 0, 'failed': 0};
     instance._isSyncing = true;
 
@@ -119,21 +99,6 @@ class OfflineBillSyncManager {
       '[OfflineBillSyncManager] Sync complete. Synced: $synced, Failed: $failed',
     );
     return {'synced': synced, 'failed': failed};
-  }
-
-  // ─── Connectivity Helper ──────────────────────────────────────────────────
-
-  /// Returns true if the device reports any active network interface.
-  /// This is a fast local check — no actual HTTP request is made.
-  /// The 10-second Firebase timeout handles the edge case where the network
-  /// interface is up but internet is not reachable (e.g. captive portal).
-  static Future<bool> _isOnline() async {
-    try {
-      final results = await Connectivity().checkConnectivity();
-      return results.any((r) => r != ConnectivityResult.none);
-    } catch (_) {
-      return false;
-    }
   }
 
   // ─── Retry Backoff ────────────────────────────────────────────────────────

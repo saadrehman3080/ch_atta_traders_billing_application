@@ -667,7 +667,9 @@ class _DailySalePageState extends State<DailySalePage>
     final bool isCreditBill = sale.billType == BillType.credit;
 
     return TapScaleWrapper(
-      onTap: () => _showBillDetails(context, sale),
+      onTap: () {
+        _showBillDetails(context, sale);
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
@@ -689,7 +691,8 @@ class _DailySalePageState extends State<DailySalePage>
             children: [
               Expanded(child: _buildCardContent(sale)),
               // Only show divider and delete button for cash bills (not converted from credit)
-              if (!isCreditBill) ...[
+              if (!isCreditBill &&
+                  DateUtils.isSameDay(sale.date, DateTime.now())) ...[
                 const SizedBox(width: 16),
                 Container(height: 90, width: 1.5, color: AppColors.gray300),
                 const SizedBox(width: 16),

@@ -255,4 +255,22 @@ class CreditRepository {
       rethrow;
     }
   }
+
+  /// Watches all credit records for a salesman in real time.
+  /// Path: Credit History/{salesmanName}/bills
+  Stream<List<CreditHistory>> watchAllCreditsForSalesman({
+    required String salesmanName,
+  }) {
+    return _firestore
+        .collection('Credit History')
+        .doc(salesmanName)
+        .collection('bills')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map(
+          (querySnapshot) => querySnapshot.docs
+              .map((doc) => CreditHistory.fromJson(doc.data()))
+              .toList(),
+        );
+  }
 }

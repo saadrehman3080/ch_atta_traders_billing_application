@@ -440,6 +440,7 @@ class BillPrinter {
     required int totalAmountDue,
     required int previouslyPaid,
     required int remainingAfter,
+    int totalPendingCrates = 0,
     List<({String billId, int amount, DateTime date})> billDetails = const [],
   }) async {
     try {
@@ -527,6 +528,13 @@ class BillPrinter {
       );
       bytes.addAll('--------------------------------\n'.codeUnits);
 
+      // MT details (only when pending crates exist)
+      if (totalPendingCrates > 0) {
+        bytes.addAll('MT DETAILS:\n'.codeUnits);
+        bytes.addAll('MT Pending:      $totalPendingCrates\n'.codeUnits);
+        bytes.addAll('--------------------------------\n'.codeUnits);
+      }
+
       if (remainingAfter == 0) {
         bytes.addAll('\x1B\x61\x01'.codeUnits); // Center
         bytes.addAll('** FULLY PAID **\n'.codeUnits);
@@ -551,6 +559,201 @@ class BillPrinter {
           : PrintResult.error('Failed to print receipt');
     } catch (e) {
       debugPrint('Error printing bulk payment receipt: $e');
+      return PrintResult.error('Error printing receipt: ${e.toString()}');
+    }
+  }
+
+  /// Prints a customer account statement focused on pending bills, pending
+  /// amount and optional payment history.
+  static Future<PrintResult> printBulkPaymentAccountStatement({
+    required String customerName,
+    required int totalBills,
+    required int totalAmountDue,
+    required int totalPaid,
+    required int remainingBillsCount,
+    required int remainingAmount,
+    required int totalPendingCrates,
+    List<CreditHistory> allBills = const [],
+    List<({DateTime date, int amount, String source, String? billId})>
+        paymentEntries =
+        const [],
+    bool includePaymentHistory = true,
+  }) async {
+    try {
+      final isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (!isConnected) {
+        return PrintResult.error(
+          'No printer connected. Please connect a printer first.',
+        );
+      }
+
+      final isAnonymousPrint =
+          await AppPreferences.instance.isAnonymousPrintEnabled;
+
+      List<int> bytes = [];
+
+      // Header
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center align
+      bytes.addAll('\x1D\x21\x01'.codeUnits); // Double height
+      bytes.addAll('ACCOUNT STATEMENT\n'.codeUnits);
+      bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Date
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left align
+      if (isAnonymousPrint) {
+        bytes.addAll(
+          'Date: ${DateFormat('dd MMM yyyy').format(DateTime.now())}\n'
+              .codeUnits,
+        );
+      } else {
+        bytes.addAll(
+          'Date: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}\n'
+              .codeUnits,
+        );
+      }
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      final customerDisplay = customerName.isEmpty
+          ? 'Walk-In'
+          : toTitleCase(customerName);
+      bytes.addAll('Customer: $customerDisplay\n'.codeUnits);
+
+      if (isAnonymousPrint) {
+        final id = await AppPreferences.instance.salesmanId;
+        bytes.addAll('Salesman: ${id ?? ''}\n'.codeUnits);
+      } else {
+        final name = await AppPreferences.instance.salesmanName;
+        if (name != null && name.isNotEmpty) {
+          bytes.addAll('Salesman: ${toTitleCase(name)}\n'.codeUnits);
+        }
+      }
+
+      bytes.addAll('Bills on Account: $totalBills\n'.codeUnits);
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Account-level summary
+      bytes.addAll('ACCOUNT SUMMARY:\n'.codeUnits);
+      bytes.addAll(
+        'Total Due:     Rs.${formatCashAmount(totalAmountDue)}\n'.codeUnits,
+      );
+      bytes.addAll(
+        'Paid:          Rs.${formatCashAmount(totalPaid)}\n'.codeUnits,
+      );
+      bytes.addAll(
+        'Outstanding:   Rs.${formatCashAmount(remainingAmount)}\n'.codeUnits,
+      );
+      bytes.addAll('Pending Bills: $remainingBillsCount\n'.codeUnits);
+      if (totalPendingCrates > 0) {
+        bytes.addAll('MT Pending:    $totalPendingCrates\n'.codeUnits);
+      }
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      // Remaining bills summary
+      final pendingBills =
+          allBills.where((b) => b.amountDue > 0 || b.cratesDue > 0).toList()
+            ..sort((a, b) => a.date.compareTo(b.date));
+
+      bytes.addAll('REMAINING BILLS:\n'.codeUnits);
+      if (pendingBills.isEmpty) {
+        bytes.addAll('No pending bills.\n'.codeUnits);
+      } else {
+        final dateFmt = DateFormat('dd MMM');
+        const maxLines = 8;
+        final displayBills = pendingBills.take(maxLines).toList();
+        for (final bill in displayBills) {
+          final id = truncateBillId(bill.billId);
+          bytes.addAll(
+            '#$id ${dateFmt.format(bill.date)} Rs.${formatCashAmount(bill.amountDue)}\n'
+                .codeUnits,
+          );
+          if (bill.cratesDue > 0) {
+            bytes.addAll('  MT Due: ${bill.cratesDue}\n'.codeUnits);
+          }
+        }
+        final hiddenCount = pendingBills.length - displayBills.length;
+        if (hiddenCount > 0) {
+          bytes.addAll('...and $hiddenCount more bill(s)\n'.codeUnits);
+        }
+      }
+      bytes.addAll('--------------------------------\n'.codeUnits);
+
+      if (includePaymentHistory) {
+        final sortedEntries =
+            List<
+                ({DateTime date, int amount, String source, String? billId})
+              >.from(paymentEntries)
+              ..sort((a, b) => b.date.compareTo(a.date));
+
+        bytes.addAll('PAYMENT HISTORY:\n'.codeUnits);
+        if (sortedEntries.isEmpty) {
+          bytes.addAll('No payment history available.\n'.codeUnits);
+        } else {
+          final dateFmt = DateFormat('dd MMM, hh:mm a');
+          const maxEntries = 10;
+          final displayEntries = sortedEntries.take(maxEntries).toList();
+          for (final entry in displayEntries) {
+            final sourceLabel = switch (entry.source) {
+              'bulk' => 'Payment',
+              'bill partial' => 'Partial',
+              _ => entry.source,
+            };
+            final amount = 'Rs.${formatCashAmount(entry.amount)}';
+            bytes.addAll('${dateFmt.format(entry.date)}\n'.codeUnits);
+            if (entry.billId != null && entry.billId!.isNotEmpty) {
+              final billShortId = truncateBillId(entry.billId!);
+              bytes.addAll(
+                '  $sourceLabel: $amount  #$billShortId\n'.codeUnits,
+              );
+            } else {
+              bytes.addAll('  $sourceLabel: $amount\n'.codeUnits);
+            }
+          }
+          final hidden = sortedEntries.length - displayEntries.length;
+          if (hidden > 0) {
+            bytes.addAll('...and $hidden older entry(s)\n'.codeUnits);
+          }
+
+          final collectedTotal = sortedEntries.fold<int>(
+            0,
+            (sum, e) => sum + e.amount,
+          );
+          bytes.addAll(
+            'Collected Total: Rs.${formatCashAmount(collectedTotal)}\n'
+                .codeUnits,
+          );
+        }
+
+        bytes.addAll('\n'.codeUnits);
+      }
+
+      // Customer-facing outstanding alert
+      bytes.addAll('\x1B\x61\x01'.codeUnits); // Center
+      bytes.addAll('--------------------------------\n'.codeUnits);
+      if (remainingAmount > 0 || pendingBills.isNotEmpty) {
+        bytes.addAll('** NOTICE **\n'.codeUnits);
+        bytes.addAll(
+          '${remainingBillsCount > 1 ? '$remainingBillsCount bills' : '1 bill'} still pending\n'
+              .codeUnits,
+        );
+        bytes.addAll(
+          'Rs.${formatCashAmount(remainingAmount)} outstanding\n'.codeUnits,
+        );
+        bytes.addAll('Please clear pending amount.\n'.codeUnits);
+      } else {
+        bytes.addAll('** ACCOUNT SETTLED **\n'.codeUnits);
+        bytes.addAll('All bills cleared. Thank you!\n'.codeUnits);
+      }
+      bytes.addAll('Thank you!\n'.codeUnits);
+      bytes.addAll('\x1B\x61\x00'.codeUnits); // Left
+      bytes.addAll('\n\n\n'.codeUnits);
+
+      final result = await PrintBluetoothThermal.writeBytes(bytes);
+      return result
+          ? PrintResult.success()
+          : PrintResult.error('Failed to print receipt');
+    } catch (e) {
+      debugPrint('Error printing bulk payment account statement: $e');
       return PrintResult.error('Error printing receipt: ${e.toString()}');
     }
   }

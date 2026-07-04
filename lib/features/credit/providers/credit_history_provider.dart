@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/credit_repository.dart';
+import 'dart:async';
 
 enum CreditHistoryState { initial, loading, loaded, error }
 
@@ -11,6 +12,8 @@ class CreditHistoryProvider extends ChangeNotifier {
   String? _errorMessage;
   DateTime? _lastFetchTime;
   bool _isDisposed = false;
+  StreamSubscription<List<CreditHistory>>? _creditSubscription;
+  String? _currentSalesmanName;
 
   CreditHistoryState get state => _state;
   List<CreditHistory> get credits => _credits;
@@ -22,6 +25,7 @@ class CreditHistoryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _creditSubscription?.cancel();
     super.dispose();
   }
 
@@ -40,38 +44,40 @@ class CreditHistoryProvider extends ChangeNotifier {
     String salesmanName, {
     bool forceRefresh = false,
   }) async {
-    // Check if we have recent data and don't need to refresh
     if (!forceRefresh &&
-        _credits.isNotEmpty &&
-        _lastFetchTime != null &&
-        DateTime.now().difference(_lastFetchTime!) <
-            const Duration(minutes: 5)) {
-      debugPrint(
-        'Using cached credit data (fetched ${DateTime.now().difference(_lastFetchTime!).inSeconds}s ago)',
-      );
+        _creditSubscription != null &&
+        _currentSalesmanName == salesmanName) {
       return;
     }
 
+    _currentSalesmanName = salesmanName;
     _state = CreditHistoryState.loading;
     _errorMessage = null;
     _safeNotifyListeners();
 
     try {
-      final startTime = DateTime.now();
+      await _creditSubscription?.cancel();
 
-      _credits = await _repository.getAllCreditsForSalesman(
-        salesmanName: salesmanName,
-      );
-
-      _lastFetchTime = DateTime.now();
-      _state = CreditHistoryState.loaded;
-
-      final loadTime = DateTime.now().difference(startTime).inMilliseconds;
-      debugPrint(
-        'Credit history loaded in ${loadTime}ms (${_credits.length} records)',
-      );
-
-      _safeNotifyListeners();
+      _creditSubscription = _repository
+          .watchAllCreditsForSalesman(salesmanName: salesmanName)
+          .listen(
+            (credits) {
+              _credits = credits;
+              _lastFetchTime = DateTime.now();
+              _state = CreditHistoryState.loaded;
+              _errorMessage = null;
+              _safeNotifyListeners();
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              _state = CreditHistoryState.error;
+              _errorMessage = error.toString();
+              _credits = [];
+              _lastFetchTime = null;
+              debugPrint('Credit history stream error: $error');
+              debugPrint('StackTrace: $stackTrace');
+              _safeNotifyListeners();
+            },
+          );
     } catch (e) {
       _state = CreditHistoryState.error;
       _errorMessage = e.toString();
@@ -87,6 +93,9 @@ class CreditHistoryProvider extends ChangeNotifier {
     _state = CreditHistoryState.initial;
     _errorMessage = null;
     _lastFetchTime = null;
+    _creditSubscription?.cancel();
+    _creditSubscription = null;
+    _currentSalesmanName = null;
     _safeNotifyListeners();
   }
 

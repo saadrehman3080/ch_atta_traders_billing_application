@@ -3,6 +3,7 @@ import 'package:ch_atta_traders_billing_application/data/models/daily_progress.d
 import 'package:ch_atta_traders_billing_application/data/models/progress_snapshot.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/daily_progress_repository.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 /// Provider for managing daily progress state.
 ///
@@ -19,6 +20,8 @@ import 'package:intl/intl.dart';
 ///   **snapshot totals  +  sum of recent records**
 class DailyProgressProvider extends ChangeNotifier {
   final DailyProgressRepository _repository;
+  StreamSubscription<List<DailyProgress>>? _progressSubscription;
+  String? _currentSalesmanDocId;
 
   DailyProgressProvider({DailyProgressRepository? repository})
     : _repository = repository ?? DailyProgressRepository();
@@ -143,7 +146,17 @@ class DailyProgressProvider extends ChangeNotifier {
   // ========================= Public Methods ========================
 
   /// Primary entry point – loads snapshot + recent records.
-  Future<void> loadProgressList(String salesmanDocId) async {
+  Future<void> loadProgressList(
+    String salesmanDocId, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh &&
+        _progressSubscription != null &&
+        _currentSalesmanDocId == salesmanDocId) {
+      return;
+    }
+
+    _currentSalesmanDocId = salesmanDocId;
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
@@ -151,47 +164,62 @@ class DailyProgressProvider extends ChangeNotifier {
 
     try {
       final cutoffDate = _computeCutoffDate();
+      await _progressSubscription?.cancel();
 
-      // 1. Try to load the existing snapshot.
       final existingSnapshot = await _repository.fetchProgressSnapshot(
         salesmanDocId,
       );
 
+      String streamAfterDate;
+      List<DailyProgress> initialRecent;
+
       if (existingSnapshot != null &&
           existingSnapshot.snapshotDate.isNotEmpty) {
-        // ── Snapshot exists ──────────────────────────────────────────────
         _snapshot = existingSnapshot;
 
-        // Fetch only records after the snapshot date.
-        final fetchedRecords = await _repository.fetchProgressAfterDate(
-          salesmanDocId,
-          _snapshot.snapshotDate,
-        );
+        if (_snapshot.snapshotDate.compareTo(cutoffDate) < 0) {
+          final fetchedAfterSnapshot = await _repository.fetchProgressAfterDate(
+            salesmanDocId,
+            _snapshot.snapshotDate,
+          );
 
-        // Partition into "gap" (older than cutoff) and "recent" (within window).
-        final gap = <DailyProgress>[];
-        final recent = <DailyProgress>[];
-        for (final r in fetchedRecords) {
-          if (r.date.compareTo(cutoffDate) <= 0) {
-            gap.add(r);
-          } else {
-            recent.add(r);
+          final gap = <DailyProgress>[];
+          final recent = <DailyProgress>[];
+          for (final r in fetchedAfterSnapshot) {
+            if (r.date.compareTo(cutoffDate) <= 0) {
+              gap.add(r);
+            } else {
+              recent.add(r);
+            }
           }
-        }
 
-        // If there are gap records, absorb them into the snapshot.
-        if (gap.isNotEmpty) {
-          _snapshot = _absorbIntoSnapshot(_snapshot, gap, cutoffDate);
-          // Fire‑and‑forget – don't block UI on write.
+          if (gap.isNotEmpty) {
+            _snapshot = _absorbIntoSnapshot(_snapshot, gap, cutoffDate);
+          } else {
+            _snapshot = ProgressSnapshot(
+              snapshotDate: cutoffDate,
+              totalNetMt: _snapshot.totalNetMt,
+              totalNetCash: _snapshot.totalNetCash,
+              totalCashReceived: _snapshot.totalCashReceived,
+              totalSalesAmount: _snapshot.totalSalesAmount,
+              totalRecordCount: _snapshot.totalRecordCount,
+            );
+          }
+
           _repository
               .saveProgressSnapshot(salesmanDocId, _snapshot)
               .catchError((_) {});
-        }
 
-        _recentRecords = recent;
+          initialRecent = recent;
+          streamAfterDate = cutoffDate;
+        } else {
+          streamAfterDate = _snapshot.snapshotDate;
+          initialRecent = await _repository.fetchProgressAfterDate(
+            salesmanDocId,
+            streamAfterDate,
+          );
+        }
       } else {
-        // ── No snapshot yet (first‑time load) ────────────────────────────
-        // Fetch ALL records once so we can create the initial snapshot.
         final allRecords = await _repository.fetchDailyProgressList(
           salesmanDocId,
         );
@@ -219,17 +247,36 @@ class DailyProgressProvider extends ChangeNotifier {
           _snapshot = ProgressSnapshot.empty();
         }
 
-        _recentRecords = recent;
+        initialRecent = recent;
+        streamAfterDate = cutoffDate;
       }
 
-      // Sort recent records: newest first.
-      _recentRecords.sort((a, b) => b.date.compareTo(a.date));
-
-      // Reset pagination and populate displayed list.
       _displayCount = _pageSize;
-      _updateDisplayedRecords();
+      _applyRecentRecords(initialRecent);
+
+      _progressSubscription = _repository
+          .watchProgressAfterDate(salesmanDocId, streamAfterDate)
+          .listen(
+            (recentRecords) {
+              _applyRecentRecords(recentRecords);
+              _isLoading = false;
+              _hasError = false;
+              _errorMessage = null;
+              notifyListeners();
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              _isLoading = false;
+              _hasError = true;
+              _errorMessage = 'Failed to load progress data. Please try again.';
+              debugPrint('Daily progress stream error: $error');
+              debugPrint('StackTrace: $stackTrace');
+              notifyListeners();
+            },
+          );
 
       _isLoading = false;
+      _hasError = false;
+      _errorMessage = null;
       notifyListeners();
     } catch (e) {
       _isLoading = false;
@@ -242,7 +289,7 @@ class DailyProgressProvider extends ChangeNotifier {
 
   /// Refresh the progress list (same as load).
   Future<void> refreshProgressList(String salesmanDocId) async {
-    await loadProgressList(salesmanDocId);
+    await loadProgressList(salesmanDocId, forceRefresh: true);
   }
 
   /// Show the next page of records in the UI list.
@@ -300,5 +347,26 @@ class DailyProgressProvider extends ChangeNotifier {
   void _updateDisplayedRecords() {
     final count = _displayCount.clamp(0, _recentRecords.length);
     _displayedRecords = _recentRecords.sublist(0, count);
+  }
+
+  void _applyRecentRecords(List<DailyProgress> records) {
+    _recentRecords = [...records];
+    _recentRecords.sort((a, b) => b.date.compareTo(a.date));
+
+    if (_displayCount < _pageSize) {
+      _displayCount = _pageSize;
+    }
+    _displayCount = _displayCount.clamp(0, _recentRecords.length);
+    if (_displayCount == 0 && _recentRecords.isNotEmpty) {
+      _displayCount = _pageSize.clamp(0, _recentRecords.length);
+    }
+
+    _updateDisplayedRecords();
+  }
+
+  @override
+  void dispose() {
+    _progressSubscription?.cancel();
+    super.dispose();
   }
 }

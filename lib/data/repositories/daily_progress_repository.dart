@@ -49,6 +49,32 @@ class DailyProgressRepository {
     }
   }
 
+  /// Watches daily progress records in real time after [afterDate].
+  ///
+  /// [afterDate] should be YYYY-MM-DD. When empty, all records are streamed.
+  Stream<List<DailyProgress>> watchProgressAfterDate(
+    String salesmanDocId,
+    String afterDate,
+  ) {
+    Query<Map<String, dynamic>> query = _firestore
+        .collection('salesmen')
+        .doc(salesmanDocId)
+        .collection('daily_sales');
+
+    if (afterDate.isNotEmpty) {
+      query = query.where('date', isGreaterThan: afterDate);
+    }
+
+    return query
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => DailyProgress.fromJson(doc.data()))
+              .toList(),
+        );
+  }
+
   // ---------------------------------------------------------------------------
   // Optimised – Snapshot + Incremental Fetch
   // ---------------------------------------------------------------------------

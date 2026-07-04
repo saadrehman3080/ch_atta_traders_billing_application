@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/daily_sales_repository.dart';
+import 'dart:async';
 
 enum DailySalesState { initial, loading, loaded, error }
 
@@ -10,6 +11,9 @@ class DailySalesProvider extends ChangeNotifier {
   List<SaleHistory> _sales = [];
   String? _errorMessage;
   bool _isDisposed = false;
+  StreamSubscription<List<SaleHistory>>? _salesSubscription;
+  String? _currentSalesmanName;
+  DateTime? _currentDate;
 
   DailySalesState get state => _state;
   List<SaleHistory> get sales => _sales;
@@ -20,6 +24,7 @@ class DailySalesProvider extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _salesSubscription?.cancel();
     super.dispose();
   }
 
@@ -30,14 +35,46 @@ class DailySalesProvider extends ChangeNotifier {
   }
 
   Future<void> loadDailySales(String salesmanName, DateTime date) async {
+    final shouldReuseSubscription =
+        _salesSubscription != null &&
+        _currentSalesmanName == salesmanName &&
+        _currentDate != null &&
+        _currentDate!.year == date.year &&
+        _currentDate!.month == date.month &&
+        _currentDate!.day == date.day;
+
+    if (shouldReuseSubscription) {
+      return;
+    }
+
+    _currentSalesmanName = salesmanName;
+    _currentDate = date;
+
     _state = DailySalesState.loading;
     _errorMessage = null;
     _safeNotifyListeners();
 
     try {
-      _sales = await _repository.fetchDailySales(salesmanName, date);
-      _state = DailySalesState.loaded;
-      _safeNotifyListeners();
+      await _salesSubscription?.cancel();
+
+      _salesSubscription = _repository
+          .watchDailySales(salesmanName, date)
+          .listen(
+            (sales) {
+              _sales = sales;
+              _state = DailySalesState.loaded;
+              _errorMessage = null;
+              _safeNotifyListeners();
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              _state = DailySalesState.error;
+              _errorMessage = error.toString();
+              _sales = [];
+              debugPrint('Daily sales stream error: $error');
+              debugPrint('StackTrace: $stackTrace');
+              _safeNotifyListeners();
+            },
+          );
     } catch (e) {
       _state = DailySalesState.error;
       _errorMessage = e.toString();

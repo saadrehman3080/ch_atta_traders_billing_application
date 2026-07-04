@@ -58,6 +58,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
   bool _isSubmittingPayment = false;
   bool _isSubmittingCrates = false;
   bool _isPrintingPayment = false;
+  bool _isPrintingPaymentStatement = false;
   bool _isPrintingCrates = false;
   bool _isCompletingBills = false;
 
@@ -288,6 +289,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
       totalAmountDue: _totalAmountDue,
       previouslyPaid: previouslyPaid > 0 ? previouslyPaid : 0,
       remainingAfter: remaining,
+      totalPendingCrates: _totalCratesDue,
       billDetails: billDetails,
     );
 
@@ -297,6 +299,216 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
         CustomSnackBar.show(
           context,
           message: 'Print failed: ${printResult.errorMessage}',
+          type: SnackBarType.warning,
+        );
+      }
+    }
+  }
+
+  Future<bool?> _showPaymentHistoryPrintDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+        actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        title: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.pepsiBlue.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.print_outlined,
+                color: AppColors.pepsiBlue,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Print Account Statement',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Choose what to include in the statement:',
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: AppColors.gray500,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _buildPrintOptionTile(
+              dialogContext,
+              icon: Icons.receipt_outlined,
+              iconColor: AppColors.gray500,
+              title: 'Summary Only',
+              subtitle: 'Account overview & pending bills',
+              returnValue: false,
+            ),
+            const SizedBox(height: 8),
+            _buildPrintOptionTile(
+              dialogContext,
+              icon: Icons.history_rounded,
+              iconColor: AppColors.pepsiBlue,
+              title: 'With Payment History',
+              subtitle: 'Includes all recorded payments',
+              returnValue: true,
+            ),
+          ],
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: AppColors.gray500,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrintOptionTile(
+    BuildContext dialogContext, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool returnValue,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.of(dialogContext).pop(returnValue),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: iconColor.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 17, color: iconColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: AppColors.gray500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 18, color: iconColor),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _printFullStatement() async {
+    setState(() => _isPrintingPaymentStatement = true);
+    final includeHistory = await _showPaymentHistoryPrintDialog();
+
+    if (!mounted) return;
+    if (includeHistory == null) {
+      setState(() => _isPrintingPaymentStatement = false);
+      return;
+    }
+
+    final pendingBills = _bills
+        .where((b) => b.amountDue > 0 || b.cratesDue > 0)
+        .toList();
+    final pendingCrates = pendingBills.fold<int>(
+      0,
+      (sum, b) => sum + b.cratesDue,
+    );
+
+    final bulkHistory = _bulkPayment?.paymentHistory ?? <BulkPaymentEntry>[];
+    final billPayments = _existingBillPayments;
+    final paymentEntries =
+        <({DateTime date, int amount, String source, String? billId})>[];
+
+    for (final entry in bulkHistory) {
+      paymentEntries.add((
+        date: entry.date,
+        amount: entry.amount,
+        source: 'bulk',
+        billId: entry.billId,
+      ));
+    }
+
+    for (final entry in billPayments) {
+      paymentEntries.add((
+        date: entry.date,
+        amount: entry.amount,
+        source: 'bill partial',
+        billId: entry.billId,
+      ));
+    }
+
+    final printResult = await BillPrinter.printBulkPaymentAccountStatement(
+      customerName: _customerName,
+      totalBills: _bills.length,
+      totalAmountDue: _totalAmountDue,
+      totalPaid: _totalPaid,
+      remainingBillsCount: pendingBills.length,
+      remainingAmount: _remaining,
+      totalPendingCrates: pendingCrates,
+      allBills: _bills,
+      paymentEntries: includeHistory ? paymentEntries : const [],
+      includePaymentHistory: includeHistory,
+    );
+
+    if (mounted) {
+      setState(() => _isPrintingPaymentStatement = false);
+      if (!printResult.success) {
+        CustomSnackBar.show(
+          context,
+          message: 'Statement print failed: ${printResult.errorMessage}',
           type: SnackBarType.warning,
         );
       }
@@ -1528,6 +1740,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                         (_isSubmittingPayment ||
                             _isSubmittingCrates ||
                             _isPrintingPayment ||
+                            _isPrintingPaymentStatement ||
                             _isPrintingCrates)
                         ? null
                         : () async {
@@ -1574,6 +1787,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                         (_isSubmittingPayment ||
                             _isSubmittingCrates ||
                             _isPrintingPayment ||
+                            _isPrintingPaymentStatement ||
                             _isPrintingCrates ||
                             !_isPrinterConnected)
                         ? null
@@ -1623,6 +1837,77 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                           : 'Printer Not Connected',
                       style: AppTextStyles.smallButton.copyWith(
                         color: _isPrintingPayment
+                            ? Colors.white
+                            : (_isPrinterConnected &&
+                                  !_isSubmittingPayment &&
+                                  !_isSubmittingCrates)
+                            ? Colors.white
+                            : AppColors.gray500,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Record & Print Full Statement button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        (_isSubmittingPayment ||
+                            _isSubmittingCrates ||
+                            _isPrintingPayment ||
+                            _isPrintingPaymentStatement ||
+                            _isPrintingCrates ||
+                            !_isPrinterConnected)
+                        ? null
+                        : _printFullStatement,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: (_isPrinterConnected)
+                          ? AppColors.pepsiBlue
+                          : AppColors.gray300,
+                      foregroundColor: (_isPrinterConnected)
+                          ? Colors.white
+                          : AppColors.gray500,
+                      disabledBackgroundColor: _isPrintingPaymentStatement
+                          ? AppColors.pepsiBlue.withValues(alpha: 0.5)
+                          : AppColors.gray300,
+                      disabledForegroundColor: _isPrintingPaymentStatement
+                          ? Colors.white
+                          : AppColors.gray500,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: _isPrintingPaymentStatement
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.description_outlined,
+                            size: 20,
+                            color:
+                                (_isPrinterConnected &&
+                                    !_isSubmittingPayment &&
+                                    !_isSubmittingCrates)
+                                ? Colors.white
+                                : AppColors.gray500,
+                          ),
+                    label: Text(
+                      _isPrinterConnected
+                          ? 'Print Full Statement'
+                          : 'Printer Not Connected',
+                      style: AppTextStyles.smallButton.copyWith(
+                        color: _isPrintingPaymentStatement
                             ? Colors.white
                             : (_isPrinterConnected &&
                                   !_isSubmittingPayment &&
@@ -1857,6 +2142,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                         (_isSubmittingCrates ||
                             _isSubmittingPayment ||
                             _isPrintingPayment ||
+                            _isPrintingPaymentStatement ||
                             _isPrintingCrates)
                         ? null
                         : () async {
@@ -1903,6 +2189,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                         (_isSubmittingCrates ||
                             _isSubmittingPayment ||
                             _isPrintingPayment ||
+                            _isPrintingPaymentStatement ||
                             _isPrintingCrates ||
                             !_isPrinterConnected)
                         ? null
