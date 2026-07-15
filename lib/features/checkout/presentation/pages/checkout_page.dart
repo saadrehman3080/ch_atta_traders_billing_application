@@ -6,6 +6,7 @@ import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackb
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/offline_dashboard_payload.dart';
 import 'package:ch_atta_traders_billing_application/data/models/pending_bill.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
@@ -13,6 +14,7 @@ import 'package:ch_atta_traders_billing_application/features/checkout/providers/
 import 'package:ch_atta_traders_billing_application/features/credit/providers/credit_provider.dart';
 import 'package:ch_atta_traders_billing_application/features/sales/providers/sale_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_service.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_dashboard_queue_service.dart';
 import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_sync_manager.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
 import 'package:flutter/material.dart';
@@ -378,7 +380,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   /// Creates bill data for saving to Firestore
   /// Returns either SaleHistory or CreditHistory based on business rules
-  dynamic _prepareBillData(String billId) {
+  dynamic _prepareBillData(String billId, {required bool isReceiptGenerated}) {
     final customerName = _getCustomerName();
     final products = _selectedProducts
         .map(
@@ -401,6 +403,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         date: DateTime.now(),
         products: products,
         discount: _discount,
+        isReceiptGenerated: isReceiptGenerated,
         billType: BillType.cash,
       );
     } else {
@@ -424,6 +427,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         date: DateTime.now(),
         products: products,
         discount: _discount,
+        isReceiptGenerated: isReceiptGenerated,
         isPaid:
             _paymentType ==
             'cash', // True if cash (only MT pending), false if credit
@@ -478,8 +482,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Future<PendingBill> _saveBillOfflineFirst({
     required String billId,
     required String salesmanIdentifier,
+    required bool isReceiptGenerated,
   }) async {
-    final billData = _prepareBillData(billId);
+    final billData = _prepareBillData(
+      billId,
+      isReceiptGenerated: isReceiptGenerated,
+    );
     final PendingBill pendingBill;
 
     if (billData is SaleHistory) {
@@ -496,7 +504,55 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
 
     await OfflineBillService().savePendingBill(pendingBill);
+    final dashboardPayload = _buildDashboardPayload(pendingBill);
+    await OfflineDashboardQueueService().savePayload(dashboardPayload);
     return pendingBill;
+  }
+
+  OfflineDashboardPayload _buildDashboardPayload(PendingBill pendingBill) {
+    final itemsSold = pendingBill.productsJson.fold<int>(
+      0,
+      (sum, p) => sum + ((p['quantity'] as num?)?.toInt() ?? 0),
+    );
+
+    final grossTotal = pendingBill.productsJson.fold<int>(0, (sum, p) {
+      final price = (p['price'] as num?)?.toInt() ?? 0;
+      final quantity = (p['quantity'] as num?)?.toInt() ?? 0;
+      return sum + (price * quantity);
+    });
+
+    final totalAmount = (grossTotal - pendingBill.discount).clamp(0, 1 << 31);
+
+    int totalCollectionDelta = 0;
+    int totalCreditDelta = 0;
+
+    if (pendingBill.billType == 'sale') {
+      totalCollectionDelta = totalAmount;
+    } else if (pendingBill.isPaid) {
+      totalCollectionDelta = pendingBill.amountDue;
+    } else {
+      totalCreditDelta = pendingBill.amountDue;
+      final partialPaymentTotal = pendingBill.partialPaymentsJson.fold<int>(
+        0,
+        (sum, p) => sum + ((p['amount'] as num?)?.toInt() ?? 0),
+      );
+      totalCollectionDelta = partialPaymentTotal;
+    }
+
+    return OfflineDashboardPayload(
+      billId: pendingBill.billId,
+      salesmanIdentifier: pendingBill.salesmanIdentifier,
+      date: pendingBill.date,
+      totalCollectionDelta: totalCollectionDelta,
+      totalItemsSoldDelta: itemsSold,
+      totalMtRemainingDelta: pendingBill.billType == 'credit'
+          ? pendingBill.cratesDue
+          : 0,
+      totalCreditDelta: totalCreditDelta,
+      totalDiscountDelta: pendingBill.discount,
+      customersServedDelta: 1,
+      createdAt: DateTime.now(),
+    );
   }
 
   Future<void> _printBill({
@@ -510,6 +566,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     int? mtCollected,
     int? mtRemaining,
     int? partialPayment,
+    bool showDuplicateLabel = false,
     bool includeSubtypeDetails = false,
     bool isPendingSync = false,
   }) async {
@@ -524,6 +581,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       mtCollected: mtCollected,
       mtRemaining: mtRemaining,
       partialPayment: partialPayment,
+      showDuplicateLabel: showDuplicateLabel,
       includeSubtypeDetails: includeSubtypeDetails,
       isPendingSync: isPendingSync,
     );
@@ -581,6 +639,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       final pendingBill = await _saveBillOfflineFirst(
         billId: billId,
         salesmanIdentifier: salesmanIdentifier,
+        isReceiptGenerated: false,
       );
 
       // Fire background sync — do not await.
@@ -671,6 +730,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       final pendingBill = await _saveBillOfflineFirst(
         billId: billId,
         salesmanIdentifier: salesmanIdentifier,
+        isReceiptGenerated: true,
       );
 
       // Print immediately after local save.
@@ -689,6 +749,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         partialPayment: _paymentType == 'credit' && _partialPayment > 0
             ? _partialPayment
             : null,
+        showDuplicateLabel: false,
         includeSubtypeDetails: includeSubtypeDetails,
         isPendingSync: true,
       );

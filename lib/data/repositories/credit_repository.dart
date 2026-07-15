@@ -61,6 +61,26 @@ class CreditRepository {
     }
   }
 
+  /// Saves only the credit document without touching dashboard summary.
+  /// Used by offline sync where dashboard deltas are pushed separately.
+  Future<void> saveCreditWithoutDashboard(
+    CreditHistory credit,
+    String salesmanName,
+  ) async {
+    try {
+      final creditRef = _firestore
+          .collection('Credit History')
+          .doc(salesmanName)
+          .collection('bills')
+          .doc(credit.billId);
+
+      await creditRef.set(credit.toJson(), SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Error saving credit without dashboard: $e');
+      rethrow;
+    }
+  }
+
   /// Reads a specific credit transaction from Firestore
   /// Path: Credit History/{salesmanName}/bills/{billId}
   Future<CreditHistory?> getCreditById({

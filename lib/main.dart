@@ -7,6 +7,7 @@ import 'package:ch_atta_traders_billing_application/features/auth/providers/auth
 import 'package:ch_atta_traders_billing_application/features/products/providers/product_provider.dart';
 import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_service.dart';
 import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_sync_manager.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_dashboard_queue_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,6 +33,7 @@ void main() async {
   Hive.registerAdapter(PendingBillStatusAdapter());
   Hive.registerAdapter(PendingBillAdapter());
   await OfflineBillService.openBox();
+  await OfflineDashboardQueueService.openBox();
 
   // Start connectivity listener for background sync.
   OfflineBillSyncManager.instance.startConnectivityListener();

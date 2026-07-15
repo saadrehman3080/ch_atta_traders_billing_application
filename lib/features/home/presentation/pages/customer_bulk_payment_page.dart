@@ -66,10 +66,14 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
 
   String get _customerName => _bills.first.customerName;
 
-  /// Bills sorted by amountDue ascending so smaller bills are covered first.
+  /// Bills sorted oldest-first so payments are applied to the earliest bill
+  /// before rolling over to the next one.
   List<CreditHistory> get _sortedBills =>
-      List<CreditHistory>.from(_bills)
-        ..sort((a, b) => a.amountDue.compareTo(b.amountDue));
+      List<CreditHistory>.from(_bills)..sort((a, b) {
+        final byDate = a.date.compareTo(b.date);
+        if (byDate != 0) return byDate;
+        return a.billId.compareTo(b.billId);
+      });
 
   /// Sum of amountDue across all bills for this customer.
   int get _totalAmountDue => _bills.fold(0, (sum, b) => sum + b.amountDue);
@@ -102,9 +106,9 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
   }
 
   /// Splits bills into completed (fully covered by accumulated payment AND
-  /// crates returned) and pending.  Bills are sorted by amountDue ascending so
-  /// smaller bills are covered first.  A bill is only completed when both its
-  /// cash is fully paid AND its crates are fully returned.
+  /// crates returned) and pending. Payments are allocated to the oldest bill
+  /// first, then continue to the next oldest bill. A bill is only completed
+  /// when both its cash is fully paid AND its crates are fully returned.
   ({List<CreditHistory> completed, List<CreditHistory> pending})
   get _billSplit {
     final completed = <CreditHistory>[];
@@ -2263,7 +2267,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
   /// Computes which bills were fully covered after each payment entry.
   /// Returns a list of items (one per history entry, oldest→newest) where each
   /// item contains a list of bill IDs that became fully paid at that step.
-  /// Uses the same sorted-by-amountDue order as [_billSplit].
+  /// Uses the same oldest-first order as [_billSplit].
   List<List<String>> _computeBillCompletionsPerEntry(
     List<BulkPaymentEntry> chronological,
   ) {

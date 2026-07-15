@@ -139,6 +139,7 @@ class CreditHistoryProvider extends ChangeNotifier {
           date: credit.date,
           products: credit.products,
           discount: credit.discount,
+          isReceiptGenerated: credit.isReceiptGenerated,
           amountDue: newAmountDue ?? credit.amountDue,
           cratesDue: newCratesDue ?? credit.cratesDue,
           isPaid: isPaid ?? credit.isPaid,

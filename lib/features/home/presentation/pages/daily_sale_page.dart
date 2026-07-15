@@ -733,6 +733,11 @@ class _DailySalePageState extends State<DailySalePage>
                 color: AppColors.gray500,
               ),
             ),
+            const SizedBox(width: 8),
+            if (!sale.isReceiptGenerated) ...[
+              const SizedBox(width: 4),
+              _buildReceiptNotGeneratedBadge(),
+            ],
           ],
         ),
         const SizedBox(height: 10),
@@ -742,6 +747,10 @@ class _DailySalePageState extends State<DailySalePage>
             _buildAmountBadge(grandTotal),
             const SizedBox(width: 8),
             _buildItemCountBadge(totalItems),
+            // if (!sale.isReceiptGenerated) ...[
+            //   const SizedBox(width: 8),
+            //   _buildReceiptNotGeneratedBadge(),
+            // ],
           ],
         ),
       ],
@@ -781,6 +790,28 @@ class _DailySalePageState extends State<DailySalePage>
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: AppColors.gray500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReceiptNotGeneratedBadge() {
+    return Tooltip(
+      message: 'Receipt not generated',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.pepsiRed.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.pepsiRed.withValues(alpha: 0.25),
+            width: 0.6,
+          ),
+        ),
+        child: Icon(
+          Icons.print_disabled_outlined,
+          size: 16,
+          color: AppColors.pepsiRed,
         ),
       ),
     );

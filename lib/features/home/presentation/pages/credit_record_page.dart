@@ -276,6 +276,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       date: deletedBill.date,
       products: deletedBill.products,
       discount: deletedBill.discount,
+      isReceiptGenerated: deletedBill.isReceiptGenerated,
       billType: BillType.credit,
     );
 
@@ -396,6 +397,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       date: deletedBill.date,
       products: deletedBill.products,
       discount: deletedBill.discount,
+      isReceiptGenerated: deletedBill.isReceiptGenerated,
       billType: BillType.credit,
     );
 
@@ -867,6 +869,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         date: bill.date,
         products: bill.products,
         discount: bill.discount,
+        isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.credit,
       );
 
@@ -1080,6 +1083,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         date: bill.date,
         products: bill.products,
         discount: bill.discount,
+        isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.credit,
       );
 

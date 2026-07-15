@@ -1,4 +1,5 @@
 import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
+import 'package:ch_atta_traders_billing_application/data/models/offline_dashboard_payload.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
@@ -38,6 +39,81 @@ class DashboardSummaryService {
     return date.year == today.year &&
         date.month == today.month &&
         date.day == today.day;
+  }
+
+  /// Applies a queued offline dashboard payload exactly once per [billId].
+  ///
+  /// Idempotency is enforced by creating a marker document at:
+  /// Dashboard Summary/{salesman}/{date}/summary/appliedOfflineBills/{billId}
+  /// and skipping increments when the marker already exists.
+  Future<void> applyOfflineDashboardPayload({
+    required OfflineDashboardPayload payload,
+  }) async {
+    final summaryRef = _getSummaryRef(payload.salesmanIdentifier, payload.date);
+    final markerRef = summaryRef
+        .collection('appliedOfflineBills')
+        .doc(payload.billId);
+
+    await _firestore.runTransaction((transaction) async {
+      final markerSnapshot = await transaction.get(markerRef);
+      if (markerSnapshot.exists) {
+        debugPrint(
+          'DashboardSummaryService: payload already applied for ${payload.billId}',
+        );
+        return;
+      }
+
+      final Map<String, dynamic> updates = {
+        'lastUpdated': FieldValue.serverTimestamp(),
+      };
+
+      if (payload.totalCollectionDelta != 0) {
+        updates['totalCollection'] = FieldValue.increment(
+          payload.totalCollectionDelta,
+        );
+      }
+      if (payload.totalItemsSoldDelta != 0) {
+        updates['totalItemsSold'] = FieldValue.increment(
+          payload.totalItemsSoldDelta,
+        );
+      }
+      if (payload.totalMtRemainingDelta != 0) {
+        updates['totalMtRemaining'] = FieldValue.increment(
+          payload.totalMtRemainingDelta,
+        );
+      }
+      if (payload.totalCreditDelta != 0) {
+        updates['totalCredit'] = FieldValue.increment(payload.totalCreditDelta);
+      }
+      if (payload.totalDiscountDelta != 0) {
+        updates['totalDiscount'] = FieldValue.increment(
+          payload.totalDiscountDelta,
+        );
+      }
+      if (payload.customersServedDelta != 0) {
+        updates['customersServed'] = FieldValue.increment(
+          payload.customersServedDelta,
+        );
+      }
+      if (payload.previousDayCashDelta != 0) {
+        updates['previousDayCash'] = FieldValue.increment(
+          payload.previousDayCashDelta,
+        );
+      }
+      if (payload.previousDayMtDelta != 0) {
+        updates['previousDayMt'] = FieldValue.increment(
+          payload.previousDayMtDelta,
+        );
+      }
+
+      transaction.set(summaryRef, updates, SetOptions(merge: true));
+      transaction.set(markerRef, {
+        'billId': payload.billId,
+        'createdAt': Timestamp.fromDate(payload.createdAt),
+        'appliedAt': FieldValue.serverTimestamp(),
+        'schemaVersion': payload.schemaVersion,
+      }, SetOptions(merge: true));
+    });
   }
 
   // ========== SALE OPERATIONS ==========

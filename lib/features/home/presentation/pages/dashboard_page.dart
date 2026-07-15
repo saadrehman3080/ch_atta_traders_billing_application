@@ -1143,6 +1143,7 @@ class _DashboardPageState extends State<DashboardPage>
         date: bill.date,
         products: products,
         discount: bill.discount,
+        isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.fromJson(bill.paymentType),
       );
     } else {
@@ -1152,6 +1153,7 @@ class _DashboardPageState extends State<DashboardPage>
         date: bill.date,
         products: products,
         discount: bill.discount,
+        isReceiptGenerated: bill.isReceiptGenerated,
         isPaid: bill.isPaid,
         amountDue: bill.amountDue,
         cratesDue: bill.cratesDue,

@@ -13,6 +13,7 @@ import 'package:ch_atta_traders_billing_application/services/printer/printer_ser
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'package:flutter/scheduler.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
@@ -31,6 +32,8 @@ class _OrderPageState extends State<OrderPage> {
   bool _isCheckoutVisible = false;
   List<Product> _filteredProducts = [];
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _productsDataSubscription;
   final Map<String, int> _originalPrices = {};
   double _lastScrollOffset = 0;
   final CheckoutFormProvider _checkoutFormProvider = CheckoutFormProvider();
@@ -42,6 +45,7 @@ class _OrderPageState extends State<OrderPage> {
     _searchController.addListener(_filterProducts);
     _productListScrollController.addListener(_handleScrollDirection);
     _setupConnectivityListener();
+    _setupProductsDataStreamListener();
     // Load products from Firebase
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().loadProducts();
@@ -57,6 +61,7 @@ class _OrderPageState extends State<OrderPage> {
     _searchController.dispose();
     _productListScrollController.dispose();
     _connectivitySubscription?.cancel();
+    _productsDataSubscription?.cancel();
     _checkoutFormProvider.dispose();
     // Restore nav visibility when leaving the page
     NavVisibilityNotifier.isVisible.value = true;
@@ -103,6 +108,18 @@ class _OrderPageState extends State<OrderPage> {
         context.read<ProductProvider>().loadProducts();
       }
     });
+  }
+
+  /// Listens for real-time product data updates and reloads products.
+  void _setupProductsDataStreamListener() {
+    _productsDataSubscription = FirebaseFirestore.instance
+        .collection('products')
+        .snapshots()
+        .listen((_) {
+          if (!mounted) return;
+          _originalPrices.clear();
+          context.read<ProductProvider>().loadProducts();
+        });
   }
 
   List<Product> _getFilteredProducts(List<Product> allProducts) {

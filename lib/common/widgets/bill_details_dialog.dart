@@ -2,11 +2,13 @@ import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
+import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class BillDetailsDialog extends StatefulWidget {
@@ -25,6 +27,7 @@ class BillDetailsDialog extends StatefulWidget {
 
 class _BillDetailsDialogState extends State<BillDetailsDialog> {
   bool _isPrinting = false;
+  late bool _isReceiptGenerated;
   final ScrollController _scrollController = ScrollController();
   bool _isScrollable = false;
 
@@ -36,10 +39,36 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
   @override
   void initState() {
     super.initState();
+    _isReceiptGenerated = widget.bill.isReceiptGenerated;
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _checkScrollable();
     });
+  }
+
+  Future<void> _markReceiptGeneratedInFirebase() async {
+    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
+    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) return;
+
+    final firestore = FirebaseFirestore.instance;
+
+    if (widget.bill is CreditHistory) {
+      await firestore
+          .collection('Credit History')
+          .doc(salesmanIdentifier)
+          .collection('bills')
+          .doc(widget.bill.billId)
+          .set({'isReceiptGenerated': true}, SetOptions(merge: true));
+      return;
+    }
+
+    final formattedDate = DateFormatters.formatForFirebase(widget.bill.date);
+    await firestore
+        .collection('Daily Sales')
+        .doc(salesmanIdentifier)
+        .collection(formattedDate)
+        .doc(widget.bill.billId)
+        .set({'isReceiptGenerated': true}, SetOptions(merge: true));
   }
 
   @override
@@ -108,13 +137,17 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
         discount: widget.bill.discount,
         salesmanName: salesmanName,
         paymentType: paymentType,
-        isReferenceOnly: true,
+        showDuplicateLabel: _isReceiptGenerated,
         paymentHistory: paymentHistory,
         includeSubtypeDetails: hasSubtypeProducts,
       );
 
       if (mounted) {
         if (result.success) {
+          if (!_isReceiptGenerated) {
+            await _markReceiptGeneratedInFirebase();
+            _isReceiptGenerated = true;
+          }
           if (Navigator.canPop(context)) {
             Navigator.of(context).pop();
           }
@@ -446,24 +479,8 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                     SizedBox(
                       width: double.infinity,
                       height: 54,
-                      child: ElevatedButton.icon(
+                      child: ElevatedButton(
                         onPressed: _isPrinting ? null : _printBill,
-                        icon: _isPrinting
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.pepsiWhite,
-                                ),
-                              )
-                            : const Icon(Icons.print, size: 22),
-                        label: Text(
-                          _isPrinting ? 'Printing...' : 'Reprint Bill',
-                          style: AppTextStyles.smallButton.copyWith(
-                            color: AppColors.pepsiWhite,
-                          ),
-                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: widget.accentColor,
                           foregroundColor: AppColors.pepsiWhite,
@@ -473,6 +490,29 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           elevation: 0,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_isPrinting)
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.pepsiWhite,
+                                ),
+                              )
+                            else
+                              const Icon(Icons.print, size: 22),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isPrinting ? 'Printing...' : 'Reprint Bill',
+                              style: AppTextStyles.smallButton.copyWith(
+                                color: AppColors.pepsiWhite,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

@@ -1,5 +1,6 @@
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Represents a single partial payment entry with date and amount
 class PartialPayment {
@@ -32,6 +33,8 @@ class CreditHistory implements BillBase {
   @override
   final int discount;
   @override
+  final bool isReceiptGenerated;
+  @override
   final BillType billType;
 
   final int cratesDue;
@@ -46,6 +49,7 @@ class CreditHistory implements BillBase {
     required this.date,
     required this.products,
     this.discount = 0,
+    this.isReceiptGenerated = false,
     this.isPaid = false,
     this.amountDue = 0,
     this.cratesDue = 0,
@@ -56,14 +60,24 @@ class CreditHistory implements BillBase {
 
   // Factory constructor to create CreditHistory from JSON (Firebase)
   factory CreditHistory.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic value) {
+      if (value is Timestamp) {
+        return value.toDate();
+      } else if (value is String) {
+        return DateTime.parse(value);
+      }
+      return DateTime.now();
+    }
+
     return CreditHistory(
       billId: json['billId'] as String,
       customerName: json['customerName'] as String,
-      date: DateTime.parse(json['date'] as String),
+      date: parseDate(json['date']),
       products: (json['products'] as List<dynamic>)
           .map((item) => Product.fromJson(item as Map<String, dynamic>))
           .toList(),
       discount: json['discount'] as int? ?? 0,
+      isReceiptGenerated: json['isReceiptGenerated'] as bool? ?? false,
       isPaid: json['isPaid'] as bool? ?? true,
       amountDue: json['amountDue'] as int? ?? 0,
       cratesDue: json['cratesDue'] as int? ?? 0,
@@ -89,6 +103,7 @@ class CreditHistory implements BillBase {
       'date': date.toIso8601String(),
       'products': products.map((product) => product.toJson()).toList(),
       'discount': discount,
+      'isReceiptGenerated': isReceiptGenerated,
       'isPaid': isPaid,
       'amountDue': amountDue,
       'isRecordUpdated': isRecordUpdated,
@@ -105,6 +120,7 @@ class CreditHistory implements BillBase {
     DateTime? date,
     List<Product>? products,
     int? discount,
+    bool? isReceiptGenerated,
     bool? isPaid,
     int? amountDue,
     int? cratesDue,
@@ -118,6 +134,7 @@ class CreditHistory implements BillBase {
       date: date ?? this.date,
       products: products ?? this.products,
       discount: discount ?? this.discount,
+      isReceiptGenerated: isReceiptGenerated ?? this.isReceiptGenerated,
       isPaid: isPaid ?? this.isPaid,
       amountDue: amountDue ?? this.amountDue,
       cratesDue: cratesDue ?? this.cratesDue,

@@ -22,6 +22,7 @@ abstract class BillBase {
   DateTime get date;
   List<Product> get products;
   int get discount;
+  bool get isReceiptGenerated;
 
   /// The type of bill - cash or credit
   BillType get billType;

@@ -81,6 +81,9 @@ class PendingBill extends HiveObject {
   @HiveField(16)
   final DateTime? lastSyncAttempt;
 
+  @HiveField(17)
+  final bool isReceiptGenerated;
+
   PendingBill({
     required this.billId,
     required this.customerName,
@@ -99,6 +102,7 @@ class PendingBill extends HiveObject {
     this.schemaVersion = 1,
     this.status = PendingBillStatus.pending,
     this.lastSyncAttempt,
+    this.isReceiptGenerated = false,
   });
 
   // ─── Factory Constructors ─────────────────────────────────────────────────
@@ -121,6 +125,7 @@ class PendingBill extends HiveObject {
       partialPaymentsJson: const [],
       createdAt: DateTime.now(),
       paymentType: bill.billType.toJson(),
+      isReceiptGenerated: bill.isReceiptGenerated,
     );
   }
 
@@ -143,6 +148,7 @@ class PendingBill extends HiveObject {
       partialPaymentsJson: bill.partialPayments.map((p) => p.toJson()).toList(),
       createdAt: DateTime.now(),
       paymentType: paymentType,
+      isReceiptGenerated: bill.isReceiptGenerated,
     );
   }
 
@@ -152,6 +158,7 @@ class PendingBill extends HiveObject {
     int? syncAttempts,
     PendingBillStatus? status,
     DateTime? lastSyncAttempt,
+    bool? isReceiptGenerated,
   }) {
     return PendingBill(
       billId: billId,
@@ -171,6 +178,7 @@ class PendingBill extends HiveObject {
       schemaVersion: schemaVersion,
       status: status ?? this.status,
       lastSyncAttempt: lastSyncAttempt ?? this.lastSyncAttempt,
+      isReceiptGenerated: isReceiptGenerated ?? this.isReceiptGenerated,
     );
   }
 }

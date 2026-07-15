@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
+import 'package:ch_atta_traders_billing_application/data/models/offline_dashboard_payload.dart';
 import 'package:ch_atta_traders_billing_application/data/models/pending_bill.dart';
 import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/credit_repository.dart';
 import 'package:ch_atta_traders_billing_application/data/repositories/sale_repository.dart';
+import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_service.dart';
+import 'package:ch_atta_traders_billing_application/services/offline/offline_dashboard_queue_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
@@ -28,11 +31,16 @@ class OfflineBillSyncManager {
   // ─── Dependencies ────────────────────────────────────────────────────────
 
   final OfflineBillService _offlineBillService = OfflineBillService();
+  final OfflineDashboardQueueService _dashboardQueueService =
+      OfflineDashboardQueueService();
   final SaleRepository _saleRepository = SaleRepository();
   final CreditRepository _creditRepository = CreditRepository();
+  final DashboardSummaryService _dashboardSummaryService =
+      DashboardSummaryService();
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _isSyncing = false;
+  final Set<String> _inFlightBillIds = <String>{};
 
   // ─── Connectivity Listener ────────────────────────────────────────────────
 
@@ -127,21 +135,35 @@ class OfflineBillSyncManager {
   // ─── Sync a Single Bill ───────────────────────────────────────────────────
 
   Future<bool> _syncSingleBill(PendingBill bill) async {
+    if (!_inFlightBillIds.add(bill.billId)) {
+      debugPrint(
+        '[OfflineBillSyncManager] Bill already syncing: ${bill.billId}',
+      );
+      return true;
+    }
+
     try {
       await _markSyncing(bill);
 
-      await _saveToFirebaseWithTimeout(
+      await _saveBillDocumentToFirebaseWithTimeout(
+        bill,
+        timeout: const Duration(seconds: 10),
+      );
+      await _syncDashboardPayloadWithTimeout(
         bill,
         timeout: const Duration(seconds: 10),
       );
 
       await _offlineBillService.deletePendingBill(bill.billId);
+      await _dashboardQueueService.deletePayload(bill.billId);
       debugPrint('[OfflineBillSyncManager] Synced bill: ${bill.billId}');
       return true;
     } catch (e) {
       await _markFailed(bill);
       debugPrint('[OfflineBillSyncManager] Sync failed for ${bill.billId}: $e');
       return false;
+    } finally {
+      _inFlightBillIds.remove(bill.billId);
     }
   }
 
@@ -163,16 +185,23 @@ class OfflineBillSyncManager {
 
   // ─── Firebase Write ───────────────────────────────────────────────────────
 
-  Future<void> _saveToFirebaseWithTimeout(
+  Future<void> _saveBillDocumentToFirebaseWithTimeout(
     PendingBill bill, {
     Duration timeout = const Duration(seconds: 10),
   }) async {
-    await _saveToFirebase(bill).timeout(timeout);
+    await _saveBillDocumentToFirebase(bill).timeout(timeout);
+  }
+
+  Future<void> _syncDashboardPayloadWithTimeout(
+    PendingBill bill, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    await _syncDashboardPayload(bill).timeout(timeout);
   }
 
   /// Reconstructs the original [SaleHistory] or [CreditHistory] from [bill]
-  /// and delegates the write to the appropriate repository.
-  Future<void> _saveToFirebase(PendingBill bill) async {
+  /// and delegates bill-document write to the appropriate repository.
+  Future<void> _saveBillDocumentToFirebase(PendingBill bill) async {
     final products = bill.productsJson.map((j) => Product.fromJson(j)).toList();
 
     if (bill.billType == 'sale') {
@@ -182,13 +211,18 @@ class OfflineBillSyncManager {
         date: bill.date,
         products: products,
         discount: bill.discount,
+        isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.fromJson(bill.paymentType),
       );
-      final ok = await _saleRepository.saveSale(
+      final ok = await _saleRepository.saveSaleFromCreditConversion(
         saleHistory,
         bill.salesmanIdentifier,
       );
-      if (!ok) throw Exception('SaleRepository.saveSale returned false');
+      if (!ok) {
+        throw Exception(
+          'SaleRepository.saveSaleFromCreditConversion returned false',
+        );
+      }
     } else {
       final partialPayments = bill.partialPaymentsJson
           .map((j) => PartialPayment.fromJson(j))
@@ -200,16 +234,70 @@ class OfflineBillSyncManager {
         date: bill.date,
         products: products,
         discount: bill.discount,
+        isReceiptGenerated: bill.isReceiptGenerated,
         isPaid: bill.isPaid,
         amountDue: bill.amountDue,
         cratesDue: bill.cratesDue,
         billType: BillType.credit,
         partialPayments: partialPayments,
       );
-      await _creditRepository.saveCredit(
+      await _creditRepository.saveCreditWithoutDashboard(
         creditHistory,
         bill.salesmanIdentifier,
       );
     }
+  }
+
+  Future<void> _syncDashboardPayload(PendingBill bill) async {
+    final payload =
+        _dashboardQueueService.getPayload(bill.billId) ??
+        _buildFallbackPayload(bill);
+    await _dashboardSummaryService.applyOfflineDashboardPayload(
+      payload: payload,
+    );
+  }
+
+  OfflineDashboardPayload _buildFallbackPayload(PendingBill bill) {
+    final itemsSold = bill.productsJson.fold<int>(
+      0,
+      (sum, p) => sum + ((p['quantity'] as num?)?.toInt() ?? 0),
+    );
+
+    final grossTotal = bill.productsJson.fold<int>(0, (sum, p) {
+      final price = (p['price'] as num?)?.toInt() ?? 0;
+      final quantity = (p['quantity'] as num?)?.toInt() ?? 0;
+      return sum + (price * quantity);
+    });
+
+    final totalAmount = (grossTotal - bill.discount).clamp(0, 1 << 31);
+
+    int totalCollectionDelta = 0;
+    int totalCreditDelta = 0;
+
+    if (bill.billType == 'sale') {
+      totalCollectionDelta = totalAmount;
+    } else if (bill.isPaid) {
+      totalCollectionDelta = bill.amountDue;
+    } else {
+      totalCreditDelta = bill.amountDue;
+      final partialPaymentTotal = bill.partialPaymentsJson.fold<int>(
+        0,
+        (sum, p) => sum + ((p['amount'] as num?)?.toInt() ?? 0),
+      );
+      totalCollectionDelta = partialPaymentTotal;
+    }
+
+    return OfflineDashboardPayload(
+      billId: bill.billId,
+      salesmanIdentifier: bill.salesmanIdentifier,
+      date: bill.date,
+      totalCollectionDelta: totalCollectionDelta,
+      totalItemsSoldDelta: itemsSold,
+      totalMtRemainingDelta: bill.billType == 'credit' ? bill.cratesDue : 0,
+      totalCreditDelta: totalCreditDelta,
+      totalDiscountDelta: bill.discount,
+      customersServedDelta: 1,
+      createdAt: bill.createdAt,
+    );
   }
 }

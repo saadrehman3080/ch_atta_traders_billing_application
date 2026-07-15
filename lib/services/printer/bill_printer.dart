@@ -882,7 +882,7 @@ class BillPrinter {
     int? mtCollected,
     int? mtRemaining,
     int? partialPayment,
-    bool isReferenceOnly = false,
+    bool showDuplicateLabel = false,
     bool isPendingSync = false,
     List<PartialPayment>? paymentHistory,
     bool includeSubtypeDetails = false,
@@ -1110,7 +1110,7 @@ class BillPrinter {
 
       bytes.addAll('Thank you for your business!\n'.codeUnits);
 
-      if (isReferenceOnly) {
+      if (showDuplicateLabel) {
         bytes.addAll('\n'.codeUnits);
         bytes.addAll('--------------------------------\n'.codeUnits);
         bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on

@@ -165,6 +165,7 @@ class DailySalesRepository {
         'date': Timestamp.fromDate(sale.date),
         'products': sale.products.map((p) => p.toJson()).toList(),
         'discount': sale.discount,
+        'isReceiptGenerated': sale.isReceiptGenerated,
         'amountDue': grandTotal,
         'cratesDue': 0, // MT fully received
         'isPaid': false,

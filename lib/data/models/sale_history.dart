@@ -14,6 +14,8 @@ class SaleHistory implements BillBase {
   @override
   final int discount;
   @override
+  final bool isReceiptGenerated;
+  @override
   final BillType billType;
 
   SaleHistory({
@@ -22,6 +24,7 @@ class SaleHistory implements BillBase {
     required this.date,
     required this.products,
     this.discount = 0,
+    this.isReceiptGenerated = false,
     this.billType = BillType.cash,
   });
 
@@ -46,6 +49,7 @@ class SaleHistory implements BillBase {
           .map((item) => Product.fromJson(item as Map<String, dynamic>))
           .toList(),
       discount: json['discount'] as int? ?? 0,
+      isReceiptGenerated: json['isReceiptGenerated'] as bool? ?? false,
       billType: BillType.fromJson(json['billType'] as String?),
     );
   }
@@ -59,6 +63,7 @@ class SaleHistory implements BillBase {
       'date': date.toIso8601String(),
       'products': products.map((product) => product.toJson()).toList(),
       'discount': discount,
+      'isReceiptGenerated': isReceiptGenerated,
       'billType': billType.toJson(),
     };
   }
@@ -70,6 +75,7 @@ class SaleHistory implements BillBase {
     DateTime? date,
     List<Product>? products,
     int? discount,
+    bool? isReceiptGenerated,
     BillType? billType,
   }) {
     return SaleHistory(
@@ -78,6 +84,7 @@ class SaleHistory implements BillBase {
       date: date ?? this.date,
       products: products ?? this.products,
       discount: discount ?? this.discount,
+      isReceiptGenerated: isReceiptGenerated ?? this.isReceiptGenerated,
       billType: billType ?? this.billType,
     );
   }
