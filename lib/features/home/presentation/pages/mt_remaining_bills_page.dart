@@ -307,6 +307,10 @@ class _MtRemainingBillsPageState extends State<MtRemainingBillsPage> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (bill.latitude != null && bill.longitude != null) ...[
+                  const SizedBox(height: 6),
+                  _buildLocationInfo(bill.latitude!, bill.longitude!),
+                ],
               ],
             ),
           ),
@@ -338,6 +342,22 @@ class _MtRemainingBillsPageState extends State<MtRemainingBillsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLocationInfo(double latitude, double longitude) {
+    return Row(
+      children: [
+        Icon(Icons.my_location_outlined, size: 12, color: AppColors.gray500),
+        const SizedBox(width: 4),
+        Text(
+          'Lat ${latitude.toStringAsFixed(6)}, Lng ${longitude.toStringAsFixed(6)}',
+          style: AppTextStyles.helperText.copyWith(
+            color: AppColors.gray500,
+            fontSize: 11,
+          ),
+        ),
+      ],
     );
   }
 

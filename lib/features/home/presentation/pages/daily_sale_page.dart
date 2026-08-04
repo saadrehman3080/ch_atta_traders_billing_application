@@ -533,51 +533,47 @@ class _DailySalePageState extends State<DailySalePage>
   }
 
   Widget _buildSaleList(List<SaleHistory> saleHistory) {
-    return RefreshIndicator(
-      onRefresh: _loadSales,
-      color: AppColors.pepsiBlue,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: saleHistory.length,
-        itemBuilder: (context, index) {
-          final sale = saleHistory[index];
-          final isRemoving = _removingBillId == sale.billId;
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: saleHistory.length,
+      itemBuilder: (context, index) {
+        final sale = saleHistory[index];
+        final isRemoving = _removingBillId == sale.billId;
 
-          if (isRemoving && _removeAnimController != null) {
-            return SizeTransition(
-              sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(
+        if (isRemoving && _removeAnimController != null) {
+          return SizeTransition(
+            sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(
+              CurvedAnimation(
+                parent: _removeAnimController!,
+                curve: Curves.easeInOut,
+              ),
+            ),
+            child: FadeTransition(
+              opacity: Tween<double>(begin: 1.0, end: 0.0).animate(
                 CurvedAnimation(
                   parent: _removeAnimController!,
-                  curve: Curves.easeInOut,
+                  curve: Curves.easeOut,
                 ),
               ),
-              child: FadeTransition(
-                opacity: Tween<double>(begin: 1.0, end: 0.0).animate(
-                  CurvedAnimation(
-                    parent: _removeAnimController!,
-                    curve: Curves.easeOut,
-                  ),
-                ),
-                child: SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: Offset.zero,
-                        end: const Offset(-0.3, 0.0),
-                      ).animate(
-                        CurvedAnimation(
-                          parent: _removeAnimController!,
-                          curve: Curves.easeInOut,
-                        ),
+              child: SlideTransition(
+                position:
+                    Tween<Offset>(
+                      begin: Offset.zero,
+                      end: const Offset(-0.3, 0.0),
+                    ).animate(
+                      CurvedAnimation(
+                        parent: _removeAnimController!,
+                        curve: Curves.easeInOut,
                       ),
-                  child: _buildSalesCard(context, sale, index),
-                ),
+                    ),
+                child: _buildSalesCard(context, sale, index),
               ),
-            );
-          }
+            ),
+          );
+        }
 
-          return _buildSalesCard(context, sale, index);
-        },
-      ),
+        return _buildSalesCard(context, sale, index);
+      },
     );
   }
 
@@ -733,9 +729,8 @@ class _DailySalePageState extends State<DailySalePage>
                 color: AppColors.gray500,
               ),
             ),
-            const SizedBox(width: 8),
             if (!sale.isReceiptGenerated) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               _buildReceiptNotGeneratedBadge(),
             ],
           ],
@@ -747,12 +742,12 @@ class _DailySalePageState extends State<DailySalePage>
             _buildAmountBadge(grandTotal),
             const SizedBox(width: 8),
             _buildItemCountBadge(totalItems),
-            // if (!sale.isReceiptGenerated) ...[
-            //   const SizedBox(width: 8),
-            //   _buildReceiptNotGeneratedBadge(),
-            // ],
           ],
         ),
+        if (sale.latitude != null && sale.longitude != null) ...[
+          const SizedBox(height: 6),
+          _buildLocationInfo(sale.latitude!, sale.longitude!),
+        ],
       ],
     );
   }
@@ -795,14 +790,30 @@ class _DailySalePageState extends State<DailySalePage>
     );
   }
 
+  Widget _buildLocationInfo(double latitude, double longitude) {
+    return Row(
+      children: [
+        Icon(Icons.my_location_outlined, size: 12, color: AppColors.gray500),
+        const SizedBox(width: 4),
+        Text(
+          'Lat ${latitude.toStringAsFixed(6)}, Lng ${longitude.toStringAsFixed(6)}',
+          style: AppTextStyles.helperText.copyWith(
+            fontSize: 11,
+            color: AppColors.gray500,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildReceiptNotGeneratedBadge() {
     return Tooltip(
       message: 'Receipt not generated',
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: AppColors.pepsiRed.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(4),
           border: Border.all(
             color: AppColors.pepsiRed.withValues(alpha: 0.25),
             width: 0.6,
@@ -810,7 +821,7 @@ class _DailySalePageState extends State<DailySalePage>
         ),
         child: Icon(
           Icons.print_disabled_outlined,
-          size: 16,
+          size: 14,
           color: AppColors.pepsiRed,
         ),
       ),

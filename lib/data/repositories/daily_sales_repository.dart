@@ -112,6 +112,7 @@ class DailySalesRepository {
       await _dashboardService.onSaleDeleted(
         salesmanName: salesmanName,
         date: sale.date,
+        billId: sale.billId,
         totalAmount: grandTotal,
         itemsSold: itemsSold,
         discount: sale.discount,
@@ -169,6 +170,8 @@ class DailySalesRepository {
         'amountDue': grandTotal,
         'cratesDue': 0, // MT fully received
         'isPaid': false,
+        'latitude': sale.latitude,
+        'longitude': sale.longitude,
       };
 
       // Save to credit history (new simplified path)
@@ -183,6 +186,7 @@ class DailySalesRepository {
       await _dashboardService.onSaleConvertedToCredit(
         salesmanName: salesmanName,
         date: sale.date,
+        billId: sale.billId,
         totalAmount: grandTotal,
         itemsSold: itemsSold,
       );

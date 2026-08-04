@@ -65,3 +65,5 @@ Changes after 03 june 2026
 Planned Features
 1. print Business card.
 2. print recipt status.
+3. date change refresh data.
+4. show deleted bills.

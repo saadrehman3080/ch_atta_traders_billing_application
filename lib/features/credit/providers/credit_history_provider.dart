@@ -145,6 +145,8 @@ class CreditHistoryProvider extends ChangeNotifier {
           isPaid: isPaid ?? credit.isPaid,
           isRecordUpdated: isRecordUpdated ?? credit.isRecordUpdated,
           partialPayments: updatedPartialPayments,
+          latitude: credit.latitude,
+          longitude: credit.longitude,
         );
         _credits[index] = updatedCredit;
         _safeNotifyListeners();

@@ -15,6 +15,23 @@ class BillingCalculations {
     );
   }
 
+  /// Calculate total margin for a bill.
+  ///
+  /// Formula per unit:
+  /// - costPrice = originalPrice - marginAmount
+  /// - realizedMargin = soldPrice - costPrice
+  ///
+  /// Bill discount is subtracted from final margin total.
+  static int calculateTotalMargin(List<Product> products, {int discount = 0}) {
+    final marginBeforeDiscount = products.fold<int>(0, (sum, product) {
+      final costPrice = product.originalPrice - product.marginAmount;
+      final realizedMarginPerUnit = product.price - costPrice;
+      return sum + (realizedMarginPerUnit * product.quantity);
+    });
+
+    return marginBeforeDiscount - discount;
+  }
+
   /// Get only selected products (quantity > 0)
   static List<Product> getSelectedProducts(List<Product> products) {
     return products.where((p) => p.quantity > 0).toList();

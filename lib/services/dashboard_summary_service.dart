@@ -116,6 +116,58 @@ class DashboardSummaryService {
     });
   }
 
+  /// Applies a dashboard mutation exactly once per [actionId].
+  ///
+  /// Manual credit/sale actions (delete, convert-to-sale, partial payment)
+  /// are performed as several separate, non-transactional Firestore calls
+  /// (save/convert doc, update dashboard, delete/update doc). If any step
+  /// after the dashboard update fails and the user retries the whole
+  /// operation, the dashboard delta would previously be re-applied even
+  /// though the underlying bill data only changed once - causing the
+  /// dashboard totals to drift from the real bill list.
+  ///
+  /// Idempotency is enforced by a marker document at:
+  /// Dashboard Summary/{salesman}/{date}/summary/processedActions/{actionId}
+  Future<bool> _applyIdempotentUpdate({
+    required String salesmanName,
+    required DateTime date,
+    required String actionId,
+    required Map<String, dynamic> Function(Map<String, dynamic> currentData)
+    buildUpdates,
+  }) async {
+    final summaryRef = _getSummaryRef(salesmanName, date);
+    final markerRef = summaryRef.collection('processedActions').doc(actionId);
+
+    try {
+      await _firestore.runTransaction((transaction) async {
+        final markerSnapshot = await transaction.get(markerRef);
+        if (markerSnapshot.exists) {
+          debugPrint(
+            'DashboardSummaryService: action already applied: $actionId',
+          );
+          return;
+        }
+
+        final summarySnapshot = await transaction.get(summaryRef);
+        final data = summarySnapshot.data() as Map<String, dynamic>? ?? {};
+
+        final updates = buildUpdates(data);
+        updates['lastUpdated'] = FieldValue.serverTimestamp();
+
+        transaction.set(summaryRef, updates, SetOptions(merge: true));
+        transaction.set(markerRef, {
+          'actionId': actionId,
+          'appliedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('Error applying dashboard action $actionId: $e');
+      debugPrint('StackTrace: $stackTrace');
+      return false;
+    }
+  }
+
   // ========== SALE OPERATIONS ==========
 
   /// Updates dashboard when a new CASH sale is created (no MT tracking).
@@ -150,10 +202,12 @@ class DashboardSummaryService {
   /// Updates dashboard when a sale is deleted.
   /// Decrements: totalCollection, totalItemsSold, totalDiscount, customersServed
   /// Only updates if the sale is from today.
-  /// Uses a transaction to prevent values from going below zero.
+  /// Idempotent per [billId] so a retry after a later step fails (e.g. the
+  /// actual sale document delete) does not decrement the dashboard twice.
   Future<bool> onSaleDeleted({
     required String salesmanName,
     required DateTime date,
+    required String billId,
     required int totalAmount,
     required int itemsSold,
     required int discount,
@@ -165,25 +219,14 @@ class DashboardSummaryService {
       return true;
     }
 
-    try {
-      debugPrint('DashboardSummaryService: onSaleDeleted');
-      debugPrint(
-        'Amount: $totalAmount, Items: $itemsSold, Discount: $discount',
-      );
+    debugPrint('DashboardSummaryService: onSaleDeleted');
+    debugPrint('Amount: $totalAmount, Items: $itemsSold, Discount: $discount');
 
-      final summaryRef = _getSummaryRef(salesmanName, date);
-
-      await _firestore.runTransaction((transaction) async {
-        final snapshot = await transaction.get(summaryRef);
-
-        if (!snapshot.exists) {
-          debugPrint(
-            'DashboardSummaryService: Summary doc not found, skipping delete update',
-          );
-          return;
-        }
-
-        final data = snapshot.data() as Map<String, dynamic>? ?? {};
+    return _applyIdempotentUpdate(
+      salesmanName: salesmanName,
+      date: date,
+      actionId: 'saleDelete_$billId',
+      buildUpdates: (data) {
         final currentCollection =
             (data['totalCollection'] as num?)?.toInt() ?? 0;
         final currentItemsSold = (data['totalItemsSold'] as num?)?.toInt() ?? 0;
@@ -191,7 +234,7 @@ class DashboardSummaryService {
         final currentCustomers =
             (data['customersServed'] as num?)?.toInt() ?? 0;
 
-        transaction.set(summaryRef, {
+        return {
           'totalCollection': (currentCollection - totalAmount).clamp(
             0,
             currentCollection,
@@ -205,16 +248,9 @@ class DashboardSummaryService {
             currentDiscount,
           ),
           'customersServed': (currentCustomers - 1).clamp(0, currentCustomers),
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      });
-
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error in onSaleDeleted: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+        };
+      },
+    );
   }
 
   // ========== CREDIT OPERATIONS ==========
@@ -270,10 +306,12 @@ class DashboardSummaryService {
   /// Updates dashboard when a credit is deleted permanently.
   /// Decrements: totalCredit (if not paid), totalItemsSold, totalMtRemaining, totalDiscount, customersServed
   /// Only updates if the credit is from today.
-  /// Uses a transaction to prevent values from going below zero.
+  /// Idempotent per [billId] so a retry after a later step fails (e.g. the
+  /// actual credit document delete) does not decrement the dashboard twice.
   Future<bool> onCreditDeleted({
     required String salesmanName,
     required DateTime date,
+    required String billId,
     required int amountDue,
     required int cratesDue,
     required int itemsSold,
@@ -288,28 +326,17 @@ class DashboardSummaryService {
       return true;
     }
 
-    try {
-      debugPrint('DashboardSummaryService: onCreditDeleted');
-      debugPrint(
-        'Amount: $amountDue, Crates: $cratesDue, Items: $itemsSold, Discount: $discount, WasPaid: $isPaidBill, PartialPaymentTotal: $partialPaymentTotal',
-      );
+    debugPrint('DashboardSummaryService: onCreditDeleted');
+    debugPrint(
+      'Amount: $amountDue, Crates: $cratesDue, Items: $itemsSold, Discount: $discount, WasPaid: $isPaidBill, PartialPaymentTotal: $partialPaymentTotal',
+    );
 
-      final summaryRef = _getSummaryRef(salesmanName, date);
-
-      await _firestore.runTransaction((transaction) async {
-        final snapshot = await transaction.get(summaryRef);
-
-        if (!snapshot.exists) {
-          debugPrint(
-            'DashboardSummaryService: Summary doc not found, skipping credit delete update',
-          );
-          return;
-        }
-
-        final data = snapshot.data() as Map<String, dynamic>? ?? {};
-        final Map<String, dynamic> updates = {
-          'lastUpdated': FieldValue.serverTimestamp(),
-        };
+    return _applyIdempotentUpdate(
+      salesmanName: salesmanName,
+      date: date,
+      actionId: 'creditDelete_$billId',
+      buildUpdates: (data) {
+        final Map<String, dynamic> updates = {};
 
         // Decrement credit if bill was not paid (clamped to 0)
         if (amountDue > 0 && !isPaidBill) {
@@ -371,16 +398,9 @@ class DashboardSummaryService {
           currentCustomers,
         );
 
-        transaction.set(summaryRef, updates, SetOptions(merge: true));
-      });
-
-      debugPrint('Dashboard summary updated successfully');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error in onCreditDeleted: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+        return updates;
+      },
+    );
   }
 
   // ========== CREDIT TO SALE CONVERSION ==========
@@ -389,10 +409,12 @@ class DashboardSummaryService {
   /// Decrements: totalCredit (if not paid), totalMtRemaining
   /// Increments: totalCollection (if not paid)
   /// Only updates if the bill is from today.
-  /// Uses a transaction to prevent values from going below zero.
+  /// Idempotent per [billId] so a retry after a later step fails (e.g. the
+  /// credit document delete) does not apply the conversion twice.
   Future<bool> onCreditConvertedToSale({
     required String salesmanName,
     required DateTime date,
+    required String billId,
     required int amountDue,
     required int cratesDue,
     required bool isPaidBill,
@@ -404,21 +426,15 @@ class DashboardSummaryService {
       return true;
     }
 
-    try {
-      debugPrint('DashboardSummaryService: onCreditConvertedToSale');
-      debugPrint(
-        'Amount: $amountDue, Crates: $cratesDue, WasPaid: $isPaidBill',
-      );
+    debugPrint('DashboardSummaryService: onCreditConvertedToSale');
+    debugPrint('Amount: $amountDue, Crates: $cratesDue, WasPaid: $isPaidBill');
 
-      final summaryRef = _getSummaryRef(salesmanName, date);
-
-      await _firestore.runTransaction((transaction) async {
-        final snapshot = await transaction.get(summaryRef);
-        final data = snapshot.data() as Map<String, dynamic>? ?? {};
-
-        final Map<String, dynamic> updates = {
-          'lastUpdated': FieldValue.serverTimestamp(),
-        };
+    return _applyIdempotentUpdate(
+      salesmanName: salesmanName,
+      date: date,
+      actionId: 'creditConvert_$billId',
+      buildUpdates: (data) {
+        final Map<String, dynamic> updates = {};
 
         // Decrement MT remaining (clamped to 0)
         final currentMt = (data['totalMtRemaining'] as num?)?.toInt() ?? 0;
@@ -439,26 +455,21 @@ class DashboardSummaryService {
           updates['totalCollection'] = currentCollection + amountDue;
         }
 
-        transaction.set(summaryRef, updates, SetOptions(merge: true));
-      });
-
-      debugPrint('Dashboard summary updated for credit-to-sale conversion');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error in onCreditConvertedToSale: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+        return updates;
+      },
+    );
   }
 
   /// Updates dashboard when a sale is converted to credit (moved back to credit).
   /// Decrements: totalCollection, totalItemsSold
   /// Increments: totalCredit
   /// Only updates if the sale is from today.
-  /// Uses a transaction to prevent values from going below zero.
+  /// Idempotent per [billId] so a retry after a later step fails (e.g. the
+  /// sale document delete) does not apply the conversion twice.
   Future<bool> onSaleConvertedToCredit({
     required String salesmanName,
     required DateTime date,
+    required String billId,
     required int totalAmount,
     required int itemsSold,
   }) async {
@@ -469,22 +480,20 @@ class DashboardSummaryService {
       return true;
     }
 
-    try {
-      debugPrint('DashboardSummaryService: onSaleConvertedToCredit');
-      debugPrint('Amount: $totalAmount, Items: $itemsSold');
+    debugPrint('DashboardSummaryService: onSaleConvertedToCredit');
+    debugPrint('Amount: $totalAmount, Items: $itemsSold');
 
-      final summaryRef = _getSummaryRef(salesmanName, date);
-
-      await _firestore.runTransaction((transaction) async {
-        final snapshot = await transaction.get(summaryRef);
-        final data = snapshot.data() as Map<String, dynamic>? ?? {};
-
+    return _applyIdempotentUpdate(
+      salesmanName: salesmanName,
+      date: date,
+      actionId: 'saleToCredit_$billId',
+      buildUpdates: (data) {
         final currentCollection =
             (data['totalCollection'] as num?)?.toInt() ?? 0;
         final currentItemsSold = (data['totalItemsSold'] as num?)?.toInt() ?? 0;
         final currentCredit = (data['totalCredit'] as num?)?.toInt() ?? 0;
 
-        transaction.set(summaryRef, {
+        return {
           'totalCollection': (currentCollection - totalAmount).clamp(
             0,
             currentCollection,
@@ -494,19 +503,9 @@ class DashboardSummaryService {
             currentItemsSold,
           ),
           'totalCredit': currentCredit + totalAmount,
-          'totalMtRemaining': FieldValue.increment(0),
-          // customersServed stays the same
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      });
-
-      debugPrint('Dashboard summary updated for sale-to-credit conversion');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error in onSaleConvertedToCredit: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+        };
+      },
+    );
   }
 
   // ========== PARTIAL PAYMENT OPERATIONS ==========
@@ -515,10 +514,18 @@ class DashboardSummaryService {
   /// Increments: totalCollection (cash received)
   /// Decrements: totalCredit (cash received), totalMtRemaining (crates received)
   /// Only updates if the bill is from today.
-  /// Uses a transaction to prevent values from going below zero.
+  ///
+  /// Idempotent per bill+[previousAmountDue]/[previousCratesDue] (the balance
+  /// the bill had *before* this payment). A retry of the same failed payment
+  /// attempt targets the same "before" balance and is skipped; a later,
+  /// genuinely new partial payment on the same bill has a different "before"
+  /// balance and is applied normally.
   Future<bool> onPartialPaymentReceived({
     required String salesmanName,
     required DateTime date,
+    required String billId,
+    required int previousAmountDue,
+    required int previousCratesDue,
     int? cashReceived,
     int? cratesReceived,
     required bool isPaidBill,
@@ -536,21 +543,18 @@ class DashboardSummaryService {
       return true;
     }
 
-    try {
-      debugPrint('DashboardSummaryService: onPartialPaymentReceived');
-      debugPrint(
-        'Cash: $cashReceived, Crates: $cratesReceived, WasPaid: $isPaidBill',
-      );
+    debugPrint('DashboardSummaryService: onPartialPaymentReceived');
+    debugPrint(
+      'Cash: $cashReceived, Crates: $cratesReceived, WasPaid: $isPaidBill',
+    );
 
-      final summaryRef = _getSummaryRef(salesmanName, date);
-
-      await _firestore.runTransaction((transaction) async {
-        final snapshot = await transaction.get(summaryRef);
-        final data = snapshot.data() as Map<String, dynamic>? ?? {};
-
-        final Map<String, dynamic> updates = {
-          'lastUpdated': FieldValue.serverTimestamp(),
-        };
+    return _applyIdempotentUpdate(
+      salesmanName: salesmanName,
+      date: date,
+      actionId:
+          'partialPayment_${billId}_from${previousAmountDue}_$previousCratesDue',
+      buildUpdates: (data) {
+        final Map<String, dynamic> updates = {};
 
         // Only update credit and collection if bill was NOT already paid
         if (cashReceived != null && cashReceived > 0 && !isPaidBill) {
@@ -573,16 +577,9 @@ class DashboardSummaryService {
           );
         }
 
-        transaction.set(summaryRef, updates, SetOptions(merge: true));
-      });
-
-      debugPrint('Dashboard summary updated for partial payment');
-      return true;
-    } catch (e, stackTrace) {
-      debugPrint('Error in onPartialPaymentReceived: $e');
-      debugPrint('StackTrace: $stackTrace');
-      return false;
-    }
+        return updates;
+      },
+    );
   }
 
   // ========== PREVIOUS DAY COLLECTION OPERATIONS ==========

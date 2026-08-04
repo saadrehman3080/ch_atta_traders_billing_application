@@ -52,7 +52,9 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
       _updateConnectionStatus(result);
     } catch (e) {
       debugPrint('Error checking connectivity: $e');
-      setState(() => _hasInternetConnection = false);
+      if (mounted) {
+        setState(() => _hasInternetConnection = false);
+      }
     }
   }
 
@@ -91,6 +93,8 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
 
   Future<void> _loadProgress() async {
     final docId = await AppPreferences.instance.salesmanDocId;
+    if (!mounted) return;
+
     if (docId != null && docId.isNotEmpty) {
       _salesmanDocId = docId;
       await _progressProvider.loadProgressList(docId);
@@ -591,6 +595,7 @@ class _DailyProgressPageState extends State<DailyProgressPage> {
                   AppColors.pepsiBlue,
                 ),
               ),
+              SizedBox(width: 16),
               Expanded(
                 child: _buildMonthStat(
                   'Items Sold',

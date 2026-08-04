@@ -68,8 +68,15 @@ class OfflineBillSyncManager {
   // ─── Public API ───────────────────────────────────────────────────────────
 
   /// Fires a background sync for a single [bill].
-  /// Always attempts — the 10-second timeout handles weak/no connectivity.
+  /// Attempts only when internet is available.
   static Future<void> syncBill(PendingBill bill) async {
+    final hasConnection = await instance._hasInternetConnection();
+    if (!hasConnection) {
+      debugPrint(
+        '[OfflineBillSyncManager] Skip single-bill sync (offline): ${bill.billId}',
+      );
+      return;
+    }
     unawaited(instance._syncSingleBill(bill));
   }
 
@@ -77,6 +84,13 @@ class OfflineBillSyncManager {
   /// Returns a map with 'synced' and 'failed' counts.
   static Future<Map<String, int>> syncPendingBills() async {
     if (instance._isSyncing) return {'synced': 0, 'failed': 0};
+
+    final hasConnection = await instance._hasInternetConnection();
+    if (!hasConnection) {
+      debugPrint('[OfflineBillSyncManager] Skip sync (offline)');
+      return {'synced': 0, 'failed': 0};
+    }
+
     instance._isSyncing = true;
 
     int synced = 0;
@@ -90,13 +104,24 @@ class OfflineBillSyncManager {
       );
 
       for (final bill in pendingBills) {
+        final onlineNow = await instance._hasInternetConnection();
+        if (!onlineNow) {
+          debugPrint(
+            '[OfflineBillSyncManager] Connectivity lost during batch sync. Stopping loop.',
+          );
+          break;
+        }
+
         if (!instance._shouldRetry(bill)) continue;
 
         final success = await instance._syncSingleBill(bill);
         if (success) {
           synced++;
         } else {
-          failed++;
+          final stillOnline = await instance._hasInternetConnection();
+          if (stillOnline) {
+            failed++;
+          }
         }
       }
     } finally {
@@ -135,6 +160,14 @@ class OfflineBillSyncManager {
   // ─── Sync a Single Bill ───────────────────────────────────────────────────
 
   Future<bool> _syncSingleBill(PendingBill bill) async {
+    final hasConnection = await _hasInternetConnection();
+    if (!hasConnection) {
+      debugPrint(
+        '[OfflineBillSyncManager] Skip syncing bill (offline): ${bill.billId}',
+      );
+      return false;
+    }
+
     if (!_inFlightBillIds.add(bill.billId)) {
       debugPrint(
         '[OfflineBillSyncManager] Bill already syncing: ${bill.billId}',
@@ -159,8 +192,18 @@ class OfflineBillSyncManager {
       debugPrint('[OfflineBillSyncManager] Synced bill: ${bill.billId}');
       return true;
     } catch (e) {
-      await _markFailed(bill);
-      debugPrint('[OfflineBillSyncManager] Sync failed for ${bill.billId}: $e');
+      final stillOnline = await _hasInternetConnection();
+      if (stillOnline) {
+        await _markFailed(bill);
+        debugPrint(
+          '[OfflineBillSyncManager] Sync failed for ${bill.billId}: $e',
+        );
+      } else {
+        await _markPendingForRetry(bill);
+        debugPrint(
+          '[OfflineBillSyncManager] Sync paused (offline) for ${bill.billId}; bill left pending.',
+        );
+      }
       return false;
     } finally {
       _inFlightBillIds.remove(bill.billId);
@@ -181,6 +224,16 @@ class OfflineBillSyncManager {
       lastSyncAttempt: DateTime.now(),
     );
     await _offlineBillService.updatePendingBill(updated);
+  }
+
+  Future<void> _markPendingForRetry(PendingBill bill) async {
+    final updated = bill.copyWith(status: PendingBillStatus.pending);
+    await _offlineBillService.updatePendingBill(updated);
+  }
+
+  Future<bool> _hasInternetConnection() async {
+    final results = await Connectivity().checkConnectivity();
+    return results.any((result) => result != ConnectivityResult.none);
   }
 
   // ─── Firebase Write ───────────────────────────────────────────────────────
@@ -213,6 +266,8 @@ class OfflineBillSyncManager {
         discount: bill.discount,
         isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.fromJson(bill.paymentType),
+        latitude: bill.latitude,
+        longitude: bill.longitude,
       );
       final ok = await _saleRepository.saveSaleFromCreditConversion(
         saleHistory,
@@ -240,6 +295,8 @@ class OfflineBillSyncManager {
         cratesDue: bill.cratesDue,
         billType: BillType.credit,
         partialPayments: partialPayments,
+        latitude: bill.latitude,
+        longitude: bill.longitude,
       );
       await _creditRepository.saveCreditWithoutDashboard(
         creditHistory,

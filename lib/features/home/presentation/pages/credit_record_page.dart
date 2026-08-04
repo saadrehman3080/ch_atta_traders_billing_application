@@ -236,11 +236,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                         return _buildEmptyState();
                       }
 
-                      return RefreshIndicator(
-                        onRefresh: _refreshCredits,
-                        color: AppColors.pepsiBlue,
-                        child: _buildBillList(provider.credits),
-                      );
+                      return _buildBillList(provider.credits);
                     },
                   ),
           ),
@@ -278,6 +274,8 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       discount: deletedBill.discount,
       isReceiptGenerated: deletedBill.isReceiptGenerated,
       billType: BillType.credit,
+      latitude: deletedBill.latitude,
+      longitude: deletedBill.longitude,
     );
 
     // Save to sale history using SaleProvider
@@ -310,6 +308,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
         salesmanName: salesmanIdentifier,
         date: deletedBill.date,
+        billId: deletedBill.billId,
         amountDue: deletedBill.amountDue,
         cratesDue: deletedBill.cratesDue,
         isPaidBill: deletedBill
@@ -399,6 +398,8 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       discount: deletedBill.discount,
       isReceiptGenerated: deletedBill.isReceiptGenerated,
       billType: BillType.credit,
+      latitude: deletedBill.latitude,
+      longitude: deletedBill.longitude,
     );
 
     // Save to sale history using SaleProvider
@@ -430,6 +431,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
         salesmanName: salesmanIdentifier,
         date: deletedBill.date,
+        billId: deletedBill.billId,
         amountDue: deletedBill.amountDue,
         cratesDue: deletedBill.cratesDue,
         isPaidBill: deletedBill.isPaid,
@@ -642,6 +644,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         final summaryUpdated = await dashboardRepo.updateSummaryOnCreditDelete(
           salesmanName: salesmanIdentifier,
           date: billToDelete.date,
+          billId: billToDelete.billId,
           amountDue: billToDelete.amountDue,
           cratesDue: billToDelete.cratesDue,
           itemsSold: itemsSold,
@@ -871,6 +874,8 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         discount: bill.discount,
         isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.credit,
+        latitude: bill.latitude,
+        longitude: bill.longitude,
       );
 
       // Save to sale history using SaleProvider
@@ -901,6 +906,7 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
           salesmanName: salesmanIdentifier,
           date: bill.date,
+          billId: bill.billId,
           amountDue: bill.amountDue,
           cratesDue: bill.cratesDue,
           isPaidBill:
@@ -964,6 +970,9 @@ class _CreditRecordPageState extends State<CreditRecordPage>
             .updateSummaryOnPartialPayment(
               salesmanName: salesmanIdentifier,
               date: bill.date,
+              billId: bill.billId,
+              previousAmountDue: bill.amountDue,
+              previousCratesDue: bill.cratesDue,
               cashReceived: amountReceived,
               cratesReceived: cratesReceived,
               isPaidBill: bill
@@ -1085,6 +1094,8 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         discount: bill.discount,
         isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.credit,
+        latitude: bill.latitude,
+        longitude: bill.longitude,
       );
 
       // Save to sale history
@@ -1115,13 +1126,22 @@ class _CreditRecordPageState extends State<CreditRecordPage>
       if (isTodaysBill) {
         // Only call credit-to-sale conversion (which handles the full amount)
         // Do NOT call partial payment update here to avoid double counting
-        await dashboardRepo.updateSummaryOnCreditToSale(
+        final summaryUpdated = await dashboardRepo.updateSummaryOnCreditToSale(
           salesmanName: salesmanIdentifier,
           date: bill.date,
+          billId: bill.billId,
           amountDue: bill.amountDue, // Use ORIGINAL amountDue, not newAmountDue
           cratesDue: bill.cratesDue, // Use ORIGINAL cratesDue, not newCratesDue
           isPaidBill: bill.isPaid,
         );
+
+        if (!summaryUpdated) {
+          setState(() => _editingIndex = null);
+          _showErrorSnackBar(
+            'Failed to update dashboard. Operation cancelled.',
+          );
+          return;
+        }
       } else {
         // Previous day bill - update today's previous day collection
         await dashboardRepo.updateSummaryForPreviousDayCollection(
@@ -1184,25 +1204,6 @@ class _CreditRecordPageState extends State<CreditRecordPage>
 
       setState(() => _editingIndex = null);
     } else {
-      // Update credit balance
-      final updated = await _creditProvider.updateCreditBalance(
-        salesmanName: salesmanIdentifier,
-        credit: bill,
-        newAmountDue: newAmountDue,
-        newCratesDue: newCratesDue,
-        isPaid: isPaid,
-        isRecordUpdated: true,
-        newPartialPayment: (amountReceived != null && amountReceived > 0)
-            ? PartialPayment(date: DateTime.now(), amount: amountReceived)
-            : null,
-      );
-
-      if (!updated) {
-        setState(() => _editingIndex = null);
-        _showErrorSnackBar('Failed to update credit record.');
-        return;
-      }
-
       // Check if bill is from today for dashboard update
       final today = DateTime.now();
       final billDate = bill.date;
@@ -1211,17 +1212,28 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           billDate.month == today.month &&
           billDate.day == today.day;
 
-      // Update dashboard
+      // Update dashboard BEFORE the credit balance write so a failure here
+      // cancels the whole operation instead of silently drifting the totals.
       final dashboardRepo = DashboardRepository();
 
       if (isTodaysBillForPartial) {
-        await dashboardRepo.updateSummaryOnPartialPayment(
-          salesmanName: salesmanIdentifier,
-          date: bill.date,
-          cashReceived: amountReceived,
-          cratesReceived: cratesReceived,
-          isPaidBill: bill.isPaid,
-        );
+        final summaryUpdated = await dashboardRepo
+            .updateSummaryOnPartialPayment(
+              salesmanName: salesmanIdentifier,
+              date: bill.date,
+              billId: bill.billId,
+              previousAmountDue: bill.amountDue,
+              previousCratesDue: bill.cratesDue,
+              cashReceived: amountReceived,
+              cratesReceived: cratesReceived,
+              isPaidBill: bill.isPaid,
+            );
+
+        if (!summaryUpdated) {
+          setState(() => _editingIndex = null);
+          _showErrorSnackBar('Failed to update dashboard. Update cancelled.');
+          return;
+        }
       } else {
         // Previous day bill - update today's previous day collection
         await dashboardRepo.updateSummaryForPreviousDayCollection(
@@ -1239,6 +1251,25 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           newAmountDue: newAmountDue,
           newCratesDue: newCratesDue,
         );
+      }
+
+      // Update credit balance
+      final updated = await _creditProvider.updateCreditBalance(
+        salesmanName: salesmanIdentifier,
+        credit: bill,
+        newAmountDue: newAmountDue,
+        newCratesDue: newCratesDue,
+        isPaid: isPaid,
+        isRecordUpdated: true,
+        newPartialPayment: (amountReceived != null && amountReceived > 0)
+            ? PartialPayment(date: DateTime.now(), amount: amountReceived)
+            : null,
+      );
+
+      if (!updated) {
+        setState(() => _editingIndex = null);
+        _showErrorSnackBar('Failed to update credit record.');
+        return;
       }
 
       // Print receipt
@@ -2072,68 +2103,85 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.gray100,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '#${bill.billId.length > 6 ? bill.billId.substring(0, 6) : bill.billId}',
-                                style: AppTextStyles.helperText.copyWith(
-                                  fontSize: 10,
-                                  color: AppColors.gray500,
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.gray100,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '#${bill.billId.length > 6 ? bill.billId.substring(0, 6) : bill.billId}',
+                                    style: AppTextStyles.helperText.copyWith(
+                                      fontSize: 10,
+                                      color: AppColors.gray500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  formattedDate,
+                                  style: AppTextStyles.helperText.copyWith(
+                                    fontSize: 11,
+                                    color: AppColors.gray500,
+                                  ),
+                                ),
+
+                                if (bill.cratesDue > 0) ...[
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 11,
+                                    color: Colors.orange[700],
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '${bill.cratesDue}',
+                                    style: AppTextStyles.helperText.copyWith(
+                                      fontSize: 11,
+                                      color: Colors.orange[700],
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 8),
+                                if (!bill.isReceiptGenerated)
+                                  _buildReceiptNotGeneratedBadge(),
+                                const Spacer(),
+                                Text(
+                                  bill.isPaid && bill.amountDue == 0
+                                      ? 'Paid'
+                                      : 'Rs. ${formatCashAmount(bill.amountDue)}',
+                                  style: AppTextStyles.helperText.copyWith(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: (bill.isPaid && bill.amountDue == 0)
+                                        ? Colors.green[700]
+                                        : AppColors.pepsiRed,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.chevron_right,
+                                  size: 14,
+                                  color: AppColors.gray400,
+                                ),
+                              ],
+                            ),
+                            if (bill.latitude != null && bill.longitude != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 5),
+                                child: _buildLocationInfo(
+                                  bill.latitude!,
+                                  bill.longitude!,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              formattedDate,
-                              style: AppTextStyles.helperText.copyWith(
-                                fontSize: 11,
-                                color: AppColors.gray500,
-                              ),
-                            ),
-                            if (bill.cratesDue > 0) ...[
-                              const SizedBox(width: 8),
-                              Icon(
-                                Icons.inventory_2_outlined,
-                                size: 11,
-                                color: Colors.orange[700],
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                '${bill.cratesDue}',
-                                style: AppTextStyles.helperText.copyWith(
-                                  fontSize: 11,
-                                  color: Colors.orange[700],
-                                ),
-                              ),
-                            ],
-                            const Spacer(),
-                            Text(
-                              bill.isPaid && bill.amountDue == 0
-                                  ? 'Paid'
-                                  : 'Rs. ${formatCashAmount(bill.amountDue)}',
-                              style: AppTextStyles.helperText.copyWith(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: (bill.isPaid && bill.amountDue == 0)
-                                    ? Colors.green[700]
-                                    : AppColors.pepsiRed,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.chevron_right,
-                              size: 14,
-                              color: AppColors.gray400,
-                            ),
                           ],
                         ),
                       ),
@@ -2338,7 +2386,6 @@ class _CreditRecordPageState extends State<CreditRecordPage>
                   _buildActionButtons(bill, index, billHistory),
                 ],
               ),
-              // Print Receipt (only show spacing + button when printer connected)
               if (_isPrinterConnected) ...[
                 const SizedBox(height: 12),
                 _buildPrintReceiptButton(index, billHistory),
@@ -2475,10 +2522,22 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         // Show date/time for today's bills or first item in list
         if (isToday || index == 0) ...[
           const SizedBox(height: 6),
-          _buildDateTimeInfo(formattedDate, bill.formattedTime),
+          Row(
+            children: [
+              _buildDateTimeInfo(formattedDate, bill.formattedTime),
+              SizedBox(width: 6),
+              if (!bill.isReceiptGenerated) _buildReceiptNotGeneratedBadge(),
+            ],
+          ),
         ] else ...[
           const SizedBox(height: 6),
-          _buildTimeInfo(bill.formattedTime),
+          Row(
+            children: [
+              _buildTimeInfo(bill.formattedTime),
+              SizedBox(width: 6),
+              if (!bill.isReceiptGenerated) _buildReceiptNotGeneratedBadge(),
+            ],
+          ),
         ],
 
         const SizedBox(height: 8),
@@ -2492,6 +2551,10 @@ class _CreditRecordPageState extends State<CreditRecordPage>
         if (bill.cratesDue > 0) ...[
           const SizedBox(height: 6),
           _buildPendingCratesText(bill.cratesDue),
+        ],
+        if (bill.latitude != null && bill.longitude != null) ...[
+          const SizedBox(height: 6),
+          _buildLocationInfo(bill.latitude!, bill.longitude!),
         ],
       ],
     );
@@ -2537,6 +2600,28 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildReceiptNotGeneratedBadge() {
+    return Tooltip(
+      message: 'Receipt not generated',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.pepsiRed.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: AppColors.pepsiRed.withValues(alpha: 0.25),
+            width: 0.6,
+          ),
+        ),
+        child: Icon(
+          Icons.print_disabled_outlined,
+          size: 14,
+          color: AppColors.pepsiRed,
+        ),
+      ),
     );
   }
 
@@ -2612,6 +2697,22 @@ class _CreditRecordPageState extends State<CreditRecordPage>
           color: AppColors.gray500,
         ),
       ),
+    );
+  }
+
+  Widget _buildLocationInfo(double latitude, double longitude) {
+    return Row(
+      children: [
+        Icon(Icons.my_location_outlined, size: 12, color: AppColors.gray500),
+        const SizedBox(width: 4),
+        Text(
+          'Lat ${latitude.toStringAsFixed(6)}, Lng ${longitude.toStringAsFixed(6)}',
+          style: AppTextStyles.helperText.copyWith(
+            fontSize: 11,
+            color: AppColors.gray500,
+          ),
+        ),
+      ],
     );
   }
 

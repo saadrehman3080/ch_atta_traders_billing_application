@@ -5,6 +5,8 @@
 class Product {
   final String name;
   final int price;
+  final int originalPrice;
+  final int marginAmount;
   int quantity;
   final bool isAvailable;
   final String type; // 'pepsi', 'masterCola', or 'others'
@@ -20,12 +22,15 @@ class Product {
   Product({
     required this.name,
     required this.price,
+    int? originalPrice,
+    this.marginAmount = 0,
     this.quantity = 0,
     this.isAvailable = true,
     this.type = 'others',
     this.subtypes = const [],
     Map<String, int>? subtypeQuantities,
-  }) : subtypeQuantities = subtypeQuantities ?? {};
+  }) : originalPrice = originalPrice ?? price,
+       subtypeQuantities = subtypeQuantities ?? {};
 
   // Factory constructor to create Product from JSON (Firebase)
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -45,6 +50,8 @@ class Product {
     return Product(
       name: json['name'] as String,
       price: json['price'] as int,
+      originalPrice: (json['originalPrice'] as num?)?.toInt(),
+      marginAmount: (json['marginAmount'] as num?)?.toInt() ?? 0,
       quantity: json['quantity'] as int? ?? 0,
       isAvailable: json['isAvailable'] as bool? ?? true,
       type: json['type'] as String? ?? 'others',
@@ -58,6 +65,8 @@ class Product {
     final json = <String, dynamic>{
       'name': name,
       'price': price,
+      'originalPrice': originalPrice,
+      'marginAmount': marginAmount,
       'quantity': quantity,
       'type': type,
     };
@@ -71,6 +80,8 @@ class Product {
   Product copyWith({
     String? name,
     int? price,
+    int? originalPrice,
+    int? marginAmount,
     int? quantity,
     bool? isAvailable,
     String? type,
@@ -80,6 +91,8 @@ class Product {
     return Product(
       name: name ?? this.name,
       price: price ?? this.price,
+      originalPrice: originalPrice ?? this.originalPrice,
+      marginAmount: marginAmount ?? this.marginAmount,
       quantity: quantity ?? this.quantity,
       isAvailable: isAvailable ?? this.isAvailable,
       type: type ?? this.type,

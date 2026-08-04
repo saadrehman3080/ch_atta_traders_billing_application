@@ -62,6 +62,11 @@ class ProductRepository {
         return Product(
           name: doc.id, // Document ID is the product name
           price: (data['price'] as num?)?.toInt() ?? 0,
+          originalPrice:
+              (data['originalPrice'] as num?)?.toInt() ??
+              (data['price'] as num?)?.toInt() ??
+              0,
+          marginAmount: (data['marginAmount'] as num?)?.toInt() ?? 0,
           quantity: 0, // Default quantity is 0 for ordering
           isAvailable: data['isAvailable'] as bool? ?? true,
           type: data['type'] as String? ?? 'others',

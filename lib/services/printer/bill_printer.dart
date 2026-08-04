@@ -729,7 +729,11 @@ class BillPrinter {
 
       // Customer-facing outstanding alert
       bytes.addAll('\x1B\x61\x01'.codeUnits); // Center
-      bytes.addAll('--------------------------------\n'.codeUnits);
+      // In summary-only mode, a divider is already printed after REMAINING BILLS.
+      // Print this divider only when PAYMENT HISTORY section is included.
+      if (includePaymentHistory) {
+        bytes.addAll('--------------------------------\n'.codeUnits);
+      }
       if (remainingAmount > 0 || pendingBills.isNotEmpty) {
         bytes.addAll('** NOTICE **\n'.codeUnits);
         bytes.addAll(
@@ -1076,6 +1080,15 @@ class BillPrinter {
         bytes.addAll('\x1D\x21\x00'.codeUnits); // Normal size
         bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
         bytes.addAll('\n'.codeUnits);
+      }
+
+      // On duplicate reprints, print pending crates whenever any are due.
+      if (showDuplicateLabel && (mtRemaining ?? 0) > 0) {
+        bytes.addAll('\n'.codeUnits);
+        //bytes.addAll('--------------------------------\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x01'.codeUnits); // Bold on
+        bytes.addAll('Pending Crates (MT): ${mtRemaining!}\n'.codeUnits);
+        bytes.addAll('\x1B\x45\x00'.codeUnits); // Bold off
       }
 
       // Payment History section (for reprinted credit bills with partial payments)

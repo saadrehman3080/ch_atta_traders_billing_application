@@ -2,13 +2,11 @@ import 'package:ch_atta_traders_billing_application/common/themes/color_schemes.
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/common/utils/string_helpers.dart';
-import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/app_preferences.dart';
 import 'package:ch_atta_traders_billing_application/data/models/bill_base.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/common/widgets/custom_snackbar.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/bill_printer.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class BillDetailsDialog extends StatefulWidget {
@@ -27,7 +25,6 @@ class BillDetailsDialog extends StatefulWidget {
 
 class _BillDetailsDialogState extends State<BillDetailsDialog> {
   bool _isPrinting = false;
-  late bool _isReceiptGenerated;
   final ScrollController _scrollController = ScrollController();
   bool _isScrollable = false;
 
@@ -39,36 +36,10 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
   @override
   void initState() {
     super.initState();
-    _isReceiptGenerated = widget.bill.isReceiptGenerated;
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _checkScrollable();
     });
-  }
-
-  Future<void> _markReceiptGeneratedInFirebase() async {
-    final salesmanIdentifier = await AppPreferences.instance.salesmanIdentifier;
-    if (salesmanIdentifier == null || salesmanIdentifier.isEmpty) return;
-
-    final firestore = FirebaseFirestore.instance;
-
-    if (widget.bill is CreditHistory) {
-      await firestore
-          .collection('Credit History')
-          .doc(salesmanIdentifier)
-          .collection('bills')
-          .doc(widget.bill.billId)
-          .set({'isReceiptGenerated': true}, SetOptions(merge: true));
-      return;
-    }
-
-    final formattedDate = DateFormatters.formatForFirebase(widget.bill.date);
-    await firestore
-        .collection('Daily Sales')
-        .doc(salesmanIdentifier)
-        .collection(formattedDate)
-        .doc(widget.bill.billId)
-        .set({'isReceiptGenerated': true}, SetOptions(merge: true));
   }
 
   @override
@@ -118,10 +89,14 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
 
       // Get payment history for credit bills with partial payments
       List<PartialPayment>? paymentHistory;
+      int? mtRemaining;
       if (widget.bill is CreditHistory) {
         final creditBill = widget.bill as CreditHistory;
         if (creditBill.partialPayments.isNotEmpty) {
           paymentHistory = creditBill.partialPayments;
+        }
+        if (creditBill.cratesDue > 0) {
+          mtRemaining = creditBill.cratesDue;
         }
       }
 
@@ -137,21 +112,21 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
         discount: widget.bill.discount,
         salesmanName: salesmanName,
         paymentType: paymentType,
-        showDuplicateLabel: _isReceiptGenerated,
+        mtRemaining: mtRemaining,
+        showDuplicateLabel: widget.bill.isReceiptGenerated,
         paymentHistory: paymentHistory,
         includeSubtypeDetails: hasSubtypeProducts,
       );
 
       if (mounted) {
         if (result.success) {
-          if (!_isReceiptGenerated) {
-            await _markReceiptGeneratedInFirebase();
-            _isReceiptGenerated = true;
-          }
+          // ignore: use_build_context_synchronously
           if (Navigator.canPop(context)) {
+            // ignore: use_build_context_synchronously
             Navigator.of(context).pop();
           }
           CustomSnackBar.show(
+            // ignore: use_build_context_synchronously
             context,
             message: 'Bill printed successfully',
             type: SnackBarType.success,
@@ -473,8 +448,8 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
                         grandTotal,
                       ),
                     ],
-                    const SizedBox(height: 24),
 
+                    const SizedBox(height: 24),
                     // Reprint Button
                     SizedBox(
                       width: double.infinity,
@@ -532,7 +507,7 @@ class _BillDetailsDialogState extends State<BillDetailsDialog> {
     final netAmount = grandTotal - credit.discount;
     final totalPaid = credit.partialPayments.fold<int>(
       0,
-      (sum, p) => sum + p.amount,
+      (sumForPartialPayment, p) => sumForPartialPayment + p.amount,
     );
     final remaining = netAmount - totalPaid;
 

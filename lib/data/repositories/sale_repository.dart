@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/core/utils/date_formatters.dart';
 import 'package:ch_atta_traders_billing_application/data/models/sale_history.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
@@ -50,6 +51,10 @@ class SaleRepository {
         0,
         (total, product) => total + product.quantity,
       );
+      final totalMargin = BillingCalculations.calculateTotalMargin(
+        sale.products,
+        discount: sale.discount,
+      );
 
       // Use transaction to atomically update both bill and dashboard summary
       await _firestore.runTransaction((transaction) async {
@@ -61,7 +66,10 @@ class SaleRepository {
             .doc(sale.billId);
 
         // Save the sale document — idempotent: safe to retry.
-        transaction.set(saleRef, sale.toJson(), SetOptions(merge: true));
+        transaction.set(saleRef, {
+          ...sale.toJson(),
+          'totalMargin': totalMargin,
+        }, SetOptions(merge: true));
 
         // Update dashboard summary using centralized service
         await _dashboardService.onSaleCreated(
@@ -113,9 +121,17 @@ class SaleRepository {
           .collection(formattedDate)
           .doc(sale.billId);
 
+      final totalMargin = BillingCalculations.calculateTotalMargin(
+        sale.products,
+        discount: sale.discount,
+      );
+
       // Save only the sale document, no dashboard update.
       // Dashboard updates are handled separately by updateSummaryOnCreditToSale.
-      await saleRef.set(sale.toJson(), SetOptions(merge: true));
+      await saleRef.set({
+        ...sale.toJson(),
+        'totalMargin': totalMargin,
+      }, SetOptions(merge: true));
 
       debugPrint(
         'Sale saved from credit conversion successfully: ${sale.billId}',

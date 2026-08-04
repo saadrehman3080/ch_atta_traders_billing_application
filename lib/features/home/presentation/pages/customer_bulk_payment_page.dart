@@ -594,6 +594,9 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
         await dashboardRepo.updateSummaryOnPartialPayment(
           salesmanName: salesmanIdentifier,
           date: bill.date,
+          billId: bill.billId,
+          previousAmountDue: bill.amountDue,
+          previousCratesDue: bill.cratesDue,
           cratesReceived: toDeduct,
           isPaidBill: bill.isPaid,
         );
@@ -683,6 +686,8 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
         products: bill.products,
         discount: bill.discount,
         billType: BillType.credit,
+        latitude: bill.latitude,
+        longitude: bill.longitude,
       );
       final savedAsSale = await saleProvider.saveSaleFromCreditConversion(
         saleHistory,
@@ -700,6 +705,7 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
         await dashboardRepo.updateSummaryOnCreditToSale(
           salesmanName: widget.salesmanName,
           date: bill.date,
+          billId: bill.billId,
           amountDue: bill.amountDue,
           cratesDue: bill.cratesDue,
           isPaidBill: bill.isPaid,
@@ -1318,6 +1324,10 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                         ),
                       ],
                     ),
+                    if (bill.latitude != null && bill.longitude != null) ...[
+                      const SizedBox(height: 3),
+                      _buildLocationInfo(bill.latitude!, bill.longitude!),
+                    ],
                     if (bill.discount > 0) ...[
                       const SizedBox(height: 2),
                       Text(
@@ -1440,6 +1450,10 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
                         ),
                       ],
                     ),
+                    if (bill.latitude != null && bill.longitude != null) ...[
+                      const SizedBox(height: 3),
+                      _buildLocationInfo(bill.latitude!, bill.longitude!),
+                    ],
                     if (bill.discount > 0) ...[
                       const SizedBox(height: 2),
                       Text(
@@ -1521,6 +1535,22 @@ class _CustomerBulkPaymentPageState extends State<CustomerBulkPaymentPage>
             endIndent: 16,
             color: AppColors.gray300.withValues(alpha: 0.5),
           ),
+      ],
+    );
+  }
+
+  Widget _buildLocationInfo(double latitude, double longitude) {
+    return Row(
+      children: [
+        Icon(Icons.my_location_outlined, size: 11, color: AppColors.gray500),
+        const SizedBox(width: 3),
+        Text(
+          'Lat ${latitude.toStringAsFixed(6)}, Lng ${longitude.toStringAsFixed(6)}',
+          style: AppTextStyles.helperText.copyWith(
+            fontSize: 10,
+            color: AppColors.gray500,
+          ),
+        ),
       ],
     );
   }

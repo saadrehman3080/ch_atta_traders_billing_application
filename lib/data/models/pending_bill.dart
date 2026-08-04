@@ -84,6 +84,12 @@ class PendingBill extends HiveObject {
   @HiveField(17)
   final bool isReceiptGenerated;
 
+  @HiveField(18)
+  final double? latitude;
+
+  @HiveField(19)
+  final double? longitude;
+
   PendingBill({
     required this.billId,
     required this.customerName,
@@ -102,7 +108,9 @@ class PendingBill extends HiveObject {
     this.schemaVersion = 1,
     this.status = PendingBillStatus.pending,
     this.lastSyncAttempt,
-    this.isReceiptGenerated = false,
+    this.isReceiptGenerated = true,
+    this.latitude,
+    this.longitude,
   });
 
   // ─── Factory Constructors ─────────────────────────────────────────────────
@@ -126,6 +134,8 @@ class PendingBill extends HiveObject {
       createdAt: DateTime.now(),
       paymentType: bill.billType.toJson(),
       isReceiptGenerated: bill.isReceiptGenerated,
+      latitude: bill.latitude,
+      longitude: bill.longitude,
     );
   }
 
@@ -149,6 +159,8 @@ class PendingBill extends HiveObject {
       createdAt: DateTime.now(),
       paymentType: paymentType,
       isReceiptGenerated: bill.isReceiptGenerated,
+      latitude: bill.latitude,
+      longitude: bill.longitude,
     );
   }
 
@@ -159,6 +171,8 @@ class PendingBill extends HiveObject {
     PendingBillStatus? status,
     DateTime? lastSyncAttempt,
     bool? isReceiptGenerated,
+    double? latitude,
+    double? longitude,
   }) {
     return PendingBill(
       billId: billId,
@@ -179,6 +193,8 @@ class PendingBill extends HiveObject {
       status: status ?? this.status,
       lastSyncAttempt: lastSyncAttempt ?? this.lastSyncAttempt,
       isReceiptGenerated: isReceiptGenerated ?? this.isReceiptGenerated,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 }

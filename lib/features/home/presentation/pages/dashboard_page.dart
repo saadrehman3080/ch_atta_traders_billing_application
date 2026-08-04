@@ -187,19 +187,15 @@ class _DashboardPageState extends State<DashboardPage>
       child: Scaffold(
         backgroundColor: AppColors.gray100,
         appBar: _buildAppBar(context),
-        body: RefreshIndicator(
-          onRefresh: () => _dashboardProvider.refreshDashboardData(),
-          color: AppColors.pepsiBlue,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              children: [
-                _buildTodayCollectionCard(),
-                _buildPreviousDayCollectionCard(),
-                _buildPrintersCard(),
-                _buildPendingSyncCard(),
-              ],
-            ),
+        body: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              _buildTodayCollectionCard(),
+              _buildPreviousDayCollectionCard(),
+              _buildPrintersCard(),
+              _buildPendingSyncCard(),
+            ],
           ),
         ),
       ),
@@ -1145,6 +1141,8 @@ class _DashboardPageState extends State<DashboardPage>
         discount: bill.discount,
         isReceiptGenerated: bill.isReceiptGenerated,
         billType: BillType.fromJson(bill.paymentType),
+        latitude: bill.latitude,
+        longitude: bill.longitude,
       );
     } else {
       return CreditHistory(
@@ -1161,6 +1159,8 @@ class _DashboardPageState extends State<DashboardPage>
         partialPayments: bill.partialPaymentsJson
             .map((j) => PartialPayment.fromJson(j))
             .toList(),
+        latitude: bill.latitude,
+        longitude: bill.longitude,
       );
     }
   }
@@ -1187,6 +1187,7 @@ class _DashboardPageState extends State<DashboardPage>
                 .where(
                   (b) =>
                       b.status == PendingBillStatus.pending ||
+                      b.status == PendingBillStatus.syncing ||
                       b.status == PendingBillStatus.failed,
                 )
                 .toList()
@@ -1197,10 +1198,16 @@ class _DashboardPageState extends State<DashboardPage>
         final failedCount = pendingBills
             .where((b) => b.status == PendingBillStatus.failed)
             .length;
+        final syncingCount = pendingBills
+            .where((b) => b.status == PendingBillStatus.syncing)
+            .length;
+        final showSyncingIndicator = _hasInternetConnection && syncingCount > 0;
 
         final accentColor = failedCount > 0
             ? AppColors.pepsiRed
-            : Colors.orange.shade700;
+            : (showSyncingIndicator
+                  ? AppColors.pepsiBlue
+                  : Colors.orange.shade700);
 
         return Container(
           margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
@@ -1230,13 +1237,24 @@ class _DashboardPageState extends State<DashboardPage>
                         color: accentColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(
-                        failedCount > 0
-                            ? Icons.sync_problem_rounded
-                            : Icons.cloud_upload_outlined,
-                        color: accentColor,
-                        size: 22,
-                      ),
+                      child: showSyncingIndicator
+                          ? SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  accentColor,
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              failedCount > 0
+                                  ? Icons.sync_problem_rounded
+                                  : Icons.cloud_upload_outlined,
+                              color: accentColor,
+                              size: 22,
+                            ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1244,7 +1262,9 @@ class _DashboardPageState extends State<DashboardPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            failedCount > 0
+                            showSyncingIndicator
+                                ? '$syncingCount Bill${syncingCount > 1 ? 's' : ''} Syncing...'
+                                : failedCount > 0
                                 ? '$failedCount Bill${failedCount > 1 ? 's' : ''} Failed to Sync'
                                 : '${pendingBills.length} Bill${pendingBills.length > 1 ? 's' : ''} Pending Sync',
                             style: AppTextStyles.productItemName.copyWith(
@@ -1255,7 +1275,11 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Saved locally — tap a bill to view details',
+                            showSyncingIndicator
+                                ? 'Sync in progress — please wait'
+                                : (!_hasInternetConnection && syncingCount > 0)
+                                ? 'Waiting for internet to resume sync'
+                                : 'Saved locally — tap a bill to view details',
                             style: AppTextStyles.helperText.copyWith(
                               color: AppColors.gray500,
                               fontSize: 11,
@@ -1324,9 +1348,14 @@ class _DashboardPageState extends State<DashboardPage>
 
   Widget _buildPendingBillRow(PendingBill bill) {
     final isFailed = bill.status == PendingBillStatus.failed;
+    final isSyncing = bill.status == PendingBillStatus.syncing;
     final isSale = bill.billType == 'sale';
-    final statusColor = isFailed ? AppColors.pepsiRed : Colors.orange.shade600;
-    final statusLabel = isFailed ? 'Failed' : 'Pending';
+    final statusColor = isFailed
+        ? AppColors.pepsiRed
+        : (isSyncing ? AppColors.pepsiBlue : Colors.orange.shade600);
+    final statusLabel = isFailed
+        ? 'Failed'
+        : (isSyncing ? 'Syncing' : 'Pending');
 
     final total =
         bill.productsJson.fold<int>(

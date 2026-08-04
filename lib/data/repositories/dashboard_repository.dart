@@ -100,7 +100,6 @@ class DashboardRepository {
       totalCredit: 0,
       totalDiscount: 0,
       customersServed: 0,
-      isReceiptGenerated: 0,
     );
   }
 
@@ -111,6 +110,7 @@ class DashboardRepository {
   Future<bool> updateSummaryOnCreditToSale({
     required String salesmanName,
     required DateTime date,
+    required String billId,
     required int amountDue,
     required int cratesDue,
     required bool isPaidBill,
@@ -118,6 +118,7 @@ class DashboardRepository {
     return _dashboardService.onCreditConvertedToSale(
       salesmanName: salesmanName,
       date: date,
+      billId: billId,
       amountDue: amountDue,
       cratesDue: cratesDue,
       isPaidBill: isPaidBill,
@@ -129,6 +130,9 @@ class DashboardRepository {
   Future<bool> updateSummaryOnPartialPayment({
     required String salesmanName,
     required DateTime date,
+    required String billId,
+    required int previousAmountDue,
+    required int previousCratesDue,
     int? cashReceived,
     int? cratesReceived,
     required bool isPaidBill,
@@ -136,6 +140,9 @@ class DashboardRepository {
     return _dashboardService.onPartialPaymentReceived(
       salesmanName: salesmanName,
       date: date,
+      billId: billId,
+      previousAmountDue: previousAmountDue,
+      previousCratesDue: previousCratesDue,
       cashReceived: cashReceived,
       cratesReceived: cratesReceived,
       isPaidBill: isPaidBill,
@@ -147,6 +154,7 @@ class DashboardRepository {
   Future<bool> updateSummaryOnCreditDelete({
     required String salesmanName,
     required DateTime date,
+    required String billId,
     required int amountDue,
     required int cratesDue,
     required int itemsSold,
@@ -157,6 +165,7 @@ class DashboardRepository {
     return _dashboardService.onCreditDeleted(
       salesmanName: salesmanName,
       date: date,
+      billId: billId,
       amountDue: amountDue,
       cratesDue: cratesDue,
       itemsSold: itemsSold,

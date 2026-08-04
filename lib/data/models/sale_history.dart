@@ -17,6 +17,8 @@ class SaleHistory implements BillBase {
   final bool isReceiptGenerated;
   @override
   final BillType billType;
+  final double? latitude;
+  final double? longitude;
 
   SaleHistory({
     required this.billId,
@@ -24,8 +26,10 @@ class SaleHistory implements BillBase {
     required this.date,
     required this.products,
     this.discount = 0,
-    this.isReceiptGenerated = false,
+    this.isReceiptGenerated = true,
     this.billType = BillType.cash,
+    this.latitude,
+    this.longitude,
   });
 
   // Factory constructor to create SaleHistory from JSON (Firebase)
@@ -41,6 +45,13 @@ class SaleHistory implements BillBase {
       }
     }
 
+    double? parseCoordinate(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
     return SaleHistory(
       billId: json['billId'] as String,
       customerName: json['customerName'] as String,
@@ -49,8 +60,10 @@ class SaleHistory implements BillBase {
           .map((item) => Product.fromJson(item as Map<String, dynamic>))
           .toList(),
       discount: json['discount'] as int? ?? 0,
-      isReceiptGenerated: json['isReceiptGenerated'] as bool? ?? false,
+      isReceiptGenerated: json['isReceiptGenerated'] as bool? ?? true,
       billType: BillType.fromJson(json['billType'] as String?),
+      latitude: parseCoordinate(json['latitude']),
+      longitude: parseCoordinate(json['longitude']),
     );
   }
 
@@ -65,6 +78,8 @@ class SaleHistory implements BillBase {
       'discount': discount,
       'isReceiptGenerated': isReceiptGenerated,
       'billType': billType.toJson(),
+      'latitude': latitude,
+      'longitude': longitude,
     };
   }
 
@@ -77,6 +92,8 @@ class SaleHistory implements BillBase {
     int? discount,
     bool? isReceiptGenerated,
     BillType? billType,
+    double? latitude,
+    double? longitude,
   }) {
     return SaleHistory(
       billId: billId ?? this.billId,
@@ -86,6 +103,8 @@ class SaleHistory implements BillBase {
       discount: discount ?? this.discount,
       isReceiptGenerated: isReceiptGenerated ?? this.isReceiptGenerated,
       billType: billType ?? this.billType,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 

@@ -22,6 +22,7 @@ class DailyProgressProvider extends ChangeNotifier {
   final DailyProgressRepository _repository;
   StreamSubscription<List<DailyProgress>>? _progressSubscription;
   String? _currentSalesmanDocId;
+  bool _isDisposed = false;
 
   DailyProgressProvider({DailyProgressRepository? repository})
     : _repository = repository ?? DailyProgressRepository();
@@ -150,6 +151,8 @@ class DailyProgressProvider extends ChangeNotifier {
     String salesmanDocId, {
     bool forceRefresh = false,
   }) async {
+    if (_isDisposed) return;
+
     if (!forceRefresh &&
         _progressSubscription != null &&
         _currentSalesmanDocId == salesmanDocId) {
@@ -160,15 +163,19 @@ class DailyProgressProvider extends ChangeNotifier {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
-    notifyListeners();
+    _notifySafely();
 
     try {
       final cutoffDate = _computeCutoffDate();
       await _progressSubscription?.cancel();
 
+      if (_isDisposed) return;
+
       final existingSnapshot = await _repository.fetchProgressSnapshot(
         salesmanDocId,
       );
+
+      if (_isDisposed) return;
 
       String streamAfterDate;
       List<DailyProgress> initialRecent;
@@ -182,6 +189,8 @@ class DailyProgressProvider extends ChangeNotifier {
             salesmanDocId,
             _snapshot.snapshotDate,
           );
+
+          if (_isDisposed) return;
 
           final gap = <DailyProgress>[];
           final recent = <DailyProgress>[];
@@ -218,11 +227,15 @@ class DailyProgressProvider extends ChangeNotifier {
             salesmanDocId,
             streamAfterDate,
           );
+
+          if (_isDisposed) return;
         }
       } else {
         final allRecords = await _repository.fetchDailyProgressList(
           salesmanDocId,
         );
+
+        if (_isDisposed) return;
 
         final old = <DailyProgress>[];
         final recent = <DailyProgress>[];
@@ -258,32 +271,35 @@ class DailyProgressProvider extends ChangeNotifier {
           .watchProgressAfterDate(salesmanDocId, streamAfterDate)
           .listen(
             (recentRecords) {
+              if (_isDisposed) return;
               _applyRecentRecords(recentRecords);
               _isLoading = false;
               _hasError = false;
               _errorMessage = null;
-              notifyListeners();
+              _notifySafely();
             },
             onError: (Object error, StackTrace stackTrace) {
+              if (_isDisposed) return;
               _isLoading = false;
               _hasError = true;
               _errorMessage = 'Failed to load progress data. Please try again.';
               debugPrint('Daily progress stream error: $error');
               debugPrint('StackTrace: $stackTrace');
-              notifyListeners();
+              _notifySafely();
             },
           );
 
       _isLoading = false;
       _hasError = false;
       _errorMessage = null;
-      notifyListeners();
+      _notifySafely();
     } catch (e) {
+      if (_isDisposed) return;
       _isLoading = false;
       _hasError = true;
       _errorMessage = 'Failed to load progress data. Please try again.';
       debugPrint('Error loading progress list: $e');
-      notifyListeners();
+      _notifySafely();
     }
   }
 
@@ -294,9 +310,10 @@ class DailyProgressProvider extends ChangeNotifier {
 
   /// Show the next page of records in the UI list.
   void loadMore() {
+    if (_isDisposed) return;
     _displayCount = (_displayCount + _pageSize).clamp(0, _recentRecords.length);
     _updateDisplayedRecords();
-    notifyListeners();
+    _notifySafely();
   }
 
   // ========================= Private Helpers =======================
@@ -364,9 +381,17 @@ class DailyProgressProvider extends ChangeNotifier {
     _updateDisplayedRecords();
   }
 
+  void _notifySafely() {
+    if (!_isDisposed) {
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
+    _isDisposed = true;
     _progressSubscription?.cancel();
+    _progressSubscription = null;
     super.dispose();
   }
 }

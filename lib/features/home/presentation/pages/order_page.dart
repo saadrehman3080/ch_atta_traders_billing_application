@@ -12,7 +12,6 @@ import 'package:ch_atta_traders_billing_application/data/models/product.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'package:flutter/scheduler.dart';
@@ -29,9 +28,29 @@ class OrderPage extends StatefulWidget {
 class _OrderPageState extends State<OrderPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _productListScrollController = ScrollController();
+  static const List<String> _filterKeywords = [
+    'Pepsi',
+    'Master',
+    'Sting',
+    'Slice',
+    'Aquafina',
+    'Shezan',
+    'Revive',
+    'Big Apple',
+    'Tops',
+    'Blast',
+    'Coke',
+    'Can',
+    'Empty',
+    'Gatorade',
+    'Malt',
+    'Benz',
+    'Murree Sparklet',
+    'Nestle Water',
+    '2250ml',
+  ];
   bool _isCheckoutVisible = false;
   List<Product> _filteredProducts = [];
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
   _productsDataSubscription;
   final Map<String, int> _originalPrices = {};
@@ -44,9 +63,7 @@ class _OrderPageState extends State<OrderPage> {
     super.initState();
     _searchController.addListener(_filterProducts);
     _productListScrollController.addListener(_handleScrollDirection);
-    _setupConnectivityListener();
     _setupProductsDataStreamListener();
-    // Load products from Firebase
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductProvider>().loadProducts();
       // Auto-connect to printer if saved
@@ -60,7 +77,6 @@ class _OrderPageState extends State<OrderPage> {
     _productListScrollController.removeListener(_handleScrollDirection);
     _searchController.dispose();
     _productListScrollController.dispose();
-    _connectivitySubscription?.cancel();
     _productsDataSubscription?.cancel();
     _checkoutFormProvider.dispose();
     // Restore nav visibility when leaving the page
@@ -95,21 +111,6 @@ class _OrderPageState extends State<OrderPage> {
     }
   }
 
-  /// Listens for connectivity changes and auto-reloads products when
-  /// the connection is restored after being offline.
-  void _setupConnectivityListener() {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      List<ConnectivityResult> results,
-    ) {
-      final hasConnection =
-          results.isNotEmpty &&
-          !results.every((r) => r == ConnectivityResult.none);
-      if (hasConnection && mounted) {
-        context.read<ProductProvider>().loadProducts();
-      }
-    });
-  }
-
   /// Listens for real-time product data updates and reloads products.
   void _setupProductsDataStreamListener() {
     _productsDataSubscription = FirebaseFirestore.instance
@@ -130,6 +131,35 @@ class _OrderPageState extends State<OrderPage> {
       return allProducts
           .where((product) => product.name.toLowerCase().contains(query))
           .toList();
+    }
+  }
+
+  List<String> get _topKeywordRow {
+    return [
+      'All',
+      for (int i = 0; i < _filterKeywords.length; i += 2) _filterKeywords[i],
+    ];
+  }
+
+  List<String> get _bottomKeywordRow {
+    return [
+      for (int i = 1; i < _filterKeywords.length; i += 2) _filterKeywords[i],
+    ];
+  }
+
+  void _applyKeywordFilter(String keyword) {
+    final normalizedKeyword = keyword == 'All' ? '' : keyword;
+    _searchController.value = TextEditingValue(
+      text: normalizedKeyword,
+      selection: TextSelection.collapsed(offset: normalizedKeyword.length),
+    );
+
+    if (_productListScrollController.hasClients) {
+      _productListScrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -613,65 +643,110 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildSearchBar() {
     return Container(
       color: AppColors.pepsiWhite,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _searchController,
         builder: (context, value, child) {
-          return Theme(
-            data: Theme.of(context).copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                cursorColor: AppColors.pepsiBlue,
-                selectionHandleColor: AppColors.pepsiBlue,
-                selectionColor: AppColors.pepsiBlue.withValues(alpha: 0.2),
+          return Container(
+            padding: const EdgeInsets.fromLTRB(6, 5, 6, 6),
+            decoration: BoxDecoration(
+              color: AppColors.gray100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.gray300.withValues(alpha: 0.5),
               ),
             ),
-            child: TextField(
-              cursorColor: AppColors.pepsiBlue,
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search items...',
-                hintStyle: TextStyle(color: AppColors.gray400, fontSize: 14),
-                prefixIcon: Icon(Icons.search, color: AppColors.gray400),
-                suffixIcon: value.text.isNotEmpty
-                    ? IconButton(
-                        iconSize: 20,
-                        icon: Icon(
-                          Icons.clear,
-                          color: AppColors.pepsiRed.withValues(alpha: 0.7),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.tune, size: 13, color: AppColors.gray500),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Filters',
+                        style: AppTextStyles.helperText.copyWith(
+                          color: AppColors.gray500,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
                         ),
-                        onPressed: () {
-                          _searchController.clear();
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: AppColors.gray100,
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: AppColors.pepsiBlue,
-                    width: 1.5,
+                      ),
+                      const Spacer(),
+                      if (value.text.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () => _applyKeywordFilter('All'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.pepsiBlue,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 0,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: const Icon(Icons.clear, size: 13),
+                          label: const Text(
+                            'Clear',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.pepsiRed,
-                    width: 1.5,
+                const SizedBox(height: 4),
+                _buildKeywordRow(_topKeywordRow, value.text),
+                const SizedBox(height: 4),
+                _buildKeywordRow(_bottomKeywordRow, value.text),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildKeywordRow(List<String> keywords, String activeKeyword) {
+    return SizedBox(
+      height: 30,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: keywords.length,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        separatorBuilder: (_, _) => const SizedBox(width: 4),
+        itemBuilder: (context, index) {
+          final keyword = keywords[index];
+          final bool isSelected = keyword == 'All'
+              ? activeKeyword.trim().isEmpty
+              : keyword.toLowerCase() == activeKeyword.toLowerCase().trim();
+
+          return InkWell(
+            onTap: () => _applyKeywordFilter(keyword),
+            borderRadius: BorderRadius.circular(8),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.pepsiBlue.withValues(alpha: 0.14)
+                    : AppColors.pepsiWhite,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isSelected
+                      ? AppColors.pepsiBlue
+                      : AppColors.gray300.withValues(alpha: 0.75),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  keyword,
+                  style: AppTextStyles.helperText.copyWith(
+                    color: isSelected ? AppColors.pepsiBlue : AppColors.gray500,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                   ),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: AppColors.gray300.withValues(alpha: 0.5),
-                    width: 1,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 12,
-                ),
-                isDense: true,
               ),
             ),
           );

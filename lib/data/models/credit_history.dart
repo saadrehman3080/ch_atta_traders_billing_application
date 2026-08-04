@@ -42,6 +42,8 @@ class CreditHistory implements BillBase {
   final int amountDue;
   final bool isRecordUpdated;
   final List<PartialPayment> partialPayments;
+  final double? latitude;
+  final double? longitude;
 
   CreditHistory({
     required this.billId,
@@ -49,13 +51,15 @@ class CreditHistory implements BillBase {
     required this.date,
     required this.products,
     this.discount = 0,
-    this.isReceiptGenerated = false,
+    this.isReceiptGenerated = true,
     this.isPaid = false,
     this.amountDue = 0,
     this.cratesDue = 0,
     this.isRecordUpdated = false,
     this.billType = BillType.credit,
     this.partialPayments = const [],
+    this.latitude,
+    this.longitude,
   });
 
   // Factory constructor to create CreditHistory from JSON (Firebase)
@@ -69,6 +73,13 @@ class CreditHistory implements BillBase {
       return DateTime.now();
     }
 
+    double? parseCoordinate(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
     return CreditHistory(
       billId: json['billId'] as String,
       customerName: json['customerName'] as String,
@@ -77,7 +88,7 @@ class CreditHistory implements BillBase {
           .map((item) => Product.fromJson(item as Map<String, dynamic>))
           .toList(),
       discount: json['discount'] as int? ?? 0,
-      isReceiptGenerated: json['isReceiptGenerated'] as bool? ?? false,
+      isReceiptGenerated: json['isReceiptGenerated'] as bool? ?? true,
       isPaid: json['isPaid'] as bool? ?? true,
       amountDue: json['amountDue'] as int? ?? 0,
       cratesDue: json['cratesDue'] as int? ?? 0,
@@ -91,6 +102,8 @@ class CreditHistory implements BillBase {
                 )
                 .toList()
           : [],
+      latitude: parseCoordinate(json['latitude']),
+      longitude: parseCoordinate(json['longitude']),
     );
   }
 
@@ -110,6 +123,8 @@ class CreditHistory implements BillBase {
       'cratesDue': cratesDue,
       'billType': billType.toJson(),
       'partialPayments': partialPayments.map((p) => p.toJson()).toList(),
+      'latitude': latitude,
+      'longitude': longitude,
     };
   }
 
@@ -127,6 +142,8 @@ class CreditHistory implements BillBase {
     bool? isRecordUpdated,
     BillType? billType,
     List<PartialPayment>? partialPayments,
+    double? latitude,
+    double? longitude,
   }) {
     return CreditHistory(
       billId: billId ?? this.billId,
@@ -141,11 +158,14 @@ class CreditHistory implements BillBase {
       isRecordUpdated: isRecordUpdated ?? this.isRecordUpdated,
       billType: billType ?? this.billType,
       partialPayments: partialPayments ?? this.partialPayments,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 
   /// Total amount received via partial payments
   int get totalPartialPaymentAmount {
+    // ignore: avoid_types_as_parameter_names
     return partialPayments.fold(0, (sum, p) => sum + p.amount);
   }
 

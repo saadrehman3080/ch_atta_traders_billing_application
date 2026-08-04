@@ -16,6 +16,7 @@ import 'package:ch_atta_traders_billing_application/features/sales/providers/sal
 import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_service.dart';
 import 'package:ch_atta_traders_billing_application/services/offline/offline_dashboard_queue_service.dart';
 import 'package:ch_atta_traders_billing_application/services/offline/offline_bill_sync_manager.dart';
+import 'package:ch_atta_traders_billing_application/services/location/bill_location_service.dart';
 import 'package:ch_atta_traders_billing_application/services/printer/printer_connection_service.dart';
 import 'package:flutter/material.dart';
 import 'package:ch_atta_traders_billing_application/common/themes/text_styles.dart';
@@ -43,7 +44,8 @@ class CheckoutPage extends StatefulWidget {
   State<CheckoutPage> createState() => _CheckoutPageState();
 }
 
-class _CheckoutPageState extends State<CheckoutPage> {
+class _CheckoutPageState extends State<CheckoutPage>
+    with WidgetsBindingObserver {
   late final SaleProvider _saleProvider;
   late final CreditProvider _creditProvider;
   final _uuid = const Uuid();
@@ -62,6 +64,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   int _partialPayment = 0;
   bool _isSaving = false;
   bool _isPrinting = false;
+  bool _isLocationServiceEnabled = false;
   bool _isAnonymousCustomer = false; // When true, skip customer name on bill
   bool _completedSuccessfully =
       false; // Prevents dispose from overwriting reset
@@ -94,11 +97,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _partialPaymentController.addListener(_updatePartialPayment);
     _scrollController.addListener(_checkScrollable);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkScrollable());
+    WidgetsBinding.instance.addObserver(this);
+    _checkLocationServiceEnabled();
     _checkPrinterConnection();
     _loadSkipCustomerNamePreference(isFirstOpen: !fp.hasBeenOpened);
     fp.markOpened();
     // Listen to printer connection changes
     PrinterConnectionService.instance.addListener(_onPrinterConnectionChanged);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkLocationServiceEnabled();
+    }
   }
 
   /// Called when printer connection status changes
@@ -116,6 +128,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
         .checkConnection();
     if (mounted) {
       setState(() => _isPrinterConnected = isConnected);
+    }
+  }
+
+  Future<void> _checkLocationServiceEnabled() async {
+    final isEnabled = await BillLocationService.instance
+        .isLocationServiceEnabled();
+    if (mounted) {
+      setState(() => _isLocationServiceEnabled = isEnabled);
     }
   }
 
@@ -169,6 +189,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _partialPaymentController.dispose();
     _saleProvider.dispose();
     _creditProvider.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     PrinterConnectionService.instance.removeListener(
       _onPrinterConnectionChanged,
     );
@@ -380,13 +401,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   /// Creates bill data for saving to Firestore
   /// Returns either SaleHistory or CreditHistory based on business rules
-  dynamic _prepareBillData(String billId, {required bool isReceiptGenerated}) {
+  dynamic _prepareBillData(
+    String billId, {
+    required bool isReceiptGenerated,
+    double? latitude,
+    double? longitude,
+  }) {
     final customerName = _getCustomerName();
     final products = _selectedProducts
         .map(
           (p) => Product(
             name: p.name,
             price: p.price,
+            originalPrice: p.originalPrice,
+            marginAmount: p.marginAmount,
             quantity: p.quantity,
             type: p.type,
             subtypes: p.subtypes,
@@ -405,6 +433,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         discount: _discount,
         isReceiptGenerated: isReceiptGenerated,
         billType: BillType.cash,
+        latitude: latitude,
+        longitude: longitude,
       );
     } else {
       // Needs tracking (credit payment or MT pending)
@@ -435,6 +465,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         cratesDue: cratesDue,
         billType: BillType.credit,
         partialPayments: partialPayments,
+        latitude: latitude,
+        longitude: longitude,
       );
     }
   }
@@ -483,10 +515,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
     required String billId,
     required String salesmanIdentifier,
     required bool isReceiptGenerated,
+    double? latitude,
+    double? longitude,
   }) async {
     final billData = _prepareBillData(
       billId,
       isReceiptGenerated: isReceiptGenerated,
+      latitude: latitude,
+      longitude: longitude,
     );
     final PendingBill pendingBill;
 
@@ -605,6 +641,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _handleSaveBill() async {
+    if (!_isLocationServiceEnabled) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Location service is off. Please turn on location first.',
+          type: SnackBarType.error,
+        );
+      }
+      return;
+    }
+
     final validationError = _validateCheckout();
     if (validationError != null) {
       if (mounted) {
@@ -634,12 +681,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
 
       final billId = _uuid.v4();
+      final location = await BillLocationService.instance.captureForBill();
 
       // Save locally first — instant, no network wait.
       final pendingBill = await _saveBillOfflineFirst(
         billId: billId,
         salesmanIdentifier: salesmanIdentifier,
         isReceiptGenerated: false,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
       );
 
       // Fire background sync — do not await.
@@ -671,6 +721,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _handlePrintBill() async {
+    if (!_isLocationServiceEnabled) {
+      if (mounted) {
+        CustomSnackBar.show(
+          context,
+          message: 'Location service is off. Please turn on location first.',
+          type: SnackBarType.error,
+        );
+      }
+      return;
+    }
+
     final validationError = _validateCheckout();
     if (validationError != null) {
       if (mounted) {
@@ -725,12 +786,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
 
       final billId = _uuid.v4();
+      final location = await BillLocationService.instance.captureForBill();
 
       // Save locally first — instant, no network wait.
       final pendingBill = await _saveBillOfflineFirst(
         billId: billId,
         salesmanIdentifier: salesmanIdentifier,
         isReceiptGenerated: true,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
       );
 
       // Print immediately after local save.
@@ -1651,9 +1715,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
             !isLoading &&
             !_isSaving &&
             !_isPrinting &&
+            _isLocationServiceEnabled &&
             _isPrinterConnected;
         final canSave =
-            hasValidCustomer && !isLoading && !_isSaving && !_isPrinting;
+            hasValidCustomer &&
+            !isLoading &&
+            !_isSaving &&
+            !_isPrinting &&
+            _isLocationServiceEnabled;
 
         return Row(
           children: [
@@ -1694,9 +1763,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   label: Text(
                     _isPrinting
                         ? 'Saving & Printing...'
-                        : (!_isPrinterConnected
-                              ? "Printer Not Connected"
-                              : "Print Bill"),
+                        : (!_isLocationServiceEnabled
+                              ? 'Location Off'
+                              : (!_isPrinterConnected
+                                    ? "Printer Not Connected"
+                                    : "Print Bill")),
                     style: AppTextStyles.smallButton.copyWith(
                       color: canPrint ? Colors.white : AppColors.gray500,
                       fontSize: 14,
@@ -1749,7 +1820,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   ButtonStyle _buildPrintButtonStyle() {
     final hasValidCustomer = _hasValidCustomerForCurrentBill;
-    final canEnable = hasValidCustomer && _isPrinterConnected;
+    final canEnable =
+        hasValidCustomer && _isLocationServiceEnabled && _isPrinterConnected;
     return ElevatedButton.styleFrom(
       backgroundColor: canEnable ? AppColors.pepsiBlue : AppColors.gray300,
       foregroundColor: canEnable ? Colors.white : AppColors.gray500,
@@ -1762,7 +1834,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   ButtonStyle _buildSaveButtonStyle() {
     final hasValidCustomer = _hasValidCustomerForCurrentBill;
-    final canEnable = hasValidCustomer;
+    final canEnable = hasValidCustomer && _isLocationServiceEnabled;
     return ElevatedButton.styleFrom(
       backgroundColor: canEnable ? AppColors.pepsiBlue : AppColors.gray300,
       foregroundColor: canEnable ? Colors.white : AppColors.gray500,

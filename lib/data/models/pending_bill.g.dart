@@ -38,14 +38,16 @@ class PendingBillAdapter extends TypeAdapter<PendingBill> {
       schemaVersion: fields[14] as int,
       status: fields[15] as PendingBillStatus,
       lastSyncAttempt: fields[16] as DateTime?,
-      isReceiptGenerated: fields[17] as bool? ?? false,
+      isReceiptGenerated: fields[17] as bool? ?? true,
+      latitude: (fields[18] as num?)?.toDouble(),
+      longitude: (fields[19] as num?)?.toDouble(),
     );
   }
 
   @override
   void write(BinaryWriter writer, PendingBill obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(20)
       ..writeByte(0)
       ..write(obj.billId)
       ..writeByte(1)
@@ -81,7 +83,11 @@ class PendingBillAdapter extends TypeAdapter<PendingBill> {
       ..writeByte(16)
       ..write(obj.lastSyncAttempt)
       ..writeByte(17)
-      ..write(obj.isReceiptGenerated);
+      ..write(obj.isReceiptGenerated)
+      ..writeByte(18)
+      ..write(obj.latitude)
+      ..writeByte(19)
+      ..write(obj.longitude);
   }
 
   @override

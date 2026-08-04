@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ch_atta_traders_billing_application/common/utils/billing_calculations.dart';
 import 'package:ch_atta_traders_billing_application/data/models/credit_history.dart';
 import 'package:ch_atta_traders_billing_application/services/dashboard_summary_service.dart';
 import 'package:flutter/foundation.dart';
@@ -27,6 +28,10 @@ class CreditRepository {
       // - MT field filled with 0: cratesDue = total - 0 = all crates remaining
       // - MT field filled with value: cratesDue = total - collected = remaining crates
       final mtRemaining = credit.cratesDue;
+      final totalMargin = BillingCalculations.calculateTotalMargin(
+        credit.products,
+        discount: credit.discount,
+      );
 
       // Use transaction to atomically update both credit and dashboard summary
       await _firestore.runTransaction((transaction) async {
@@ -38,7 +43,10 @@ class CreditRepository {
             .doc(credit.billId);
 
         // Save the credit document — idempotent: safe to retry.
-        transaction.set(creditRef, credit.toJson(), SetOptions(merge: true));
+        transaction.set(creditRef, {
+          ...credit.toJson(),
+          'totalMargin': totalMargin,
+        }, SetOptions(merge: true));
 
         // Update dashboard summary using centralized service
         await _dashboardService.onCreditCreated(
@@ -74,7 +82,15 @@ class CreditRepository {
           .collection('bills')
           .doc(credit.billId);
 
-      await creditRef.set(credit.toJson(), SetOptions(merge: true));
+      final totalMargin = BillingCalculations.calculateTotalMargin(
+        credit.products,
+        discount: credit.discount,
+      );
+
+      await creditRef.set({
+        ...credit.toJson(),
+        'totalMargin': totalMargin,
+      }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Error saving credit without dashboard: $e');
       rethrow;
@@ -169,6 +185,8 @@ class CreditRepository {
         'amountDue': credit.amountDue,
         'cratesDue': credit.cratesDue,
         'isPaid': credit.isPaid,
+        'latitude': credit.latitude,
+        'longitude': credit.longitude,
         'deletedAt': FieldValue.serverTimestamp(),
       };
 
